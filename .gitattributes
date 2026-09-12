@@ -1,0 +1,5 @@
+# Public release snapshots omit machine-local agent instructions and historical
+# task evidence. Preserve all product source, tests, build files and verification.
+AGENTS.md export-ignore
+VERIFICATION.md export-ignore
+docs export-ignore

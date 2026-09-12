@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>Inceptus.DocumentEngine.Bpmn</PackageId>
+    <AssemblyName>Inceptus.DocumentEngine.Bpmn</AssemblyName>
+    <RootNamespace>Inceptus.DocumentEngine.Bpmn</RootNamespace>
+    <IsPackable>true</IsPackable>
+    <Description>BPMN notation semantics, commands, validation, and plugin contributions for the Inceptus Document Engine.</Description>
+    <PackageTags>inceptus;document-engine;bpmn</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Inceptus.DocumentEngine.Contracts/Inceptus.DocumentEngine.Contracts.csproj" />
+  </ItemGroup>
+</Project>

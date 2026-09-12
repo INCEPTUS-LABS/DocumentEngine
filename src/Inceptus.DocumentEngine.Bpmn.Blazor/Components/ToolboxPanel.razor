@@ -1,0 +1,246 @@
+@using Inceptus.DocumentEngine.Bpmn.Blazor.Presentation
+@using Inceptus.DocumentEngine.Contracts.Primitives
+@using Inceptus.DocumentEngine.Contracts.Toolbox
+@using Microsoft.AspNetCore.Components.Web
+
+<aside id="@DomId("toolbox")"
+       class="@PanelClass"
+       aria-labelledby="@DomId("toolbox-heading")"
+       data-toolbox-view-mode="@ViewModeValue"
+       data-expanded-toolbox-group-id="@(_presentation.ExpandedToolboxGroupId?.Value ?? string.Empty)"
+       data-selected-toolbox-item-id="@(SelectedItemId?.Value ?? string.Empty)">
+    <header class="toolbox-header">
+        <h2 id="@DomId("toolbox-heading")">Toolbox</h2>
+        <button id="@DomId("toolbox-mode-toggle")"
+                class="toolbox-mode-toggle"
+                type="button"
+                title="@ModeToggleLabel"
+                aria-label="@ModeToggleLabel"
+                @onclick="ToggleViewMode">
+            <span aria-hidden="true">@ModeToggleGlyph</span>
+        </button>
+    </header>
+
+    @if (VisibleGroups.Count == 0)
+    {
+        <p class="toolbox-empty">No tools available.</p>
+    }
+    else
+    {
+        <div class="toolbox-scroll-region">
+            @foreach (var section in VisibleSections)
+            {
+                <section class="toolbox-section"
+                         aria-labelledby="@SectionHeadingId(section.Index)"
+                         data-toolbox-section-id="@section.Section.SectionId.Value"
+                         @key="section.Section.SectionId">
+                    <h3 id="@SectionHeadingId(section.Index)"
+                        class="toolbox-section-heading">@section.Section.DisplayName</h3>
+                    @foreach (var entry in section.Groups)
+                    {
+                        <section class="toolbox-group"
+                                 aria-labelledby="@GroupHeadingId(entry.Index)"
+                                 data-toolbox-group-id="@entry.Group.GroupId.Value"
+                                 @key="entry.Group.GroupId">
+                            <button id="@GroupHeadingId(entry.Index)"
+                                    class="toolbox-group-toggle"
+                                    type="button"
+                                    title="@entry.Group.DisplayName"
+                                    aria-label="@entry.Group.DisplayName"
+                                    aria-expanded="@BooleanValue(IsExpanded(entry.Group.GroupId))"
+                                    aria-controls="@GroupItemsId(entry.Index)"
+                                    data-toolbox-group-icon-key="@(entry.Group.Icon?.IconKey ?? string.Empty)"
+                                    @onclick="() => ToggleGroup(entry.Group.GroupId)">
+                                <span class="toolbox-group-icon" aria-hidden="true">@ResolveGlyph(entry.Group.Icon)</span>
+                                <span class="toolbox-group-label">@entry.Group.DisplayName</span>
+                                <span class="toolbox-group-disclosure" aria-hidden="true">@Disclosure(entry.Group.GroupId)</span>
+                            </button>
+                            <div id="@GroupItemsId(entry.Index)"
+                                 class="toolbox-items"
+                                 role="group"
+                                 aria-labelledby="@GroupHeadingId(entry.Index)"
+                                 hidden="@(!IsExpanded(entry.Group.GroupId))">
+                                @foreach (var item in entry.Items)
+                                {
+                                    <button type="button"
+                                            class="@ItemClass(item.ItemId)"
+                                            title="@item.DisplayName"
+                                            aria-label="@item.DisplayName"
+                                            aria-pressed="@BooleanValue(IsSelected(item.ItemId))"
+                                            data-toolbox-item-id="@item.ItemId.Value"
+                                            data-toolbox-element-type-id="@item.ElementTypeId.Value"
+                                            data-toolbox-icon-key="@item.Icon.IconKey"
+                                            @onclick="() => SelectItemAsync(item.ItemId)"
+                                            @key="item.ItemId">
+                                        <span class="toolbox-item-icon" aria-hidden="true">@ResolveGlyph(item.Icon)</span>
+                                        <span class="toolbox-item-label">@item.DisplayName</span>
+                                    </button>
+                                }
+                            </div>
+                        </section>
+                    }
+                </section>
+            }
+
+            @foreach (var entry in UnsectionedVisibleGroups)
+            {
+                <section class="toolbox-group"
+                         aria-labelledby="@GroupHeadingId(entry.Index)"
+                         data-toolbox-group-id="@entry.Group.GroupId.Value"
+                         @key="entry.Group.GroupId">
+                    <button id="@GroupHeadingId(entry.Index)"
+                            class="toolbox-group-toggle"
+                            type="button"
+                            title="@entry.Group.DisplayName"
+                            aria-label="@entry.Group.DisplayName"
+                            aria-expanded="@BooleanValue(IsExpanded(entry.Group.GroupId))"
+                            aria-controls="@GroupItemsId(entry.Index)"
+                            data-toolbox-group-icon-key="@(entry.Group.Icon?.IconKey ?? string.Empty)"
+                            @onclick="() => ToggleGroup(entry.Group.GroupId)">
+                        <span class="toolbox-group-icon" aria-hidden="true">@ResolveGlyph(entry.Group.Icon)</span>
+                        <span class="toolbox-group-label">@entry.Group.DisplayName</span>
+                        <span class="toolbox-group-disclosure" aria-hidden="true">@Disclosure(entry.Group.GroupId)</span>
+                    </button>
+                    <div id="@GroupItemsId(entry.Index)"
+                         class="toolbox-items"
+                         role="group"
+                         aria-labelledby="@GroupHeadingId(entry.Index)"
+                         hidden="@(!IsExpanded(entry.Group.GroupId))">
+                        @foreach (var item in entry.Items)
+                        {
+                            <button type="button"
+                                    class="@ItemClass(item.ItemId)"
+                                    title="@item.DisplayName"
+                                    aria-label="@item.DisplayName"
+                                    aria-pressed="@BooleanValue(IsSelected(item.ItemId))"
+                                    data-toolbox-item-id="@item.ItemId.Value"
+                                    data-toolbox-element-type-id="@item.ElementTypeId.Value"
+                                    data-toolbox-icon-key="@item.Icon.IconKey"
+                                    @onclick="() => SelectItemAsync(item.ItemId)"
+                                    @key="item.ItemId">
+                                <span class="toolbox-item-icon" aria-hidden="true">@ResolveGlyph(item.Icon)</span>
+                                <span class="toolbox-item-label">@item.DisplayName</span>
+                            </button>
+                        }
+                    </div>
+                </section>
+            }
+        </div>
+    }
+</aside>
+
+@code {
+    private const string UnknownIconFallbackGlyph = "□";
+    private readonly string _fallbackDomIdPrefix = $"inceptus-{Guid.NewGuid():N}";
+    private readonly ToolboxPresentationState _presentation = new();
+
+    [Parameter]
+    public string? DomIdPrefix { get; set; }
+
+    [Parameter, EditorRequired]
+    public ToolboxCatalog Catalog { get; set; } = ToolboxCatalog.Empty;
+
+    [Parameter]
+    public ToolboxItemId? SelectedItemId { get; set; }
+
+    [Parameter]
+    public EventCallback<ToolboxItemId> SelectedItemIdChanged { get; set; }
+
+    private IReadOnlyList<VisibleToolboxGroup> VisibleGroups => Catalog.Groups
+        .Select((group, index) => new VisibleToolboxGroup(
+            index,
+            group,
+            Catalog.GetItems(group.GroupId)))
+        .Where(static entry => !entry.Items.IsEmpty)
+        .ToArray();
+
+    private IReadOnlyList<VisibleToolboxSection> VisibleSections
+    {
+        get
+        {
+            var groups = VisibleGroups;
+            return Catalog.Sections
+                .Select((section, index) => new VisibleToolboxSection(
+                    index,
+                    section,
+                    groups.Where(entry => entry.Group.SectionId == section.SectionId).ToArray()))
+                .Where(static entry => entry.Groups.Count > 0)
+                .ToArray();
+        }
+    }
+
+    private IReadOnlyList<VisibleToolboxGroup> UnsectionedVisibleGroups => VisibleGroups
+        .Where(static entry => entry.Group.SectionId is null)
+        .ToArray();
+
+    private string PanelClass => _presentation.ViewMode == ToolboxViewMode.Expanded
+        ? "toolbox-panel toolbox-expanded"
+        : "toolbox-panel toolbox-compact";
+
+    private string ViewModeValue => _presentation.ViewMode.ToString().ToLowerInvariant();
+
+    private string ModeToggleLabel => _presentation.ViewMode == ToolboxViewMode.Expanded
+        ? "Collapse Toolbox"
+        : "Expand Toolbox";
+
+    private string ModeToggleGlyph => _presentation.ViewMode == ToolboxViewMode.Expanded
+        ? "«"
+        : "»";
+
+    protected override void OnParametersSet()
+    {
+        base.OnParametersSet();
+        _presentation.Reconcile(VisibleGroups.Select(static entry => entry.Group.GroupId));
+    }
+
+    internal async Task<bool> SelectItemAsync(ToolboxItemId itemId)
+    {
+        ArgumentNullException.ThrowIfNull(itemId);
+        if (!Catalog.TryGetItem(itemId, out _))
+        {
+            return false;
+        }
+
+        await SelectedItemIdChanged.InvokeAsync(itemId);
+        return true;
+    }
+
+    internal bool ToggleGroup(ToolboxGroupId groupId) => _presentation.ToggleGroup(groupId);
+
+    internal void ToggleViewMode() => _presentation.ToggleViewMode();
+
+    private bool IsSelected(ToolboxItemId itemId) => SelectedItemId == itemId;
+
+    private bool IsExpanded(ToolboxGroupId groupId) =>
+        _presentation.ExpandedToolboxGroupId == groupId;
+
+    private string ItemClass(ToolboxItemId itemId) => IsSelected(itemId)
+        ? "toolbox-item selected"
+        : "toolbox-item";
+
+    private static string ResolveGlyph(ToolboxIconDescriptor? icon) =>
+        icon?.FallbackGlyph ?? UnknownIconFallbackGlyph;
+
+    private string Disclosure(ToolboxGroupId groupId) => IsExpanded(groupId) ? "▾" : "▸";
+
+    private string SectionHeadingId(int index) => DomId($"toolbox-section-{index}");
+
+    private string GroupHeadingId(int index) => DomId($"toolbox-group-{index}");
+
+    private string GroupItemsId(int index) => DomId($"toolbox-group-items-{index}");
+
+    private string DomId(string suffix) =>
+        $"{(string.IsNullOrWhiteSpace(DomIdPrefix) ? _fallbackDomIdPrefix : DomIdPrefix)}-{suffix}";
+
+    private static string BooleanValue(bool value) => value ? "true" : "false";
+
+    private sealed record VisibleToolboxSection(
+        int Index,
+        ToolboxSectionDefinition Section,
+        IReadOnlyList<VisibleToolboxGroup> Groups);
+
+    private sealed record VisibleToolboxGroup(
+        int Index,
+        ToolboxGroupDefinition Group,
+        System.Collections.Immutable.ImmutableArray<ToolboxItemDefinition> Items);
+}

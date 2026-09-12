@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Published Process</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main class="published-process" aria-label="Published process viewer">
+    <header class="viewer-controls">
+      <button id="start-process" type="button" disabled>Start</button>
+      <span id="start-guidance" class="start-guidance" hidden></span>
+      <span class="viewer-spacer"></span>
+      <button id="zoom-out" type="button" aria-label="Zoom out" title="Zoom out">−</button>
+      <button id="zoom-in" type="button" aria-label="Zoom in" title="Zoom in">+</button>
+    </header>
+    <div id="viewer-surface" class="viewer-surface">
+      <canvas id="process-canvas" aria-label="Published process"></canvas>
+      <p id="viewer-status" class="viewer-status" role="status">Loading process…</p>
+    </div>
+  </main>
+  <script src="./process.data.js"></script>
+  <script src="./inceptus.publish.js"></script>
+</body>
+</html>

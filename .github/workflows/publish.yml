@@ -1,0 +1,130 @@
+name: Publish public release
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  publish:
+    if: github.repository == 'INCEPTUS-LABS/DocumentEngine'
+    runs-on: windows-latest
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    concurrency:
+      group: nuget-publication
+      cancel-in-progress: false
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Require the exact public release tag
+        env:
+          SELECTED_REF: ${{ github.ref }}
+          SELECTED_SHA: ${{ github.sha }}
+        run: |
+          [xml]$props = Get-Content Directory.Build.props
+          $version = [string]$props.Project.PropertyGroup.Version
+          if ($version -cnotmatch '^\d+\.\d+\.\d+$') { throw 'Expected a stable release version.' }
+          if ($env:SELECTED_REF -cne "refs/tags/v$version") { throw 'Dispatch on the exact version tag.' }
+          $head = git rev-parse HEAD
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $tag = git rev-parse "$($env:SELECTED_REF)^{commit}"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($head -cne $tag -or $head -cne $env:SELECTED_SHA) { throw 'Checkout does not match the selected public tag.' }
+          if ((git remote get-url origin) -cne 'https://github.com/INCEPTUS-LABS/DocumentEngine') {
+            if ((git remote get-url origin) -cne 'https://github.com/INCEPTUS-LABS/DocumentEngine.git') { throw 'Unexpected source repository.' }
+          }
+      - name: Check SDK
+        run: |
+          $expected = (Get-Content global.json -Raw | ConvertFrom-Json).sdk.version
+          if ((dotnet --version) -cne $expected) { throw 'SDK differs from global.json.' }
+          node --version
+      - name: Restore
+        run: dotnet restore
+      - name: Release solution build
+        run: dotnet build -c Release --no-restore
+      - name: Full Unit
+        run: dotnet test tests/Inceptus.DocumentEngine.UnitTests/Inceptus.DocumentEngine.UnitTests.csproj -c Release --no-build --no-restore --logger "trx;LogFileName=unit.trx" --results-directory "${{ runner.temp }}/results/unit"
+      - name: Full Integration
+        run: dotnet test tests/Inceptus.DocumentEngine.IntegrationTests/Inceptus.DocumentEngine.IntegrationTests.csproj -c Release --no-build --no-restore --logger "trx;LogFileName=integration.trx" --results-directory "${{ runner.temp }}/results/integration"
+      - name: JavaScript suites
+        run: |
+          node --test tests/JavaScript/inceptus.canvas2d.test.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node --test tests/JavaScript/inceptus.presentation.test.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node --test tests/JavaScript/inceptus.publish.test.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: JavaScript syntax
+        run: |
+          $files = @(
+            'src/Inceptus.DocumentEngine.Canvas2D/wwwroot/inceptus.canvas2d.js',
+            'src/Inceptus.DocumentEngine.Bpmn.Blazor/wwwroot/inceptus.presentation.js',
+            'src/Inceptus.DocumentEngine.Canvas2D/Publishing/Assets/inceptus.publish.js',
+            'tests/JavaScript/inceptus.canvas2d.test.mjs',
+            'tests/JavaScript/inceptus.presentation.test.mjs',
+            'tests/JavaScript/inceptus.publish.test.mjs'
+          )
+          foreach ($file in $files) {
+            node --check $file
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+      - name: Explicit RCL build
+        run: dotnet build src/Inceptus.DocumentEngine.Bpmn.Blazor/Inceptus.DocumentEngine.Bpmn.Blazor.csproj -c Release --no-restore
+      - name: Formatting
+        run: dotnet format --verify-no-changes
+      - name: Diff and checkout cleanliness
+        run: |
+          git diff --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (git status --porcelain=v1 --untracked-files=all) { throw 'Verification changed the checkout.' }
+      - name: Pack six package and symbol pairs
+        run: |
+          $output = Join-Path $env:RUNNER_TEMP 'release-packages'
+          if (Test-Path $output) { throw 'Package output must be fresh.' }
+          foreach ($name in @('Contracts', 'Runtime', 'Bpmn', 'Organizational', 'Canvas2D', 'Bpmn.Blazor')) {
+            dotnet pack "src/Inceptus.DocumentEngine.$name/Inceptus.DocumentEngine.$name.csproj" -c Release --no-build --no-restore --output $output
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+      - name: Package and public source provenance
+        run: |
+          [xml]$props = Get-Content Directory.Build.props
+          $version = [string]$props.Project.PropertyGroup.Version
+          $commit = git rev-parse HEAD
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./.github/scripts/Inspect-Packages.ps1 -PackageDirectory (Join-Path $env:RUNNER_TEMP 'release-packages') -Version $version -Commit $commit -RequireSourceLink
+      - name: Retain verification and package evidence
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: release-evidence-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/results
+            ${{ runner.temp }}/release-packages
+          if-no-files-found: warn
+      - name: NuGet Trusted Publishing login
+        uses: NuGet/login@v1
+        id: login
+        with:
+          user: inceptus
+      - name: Publish immutable package and symbol pairs
+        env:
+          NUGET_TEMPORARY_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
+        run: |
+          # NuGet V3 pushes each colocated snupkg after its primary nupkg.
+          # Duplicates fail; never conceal a same-version collision.
+          foreach ($package in Get-ChildItem (Join-Path $env:RUNNER_TEMP 'release-packages') -Filter '*.nupkg' | Sort-Object Name) {
+            dotnet nuget push $package.FullName --api-key $env:NUGET_TEMPORARY_KEY --source https://api.nuget.org/v3/index.json
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }

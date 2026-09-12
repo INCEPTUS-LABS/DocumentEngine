@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>Inceptus.DocumentEngine.Contracts</PackageId>
+    <AssemblyName>Inceptus.DocumentEngine.Contracts</AssemblyName>
+    <RootNamespace>Inceptus.DocumentEngine.Contracts</RootNamespace>
+    <IsPackable>true</IsPackable>
+    <Description>Immutable contracts and extension APIs for the Inceptus Document Engine.</Description>
+    <PackageTags>inceptus;document-engine;contracts</PackageTags>
+  </PropertyGroup>
+</Project>

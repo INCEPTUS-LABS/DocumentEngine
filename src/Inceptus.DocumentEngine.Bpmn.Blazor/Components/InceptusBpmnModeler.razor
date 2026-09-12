@@ -1,0 +1,10 @@
+@namespace Inceptus.DocumentEngine.Bpmn.Blazor.Components
+@using Inceptus.DocumentEngine.Bpmn.Blazor.Presentation
+
+<CascadingValue Value="_facade" IsFixed="true">
+    <div class="@RootClass"
+         style="@Style"
+         @attributes="AdditionalAttributes">
+        <DocumentCanvas />
+    </div>
+</CascadingValue>

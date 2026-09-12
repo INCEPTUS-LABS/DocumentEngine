@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+  <PropertyGroup>
+    <PackageId>Inceptus.DocumentEngine.Bpmn.Blazor</PackageId>
+    <AssemblyName>Inceptus.DocumentEngine.Bpmn.Blazor</AssemblyName>
+    <RootNamespace>Inceptus.DocumentEngine.Bpmn.Blazor</RootNamespace>
+    <IsPackable>true</IsPackable>
+    <Description>BPMN modeler components and browser presentation integration for the Inceptus Document Engine.</Description>
+    <PackageTags>inceptus;document-engine;bpmn;blazor;modeler</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.Web" />
+    <PackageReference Include="Microsoft.JSInterop" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Inceptus.DocumentEngine.Contracts/Inceptus.DocumentEngine.Contracts.csproj" />
+    <ProjectReference Include="../Inceptus.DocumentEngine.Runtime/Inceptus.DocumentEngine.Runtime.csproj" />
+    <ProjectReference Include="../Inceptus.DocumentEngine.Canvas2D/Inceptus.DocumentEngine.Canvas2D.csproj" />
+    <ProjectReference Include="../Inceptus.DocumentEngine.Bpmn/Inceptus.DocumentEngine.Bpmn.csproj" />
+    <ProjectReference Include="../Inceptus.DocumentEngine.Organizational/Inceptus.DocumentEngine.Organizational.csproj" />
+  </ItemGroup>
+</Project>

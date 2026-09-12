@@ -1,0 +1,25 @@
+<Project>
+  <!-- Evaluate after each project declares packability; Demo and tests remain unpackaged. -->
+  <PropertyGroup Condition="'$(IsPackable)' == 'true'">
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <Copyright>Copyright (c) 2026 Inceptus Robert Prokopczuk</Copyright>
+    <PackageProjectUrl>https://inceptus.online/bpmn/</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/INCEPTUS-LABS/DocumentEngine</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <!-- Source Link providers are included in the pinned .NET SDK. The actual
+         checkout supplies the commit and source roots; never inject a release SHA. -->
+    <DebugType>portable</DebugType>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageReleaseNotes>$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)RELEASE-NOTES.md'))</PackageReleaseNotes>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(IsPackable)' == 'true'">
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="/" />
+    <None Include="$(MSBuildThisFileDirectory)LICENSE" Pack="true" PackagePath="/" />
+    <None Include="$(MSBuildThisFileDirectory)RELEASE-NOTES.md" Pack="true" PackagePath="/" />
+    <None Include="$(MSBuildThisFileDirectory)THIRD-PARTY-NOTICES.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+</Project>

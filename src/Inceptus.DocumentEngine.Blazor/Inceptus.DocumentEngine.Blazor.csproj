@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Inceptus.DocumentEngine.Bpmn.Blazor/Inceptus.DocumentEngine.Bpmn.Blazor.csproj" />
+    <ProjectReference Include="../Inceptus.DocumentEngine.Canvas2D/Inceptus.DocumentEngine.Canvas2D.csproj" />
+    <ProjectReference Include="../Inceptus.DocumentEngine.Contracts/Inceptus.DocumentEngine.Contracts.csproj" />
+    <ProjectReference Include="../Inceptus.DocumentEngine.Runtime/Inceptus.DocumentEngine.Runtime.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Demo/bpmn-demo.inceptus.json"
+                      LogicalName="Inceptus.DocumentEngine.Blazor.Demo.bpmn-demo.inceptus.json" />
+  </ItemGroup>
+</Project>

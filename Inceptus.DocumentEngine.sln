@@ -1,0 +1,70 @@
+
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inceptus.DocumentEngine.Contracts", "src\Inceptus.DocumentEngine.Contracts\Inceptus.DocumentEngine.Contracts.csproj", "{26AF69B2-E2EB-4E6A-922E-A9217672F49A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inceptus.DocumentEngine.Runtime", "src\Inceptus.DocumentEngine.Runtime\Inceptus.DocumentEngine.Runtime.csproj", "{A541644A-11C7-4388-9140-6149346D813D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inceptus.DocumentEngine.Canvas2D", "src\Inceptus.DocumentEngine.Canvas2D\Inceptus.DocumentEngine.Canvas2D.csproj", "{5CF4829C-7A37-456E-9C57-F25009ECA9A7}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inceptus.DocumentEngine.Bpmn", "src\Inceptus.DocumentEngine.Bpmn\Inceptus.DocumentEngine.Bpmn.csproj", "{2474C1BB-4846-47EF-B6A2-69E9558249F0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inceptus.DocumentEngine.Bpmn.Blazor", "src\Inceptus.DocumentEngine.Bpmn.Blazor\Inceptus.DocumentEngine.Bpmn.Blazor.csproj", "{8EE8D517-B097-43A6-AE9A-10F3C0961D38}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inceptus.DocumentEngine.Organizational", "src\Inceptus.DocumentEngine.Organizational\Inceptus.DocumentEngine.Organizational.csproj", "{6D6D504D-08DF-4E81-A063-EC2AE58E16F1}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inceptus.DocumentEngine.Blazor", "src\Inceptus.DocumentEngine.Blazor\Inceptus.DocumentEngine.Blazor.csproj", "{21AD31F1-D82A-4FE4-974A-F108EE44D2D1}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inceptus.DocumentEngine.UnitTests", "tests\Inceptus.DocumentEngine.UnitTests\Inceptus.DocumentEngine.UnitTests.csproj", "{EC5AA30F-9F79-49BF-A10D-0E862C14680E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inceptus.DocumentEngine.IntegrationTests", "tests\Inceptus.DocumentEngine.IntegrationTests\Inceptus.DocumentEngine.IntegrationTests.csproj", "{D6FDA564-780A-4E66-852F-93A105ED2A47}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{26AF69B2-E2EB-4E6A-922E-A9217672F49A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{26AF69B2-E2EB-4E6A-922E-A9217672F49A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{26AF69B2-E2EB-4E6A-922E-A9217672F49A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{26AF69B2-E2EB-4E6A-922E-A9217672F49A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A541644A-11C7-4388-9140-6149346D813D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A541644A-11C7-4388-9140-6149346D813D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A541644A-11C7-4388-9140-6149346D813D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A541644A-11C7-4388-9140-6149346D813D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5CF4829C-7A37-456E-9C57-F25009ECA9A7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5CF4829C-7A37-456E-9C57-F25009ECA9A7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5CF4829C-7A37-456E-9C57-F25009ECA9A7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5CF4829C-7A37-456E-9C57-F25009ECA9A7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2474C1BB-4846-47EF-B6A2-69E9558249F0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2474C1BB-4846-47EF-B6A2-69E9558249F0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2474C1BB-4846-47EF-B6A2-69E9558249F0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2474C1BB-4846-47EF-B6A2-69E9558249F0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8EE8D517-B097-43A6-AE9A-10F3C0961D38}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8EE8D517-B097-43A6-AE9A-10F3C0961D38}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8EE8D517-B097-43A6-AE9A-10F3C0961D38}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8EE8D517-B097-43A6-AE9A-10F3C0961D38}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6D6D504D-08DF-4E81-A063-EC2AE58E16F1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6D6D504D-08DF-4E81-A063-EC2AE58E16F1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6D6D504D-08DF-4E81-A063-EC2AE58E16F1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6D6D504D-08DF-4E81-A063-EC2AE58E16F1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{21AD31F1-D82A-4FE4-974A-F108EE44D2D1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{21AD31F1-D82A-4FE4-974A-F108EE44D2D1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{21AD31F1-D82A-4FE4-974A-F108EE44D2D1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{21AD31F1-D82A-4FE4-974A-F108EE44D2D1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EC5AA30F-9F79-49BF-A10D-0E862C14680E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EC5AA30F-9F79-49BF-A10D-0E862C14680E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EC5AA30F-9F79-49BF-A10D-0E862C14680E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EC5AA30F-9F79-49BF-A10D-0E862C14680E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D6FDA564-780A-4E66-852F-93A105ED2A47}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D6FDA564-780A-4E66-852F-93A105ED2A47}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D6FDA564-780A-4E66-852F-93A105ED2A47}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D6FDA564-780A-4E66-852F-93A105ED2A47}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

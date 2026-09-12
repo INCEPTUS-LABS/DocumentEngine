@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Inceptus.DocumentEngine.Blazor/Inceptus.DocumentEngine.Blazor.csproj" />
+    <ProjectReference Include="../../src/Inceptus.DocumentEngine.Bpmn/Inceptus.DocumentEngine.Bpmn.csproj" />
+    <ProjectReference Include="../../src/Inceptus.DocumentEngine.Bpmn.Blazor/Inceptus.DocumentEngine.Bpmn.Blazor.csproj" />
+    <ProjectReference Include="../../src/Inceptus.DocumentEngine.Canvas2D/Inceptus.DocumentEngine.Canvas2D.csproj" />
+    <ProjectReference Include="../../src/Inceptus.DocumentEngine.Contracts/Inceptus.DocumentEngine.Contracts.csproj" />
+    <ProjectReference Include="../../src/Inceptus.DocumentEngine.Organizational/Inceptus.DocumentEngine.Organizational.csproj" />
+    <ProjectReference Include="../../src/Inceptus.DocumentEngine.Runtime/Inceptus.DocumentEngine.Runtime.csproj" />
+  </ItemGroup>
+</Project>

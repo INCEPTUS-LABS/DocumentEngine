@@ -1,0 +1,3489 @@
+@using Inceptus.DocumentEngine.Bpmn.Blazor
+@using Inceptus.DocumentEngine.Bpmn.Blazor.Composition
+@using Inceptus.DocumentEngine.Bpmn.Blazor.Presentation
+@using Inceptus.DocumentEngine.Canvas2D.EditingSession
+@using Inceptus.DocumentEngine.Canvas2D.Interaction
+@using Inceptus.DocumentEngine.Canvas2D.Scene
+@using Inceptus.DocumentEngine.Contracts.Canvas2D
+@using Inceptus.DocumentEngine.Contracts.ContextMenus
+@using Inceptus.DocumentEngine.Contracts.Deletion
+@using Inceptus.DocumentEngine.Contracts.Diagnostics
+@using Inceptus.DocumentEngine.Contracts.Documents
+@using Inceptus.DocumentEngine.Contracts.Geometry
+@using Inceptus.DocumentEngine.Contracts.Primitives
+@using Inceptus.DocumentEngine.Contracts.Properties
+@using Inceptus.DocumentEngine.Contracts.Profiles
+@using Inceptus.DocumentEngine.Contracts.Toolbox
+@using Inceptus.DocumentEngine.Contracts.Validation
+@using Inceptus.DocumentEngine.Contracts.Visuals
+@using System.Collections.Immutable
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components.Web
+@using Microsoft.Extensions.DependencyInjection
+@using Microsoft.JSInterop
+@implements IAsyncDisposable
+@inject Microsoft.JSInterop.IJSRuntime JavaScript
+@inject IServiceProvider Services
+
+<main class="document-canvas-page"
+      @onclick="CloseContextMenu"
+      @onkeydown="HandleEditorKeyDownAsync">
+    <section class="document-canvas-shell"
+             data-presentation-status="@StatusValue"
+             data-scene-status="@SceneStatusValue"
+             data-scene-revision="@SceneRevision"
+             data-document-id="@DocumentId"
+             data-document-revision="@DocumentRevision"
+             data-active-scope-id="@ActiveScopeId"
+             data-scope-breadcrumb="@ScopeBreadcrumbValue"
+             data-history-entry-count="@HistoryEntryCount"
+             data-can-undo="@CanUndoValue"
+             data-can-redo="@CanRedoValue"
+             data-native-document-operation="@_nativeDocumentOperationStatus"
+             data-native-document-error-code="@(_nativeDocumentOperationErrorCode ?? string.Empty)"
+             data-new-diagram-operation="@_newDiagramOperationStatus"
+             data-new-diagram-error-code="@(_newDiagramOperationErrorCode ?? string.Empty)"
+             data-new-diagram-confirmation="@(_newDiagramConfirmationOpen ? "open" : "closed")"
+             data-publish-operation="@_publishOperationStatus"
+             data-publish-error-code="@(_publishOperationErrorCode ?? string.Empty)"
+             data-publication-dialog="@(_publicationDialogOpen ? "open" : "closed")"
+             data-publication-draft-valid="@(PublicationDraftIsValid ? "true" : "false")"
+             data-active-canvas-id="@ActiveCanvasElementId"
+             data-viewport-zoom="@ViewportZoom"
+             data-viewport-pan-x="@ViewportPanX"
+             data-viewport-pan-y="@ViewportPanY"
+             data-zoom-percentage="@ZoomPercentage"
+             data-can-zoom-out="@CanZoomOutValue"
+             data-can-set-zoom-100="@CanSetZoomToActualSizeValue"
+             data-can-zoom-in="@CanZoomInValue"
+             data-context-menu-open="@ContextMenuOpenValue"
+             data-context-menu-kind="@ContextMenuKindValue"
+             data-context-target-visual-state-id="@ContextMenuTargetVisualStateId"
+             data-context-target-semantic-element-id="@ContextMenuTargetSemanticElementId"
+             data-open-scope-available="@OpenScopeAvailableValue"
+             data-add-connector-point-available="@AddConnectorPointAvailableValue"
+             data-delete-connector-point-available="@DeleteConnectorPointAvailableValue"
+             data-delete-element-available="@DeleteElementAvailableValue"
+             data-delete-connection-available="@DeleteConnectionAvailableValue"
+             data-properties-available="@PropertiesAvailableValue"
+             data-properties-form-open="@PropertiesFormOpenValue"
+             data-properties-target-visual-state-id="@PropertiesTargetVisualStateId"
+             data-properties-target-semantic-element-id="@PropertiesTargetSemanticElementId"
+             data-properties-dirty="@PropertiesDirtyValue"
+             data-properties-apply-status="@_propertiesApplyStatus"
+             data-properties-authoritative-bounds="@PropertiesAuthoritativeBounds"
+             data-properties-draft-bounds="@PropertiesDraftBounds"
+             data-properties-data-field-count="@PropertiesDataFieldCount"
+             data-properties-data-field-ids="@PropertiesDataFieldIds"
+             data-model-view-properties-form-open="@ModelViewPropertiesFormOpenValue"
+             data-model-view-properties-dirty="@ModelViewPropertiesDirtyValue"
+             data-model-view-properties-apply-status="@_modelViewPropertiesApplyStatus"
+             data-render-count="@SuccessfulRenderCount"
+             data-projection-rule-count="@ProjectionRuleInvocationCount"
+             data-layout-count="@LayoutInvocationCount"
+             data-routing-count="@RoutingInvocationCount"
+             data-scene-contribution-count="@SceneContributionInvocationCount"
+             data-graphical-interaction-enabled="@GraphicalInteractionEnabled"
+             data-selection-count="@SelectionCount"
+             data-selected-visual-state-ids="@SelectedVisualStateIds"
+             data-selected-scene-object-id="@SelectedSceneObjectId"
+             data-hovered-scene-object-id="@HoveredSceneObjectId"
+             data-selected-semantic-element-id="@SelectedSemanticElementId"
+             data-hovered-semantic-element-id="@HoveredSemanticElementId"
+             data-selected-visual-state-id="@SelectedVisualStateId"
+             data-selected-document-bounds="@SelectedDocumentBounds"
+             data-selected-route="@SelectedRoute"
+             data-active-gesture-kind="@ActiveGestureKind"
+             data-canvas-cursor="@CanvasCursor"
+             data-interaction-diagnostic-code="@InteractionDiagnosticCode"
+             data-canvas-css-width="@CssWidth"
+             data-canvas-css-height="@CssHeight"
+             data-device-pixel-ratio="@DevicePixelRatio"
+             data-validation-state="@ValidationStateValue"
+             data-validation-issue-count="@ValidationIssueCount"
+             data-validation-error-count="@ValidationErrorCount"
+             data-validation-warning-count="@ValidationWarningCount"
+             data-validation-info-count="@ValidationInfoCount"
+             data-can-validate="@CanValidateValue"
+             data-issues-panel-open="@IssuesPanelOpenValue"
+             data-issues-panel-left="@IssuesPanelLeft"
+             data-issues-panel-top="@IssuesPanelTop"
+             aria-label="Document presentation">
+        <div class="document-editor-layout">
+            <ToolboxPanel Catalog="@ToolboxCatalog"
+                          DomIdPrefix="@_domIdPrefix"
+                          SelectedItemId="@_toolboxSelection.SelectedItemId"
+                          SelectedItemIdChanged="SelectToolboxItemAsync" />
+            <div class="document-editor-workspace">
+        <div class="editor-toolbar" role="toolbar" aria-label="Editor toolbar">
+            <nav class="scope-breadcrumb" aria-label="Process scope">
+                @for (var index = 0; index < ScopeBreadcrumb.Length; index++)
+                {
+                    var segment = ScopeBreadcrumb[index];
+                    if (index > 0)
+                    {
+                        <span class="scope-breadcrumb-separator" aria-hidden="true">›</span>
+                    }
+                    if (segment.IsActive)
+                    {
+                        <span class="scope-breadcrumb-current"
+                              aria-current="page"
+                              title="@segment.ScopeId.Value">@segment.Label</span>
+                    }
+                    else
+                    {
+                        <button class="scope-breadcrumb-link"
+                                type="button"
+                                disabled="@(!CanNavigateScope)"
+                                title="@segment.ScopeId.Value"
+                                @onclick="() => NavigateToScopeAsync(segment.ScopeId)">@segment.Label</button>
+                    }
+                }
+            </nav>
+            <div class="toolbar-group document-file-controls" role="group" aria-label="Document file">
+                <button id="@DomId("new-diagram")"
+                        class="native-document-action new-diagram-action"
+                        type="button"
+                        disabled="@(!CanCreateNewDiagram)"
+                        aria-label="New diagram"
+                        title="New diagram"
+                        @onclick="OpenNewDiagramConfirmation">
+                    <span class="native-document-action-icon" aria-hidden="true">▧</span>
+                </button>
+                <label id="@DomId("import")"
+                       class="native-document-action native-document-import-action"
+                       for="@DomId("import-file")"
+                       aria-disabled="@(!CanUseNativeDocumentTransfer)"
+                       title="Import native Document (maximum 16 MiB)">
+                    <span class="native-document-action-icon" aria-hidden="true">⇩</span>
+                    <InputFile @key="_nativeDocumentInputKey"
+                               id="@DomId("import-file")"
+                               class="native-document-file-input"
+                               aria-label="Import native Document"
+                               disabled="@(!CanUseNativeDocumentTransfer)"
+                               accept=".inceptus.json,application/json"
+                               OnChange="ImportNativeDocumentAsync" />
+                </label>
+                <button id="@DomId("export")"
+                        class="native-document-action"
+                        type="button"
+                        disabled="@(!CanUseNativeDocumentTransfer)"
+                        aria-label="Export native Document"
+                        title="Export native Document"
+                        @onclick="ExportNativeDocumentAsync">
+                    <span class="native-document-action-icon" aria-hidden="true">⇧</span>
+                </button>
+                <button id="@DomId("publish")"
+                        class="native-document-action publish-action"
+                        type="button"
+                        disabled="@(!CanPublish)"
+                        aria-label="Publish"
+                        title="Publish"
+                        @onclick="OpenPublicationDialog">
+                    <span class="native-document-action-icon" aria-hidden="true">◈</span>
+                </button>
+            </div>
+            <div class="toolbar-group history-controls" role="group" aria-label="Editing history">
+                <button id="@DomId("undo")"
+                        type="button"
+                        disabled="@(!CanUndo)"
+                        title="Undo"
+                        @onclick="UndoAsync">Undo</button>
+                <button id="@DomId("redo")"
+                        type="button"
+                        disabled="@(!CanRedo)"
+                        title="Redo"
+                        @onclick="RedoAsync">Redo</button>
+            </div>
+
+            <div class="toolbar-group zoom-controls" role="group" aria-label="Viewport zoom">
+                <button id="@DomId("zoom-out")"
+                        type="button"
+                        disabled="@(!CanZoomOut)"
+                        aria-label="Zoom out"
+                        title="Zoom out"
+                        @onclick="ZoomOutAsync">−</button>
+                <button id="@DomId("zoom-100")"
+                        class="zoom-percentage"
+                        type="button"
+                        disabled="@(!CanSetZoomToActualSize)"
+                        aria-label="Set zoom to 100%"
+                        title="Set zoom to 100%"
+                        @onclick="SetZoomToActualSizeAsync">@ZoomPercentage%</button>
+                <button id="@DomId("zoom-in")"
+                        type="button"
+                        disabled="@(!CanZoomIn)"
+                        aria-label="Zoom in"
+                        title="Zoom in"
+                        @onclick="ZoomInAsync">+</button>
+            </div>
+            <div class="toolbar-group validation-controls" role="group" aria-label="Model validation">
+                <button id="@DomId("validate")"
+                        type="button"
+                        disabled="@(!CanValidate)"
+                        title="Validate model"
+                        @onclick="ValidateAsync">Validate</button>
+            </div>
+        </div>
+
+        <div id="@ContainerElementId" class="document-canvas-surface">
+            <canvas id="@CanvasElementId"
+                    class="@CanvasClass(CanvasElementId)"
+                    tabindex="@CanvasTabIndex(CanvasElementId)"
+                    aria-hidden="@CanvasAriaHidden(CanvasElementId)"
+                    aria-label="Rendered document diagram"></canvas>
+            <canvas id="@StandbyCanvasElementId"
+                    class="@CanvasClass(StandbyCanvasElementId)"
+                    tabindex="@CanvasTabIndex(StandbyCanvasElementId)"
+                    aria-hidden="@CanvasAriaHidden(StandbyCanvasElementId)"
+                    aria-label="Rendered document diagram"></canvas>
+            @if (_state?.ContextMenu is { } contextMenu &&
+                _propertiesDraft is null && _modelViewPropertiesDraft is null)
+            {
+                <div id="@(contextMenu.Kind == DocumentCanvasContextMenuKind.Background
+                              ? DomId("model-context-menu")
+                              : DomId("object-context-menu"))"
+                     class="object-context-menu"
+                     role="menu"
+                     aria-label="@(contextMenu.Kind == DocumentCanvasContextMenuKind.Background
+                                      ? "Model and view actions"
+                                      : "Diagram object actions")"
+                     @onclick:stopPropagation
+                     @onpointerdown:stopPropagation
+                     @onpointerup:stopPropagation
+                     @onpointermove:stopPropagation
+                     @onwheel:stopPropagation
+                     @oncontextmenu:preventDefault
+                     @oncontextmenu:stopPropagation
+                     @onauxclick:preventDefault
+                     @onauxclick:stopPropagation
+                     style="left: @Format(contextMenu.CssPosition.X)px; top: @Format(contextMenu.CssPosition.Y)px;">
+                    @if (contextMenu.Kind == DocumentCanvasContextMenuKind.Background)
+                    {
+                        @foreach (var group in contextMenu.BackgroundActions
+                            .GroupBy(static action => action.GroupLabel, StringComparer.Ordinal))
+                        {
+                            <div class="model-context-submenu" role="none">
+                                <button class="model-context-submenu-trigger"
+                                        type="button"
+                                        role="menuitem"
+                                        aria-haspopup="menu">
+                                    <span>@group.Key</span>
+                                    <span aria-hidden="true">›</span>
+                                </button>
+                                <div class="model-context-submenu-items"
+                                     role="menu"
+                                     aria-label="@group.Key">
+                                    @foreach (var action in group)
+                                    {
+                                        <button id="@BackgroundActionControlId(action.Id)"
+                                                type="button"
+                                                role="menuitem"
+                                                data-background-action-id="@action.Id.Value"
+                                                @onclick="() => ExecuteBackgroundContextActionAsync(action.Id)">@action.DisplayName</button>
+                                    }
+                                </div>
+                            </div>
+                        }
+                        <button id="@DomId("model-view-properties-action")"
+                                type="button"
+                                role="menuitem"
+                                @onclick="OpenModelViewPropertiesAsync">View and model properties...</button>
+                    }
+                    else
+                    {
+                        @foreach (var action in contextMenu.SemanticCommandActions)
+                        {
+                            <button id="@SemanticSceneCommandActionControlId(action.Id)"
+                                    type="button"
+                                    role="menuitem"
+                                    data-semantic-scene-command-action-id="@action.Id.Value"
+                                    @onclick="() => ExecuteSemanticSceneCommandContextActionAsync(action.Id)">@action.DisplayName</button>
+                        }
+                        @foreach (var action in contextMenu.SemanticViewActions)
+                        {
+                            <button id="@SemanticSceneViewActionControlId(action.Id)"
+                                    type="button"
+                                    role="menuitem"
+                                    data-semantic-scene-view-action-id="@action.Id.Value"
+                                    @onclick="() => ExecuteSemanticSceneViewContextActionAsync(action.Id)">@action.DisplayName</button>
+                        }
+                        @if (contextMenu.ScopeNavigationAction is { } scopeNavigationAction)
+                        {
+                            <button id="@DomId("open-scope-action")"
+                                    type="button"
+                                    role="menuitem"
+                                    @onclick="ExecuteScopeNavigationContextActionAsync">@scopeNavigationAction.Label</button>
+                        }
+                        <button id="@DomId("properties-action")"
+                                type="button"
+                                role="menuitem"
+                                disabled="@(!PropertiesAvailable)"
+                                @onclick="OpenPropertiesAsync">Properties...</button>
+                        @if (contextMenu.ConnectorRouteAction?.Kind is
+                            Canvas2DConnectorRouteContextActionKind.AddPoint)
+                        {
+                            <button id="@DomId("add-connector-point-action")"
+                                    type="button"
+                                    role="menuitem"
+                                    @onclick="ExecuteConnectorRouteContextActionAsync">Add point here</button>
+                        }
+                        else if (contextMenu.ConnectorRouteAction?.Kind is
+                                 Canvas2DConnectorRouteContextActionKind.DeletePoint)
+                        {
+                            <button id="@DomId("delete-connector-point-action")"
+                                    type="button"
+                                    role="menuitem"
+                                    @onclick="ExecuteConnectorRouteContextActionAsync">Delete point</button>
+                        }
+                        @if (contextMenu.ConnectorAnchorAction?.Kind is
+                            Canvas2DConnectorAnchorContextActionKind.AddAnchor)
+                        {
+                            @if (contextMenu.ConnectorAnchorAction.CanAdd(ConnectorAnchorRole.Source))
+                            {
+                                <button id="@DomId("add-connector-source-anchor-action")"
+                                        type="button"
+                                        role="menuitem"
+                                        @onclick="() => ExecuteConnectorAnchorContextActionAsync(ConnectorAnchorRole.Source)">Add connector start point here</button>
+                            }
+                            @if (contextMenu.ConnectorAnchorAction.CanAdd(ConnectorAnchorRole.Target))
+                            {
+                                <button id="@DomId("add-connector-target-anchor-action")"
+                                        type="button"
+                                        role="menuitem"
+                                        @onclick="() => ExecuteConnectorAnchorContextActionAsync(ConnectorAnchorRole.Target)">Add connector end point here</button>
+                            }
+                        }
+                        else if (contextMenu.ConnectorAnchorAction is
+                                 {
+                                     Kind: Canvas2DConnectorAnchorContextActionKind.DeleteAnchor,
+                                     CanDelete: true,
+                                 })
+                        {
+                            <button id="@DomId("delete-connector-anchor-action")"
+                                    type="button"
+                                    role="menuitem"
+                                    @onclick="() => ExecuteConnectorAnchorContextActionAsync(null)">Delete attachment point</button>
+                        }
+                        @if (contextMenu.NodeLabelAction is not null)
+                        {
+                            <button id="@DomId("reset-node-label-action")"
+                                    type="button"
+                                    role="menuitem"
+                                    @onclick="ExecuteNodeLabelContextActionAsync">Reset label position</button>
+                        }
+                        @if (contextMenu.DeletionAction?.TargetKind is
+                            DiagramDeletionTargetKind.Element)
+                        {
+                            <button id="@DomId("delete-element-action")"
+                                    type="button"
+                                    role="menuitem"
+                                    @onclick="ExecuteDeletionContextActionAsync">Delete element</button>
+                        }
+                        else if (contextMenu.DeletionAction?.TargetKind is
+                                 DiagramDeletionTargetKind.Connection)
+                        {
+                            <button id="@DomId("delete-connection-action")"
+                                    type="button"
+                                    role="menuitem"
+                                    @onclick="ExecuteDeletionContextActionAsync">Delete connection</button>
+                        }
+                    }
+                </div>
+            }
+
+            @if (_modelViewPropertiesDraft is { } modelViewDraft)
+            {
+                <div class="properties-backdrop"
+                     aria-hidden="true"
+                     @oncontextmenu:preventDefault></div>
+                <form id="@DomId("model-view-properties-form")"
+                      class="properties-form model-view-properties-form"
+                      aria-label="View and model properties"
+                      @onsubmit="ApplyModelViewPropertiesAsync"
+                      @onsubmit:preventDefault>
+                    <header class="properties-form-header">
+                        <h2>View and model properties</h2>
+                        <button id="@DomId("model-view-properties-close")"
+                                class="properties-close"
+                                type="button"
+                                aria-label="Close view and model properties"
+                                title="Close view and model properties"
+                                disabled="@_modelViewPropertiesApplying"
+                                @onclick="CancelModelViewProperties">×</button>
+                    </header>
+
+                    <fieldset data-property-group="profiles">
+                        <legend>Profiles</legend>
+                        @foreach (var profile in modelViewDraft.Profiles)
+                        {
+                            <section class="model-profile-row"
+                                     data-model-profile-id="@profile.Definition.Id.Value">
+                                <h3>@profile.Definition.DisplayName</h3>
+                                <label>
+                                    <input id="@ModelProfileAvailableControlId(profile.Definition.Id)"
+                                           type="checkbox"
+                                           checked="@profile.IsAvailable"
+                                           disabled="@_modelViewPropertiesApplying"
+                                           @onchange="eventArgs => UpdateModelProfileAvailability(profile.Definition.Id, eventArgs.Value)" />
+                                    <span>Available in model</span>
+                                </label>
+                                <label>
+                                    <input id="@ModelProfileVisibleControlId(profile.Definition.Id)"
+                                           type="checkbox"
+                                           checked="@profile.IsEffectivelyVisible"
+                                           disabled="@(_modelViewPropertiesApplying || !profile.IsAvailable)"
+                                           @onchange="eventArgs => UpdateModelProfileVisibility(profile.Definition.Id, eventArgs.Value)" />
+                                    <span>Visible in view</span>
+                                </label>
+                            </section>
+                        }
+                    </fieldset>
+
+                    @if (!string.IsNullOrWhiteSpace(modelViewDraft.Feedback))
+                    {
+                        <p class="properties-feedback" role="alert">@modelViewDraft.Feedback</p>
+                    }
+
+                    <footer class="properties-form-actions">
+                        <button id="@DomId("model-view-properties-cancel")"
+                                type="button"
+                                disabled="@_modelViewPropertiesApplying"
+                                @onclick="CancelModelViewProperties">Cancel</button>
+                        <button id="@DomId("model-view-properties-apply")"
+                                class="primary"
+                                type="submit"
+                                disabled="@(_modelViewPropertiesApplying || modelViewDraft.IsStale)">Apply</button>
+                    </footer>
+                </form>
+            }
+
+            @if (_propertiesDraft is { } draft)
+            {
+                <div class="properties-backdrop"
+                     aria-hidden="true"
+                     @oncontextmenu:preventDefault></div>
+                <form id="@DomId("properties-form")"
+                      class="properties-form"
+                      aria-label="Selected object properties"
+                      @onsubmit="ApplyPropertiesAsync"
+                      @onsubmit:preventDefault>
+                    <header class="properties-form-header">
+                        <h2>Properties</h2>
+                        <button id="@DomId("properties-close")"
+                                class="properties-close"
+                                type="button"
+                                aria-label="Close properties"
+                                title="Close properties"
+                                disabled="@_propertiesApplying"
+                                @onclick="CancelProperties">×</button>
+                    </header>
+
+                    <fieldset data-property-group="data">
+                        <legend>Data</legend>
+                        @foreach (var field in draft.DataFields)
+                        {
+                            <label>
+                                @field.Definition.DisplayName
+                                @switch (field.Definition.EditorKind)
+                                {
+                                    case ElementPropertyEditorKind.SingleLineText:
+                                        <input id="@PropertiesFieldControlId(field.FieldId)"
+                                               data-property-field-id="@field.FieldId.Value"
+                                               type="text"
+                                               value="@field.EditorValue"
+                                               readonly="@(!field.CanEdit)"
+                                               disabled="@_propertiesApplying"
+                                               @oninput="eventArgs => UpdateDataDraftValue(field.FieldId, eventArgs.Value)" />
+                                        break;
+                                    case ElementPropertyEditorKind.Integer:
+                                        <input id="@PropertiesFieldControlId(field.FieldId)"
+                                               data-property-field-id="@field.FieldId.Value"
+                                               type="number"
+                                               step="1"
+                                               inputmode="numeric"
+                                               value="@field.EditorValue"
+                                               readonly="@(!field.CanEdit)"
+                                               disabled="@_propertiesApplying"
+                                               @oninput="eventArgs => UpdateDataDraftValue(field.FieldId, eventArgs.Value)" />
+                                        break;
+                                    case ElementPropertyEditorKind.MultilineText:
+                                        <textarea id="@PropertiesFieldControlId(field.FieldId)"
+                                                  data-property-field-id="@field.FieldId.Value"
+                                                  rows="5"
+                                                  value="@field.EditorValue"
+                                                  readonly="@(!field.CanEdit)"
+                                                  disabled="@_propertiesApplying"
+                                                  @oninput="eventArgs => UpdateDataDraftValue(field.FieldId, eventArgs.Value)"></textarea>
+                                        break;
+                                    case ElementPropertyEditorKind.Boolean:
+                                        <input id="@PropertiesFieldControlId(field.FieldId)"
+                                               data-property-field-id="@field.FieldId.Value"
+                                               type="checkbox"
+                                               checked="@ResolveBooleanEditorValue(field)"
+                                               disabled="@(_propertiesApplying || !field.CanEdit)"
+                                               @onchange="eventArgs => UpdateDataDraftValue(field.FieldId, eventArgs.Value)" />
+                                        break;
+                                    default:
+                                        throw new InvalidOperationException(
+                                            "The element Properties editor kind is unsupported.");
+                                }
+                            </label>
+                        }
+                    </fieldset>
+
+                    <fieldset data-property-group="identity">
+                        <legend>Identity</legend>
+                        <label>Semantic ID
+                            <input id="@DomId("properties-semantic-id")"
+                                   value="@draft.Authoritative.SemanticId.Value"
+                                   readonly />
+                        </label>
+                        @if (draft.Authoritative.VisualStateId is { } propertyVisualStateId)
+                        {
+                            <label>Visual State ID
+                                <input id="@DomId("properties-visual-id")"
+                                       value="@propertyVisualStateId.Value"
+                                       readonly />
+                            </label>
+                        }
+                        <label>Type
+                            <input id="@DomId("properties-type")"
+                                   value="@draft.Authoritative.TypeId.Value"
+                                   readonly />
+                        </label>
+                    </fieldset>
+
+                    <fieldset data-property-group="visual">
+                        <legend>Visual</legend>
+                        <label>Placement
+                            <input id="@DomId("properties-placement")"
+                                   value="@draft.Authoritative.PlacementMode"
+                                   readonly />
+                        </label>
+                        @if (draft.Authoritative.CanEditBounds)
+                        {
+                            <div class="properties-grid">
+                                <label>X
+                                    <input id="@DomId("properties-x")"
+                                           inputmode="decimal"
+                                           value="@draft.X"
+                                           disabled="@(_propertiesApplying || draft.IsSemanticDirty)"
+                                           @oninput="eventArgs => UpdateVisualDraftValue(PropertiesVisualDraftField.X, eventArgs.Value)" />
+                                </label>
+                                <label>Y
+                                    <input id="@DomId("properties-y")"
+                                           inputmode="decimal"
+                                           value="@draft.Y"
+                                           disabled="@(_propertiesApplying || draft.IsSemanticDirty)"
+                                           @oninput="eventArgs => UpdateVisualDraftValue(PropertiesVisualDraftField.Y, eventArgs.Value)" />
+                                </label>
+                                <label>Width
+                                    <input id="@DomId("properties-width")"
+                                           inputmode="decimal"
+                                           value="@draft.Width"
+                                           disabled="@(_propertiesApplying || draft.IsSemanticDirty)"
+                                           @oninput="eventArgs => UpdateVisualDraftValue(PropertiesVisualDraftField.Width, eventArgs.Value)" />
+                                </label>
+                                <label>Height
+                                    <input id="@DomId("properties-height")"
+                                           inputmode="decimal"
+                                           value="@draft.Height"
+                                           disabled="@(_propertiesApplying || draft.IsSemanticDirty)"
+                                           @oninput="eventArgs => UpdateVisualDraftValue(PropertiesVisualDraftField.Height, eventArgs.Value)" />
+                                </label>
+                            </div>
+                        }
+                        else if (draft.Authoritative.IsConnector)
+                        {
+                            <label>Source
+                                <input id="@DomId("properties-source")"
+                                       value="@draft.Authoritative.SourceId?.Value"
+                                       readonly />
+                            </label>
+                            <label>Target
+                                <input id="@DomId("properties-target")"
+                                       value="@draft.Authoritative.TargetId?.Value"
+                                       readonly />
+                            </label>
+                            <label>Label path position
+                                <input id="@DomId("properties-label-path-position")"
+                                       value="@Format(draft.Authoritative.LabelPlacement!.PathPosition)"
+                                       readonly />
+                            </label>
+                            <label>Label offset X
+                                <input id="@DomId("properties-label-offset-x")"
+                                       value="@Format(draft.Authoritative.LabelPlacement!.Offset.X)"
+                                       readonly />
+                            </label>
+                            <label>Label offset Y
+                                <input id="@DomId("properties-label-offset-y")"
+                                       value="@Format(draft.Authoritative.LabelPlacement!.Offset.Y)"
+                                       readonly />
+                            </label>
+                        }
+                    </fieldset>
+
+                    @if (!string.IsNullOrWhiteSpace(draft.Feedback))
+                    {
+                        <p class="properties-feedback" role="alert">@draft.Feedback</p>
+                    }
+
+                    <footer class="properties-form-actions">
+                        <button id="@DomId("properties-cancel")"
+                                type="button"
+                                disabled="@_propertiesApplying"
+                                @onclick="CancelProperties">Cancel</button>
+                        <button id="@DomId("properties-apply")"
+                                class="primary"
+                                type="submit"
+                                disabled="@(_propertiesApplying || draft.IsStale || !draft.IsValid)">Apply</button>
+                    </footer>
+                </form>
+            }
+
+            @if (_issuesPanel.IsOpen)
+            {
+                <aside id="@DomId("issues-panel")"
+                       class="issues-floating-panel"
+                       aria-label="Validation issues"
+                       aria-live="polite"
+                       style="@IssuesPanelStyle"
+                       @onclick:stopPropagation
+                       @onpointerdown:stopPropagation
+                       @onpointermove:stopPropagation
+                       @onpointerup:stopPropagation
+                       @onpointercancel:stopPropagation
+                       @onwheel:stopPropagation
+                       @oncontextmenu:preventDefault
+                       @oncontextmenu:stopPropagation
+                       @onauxclick:preventDefault
+                       @onauxclick:stopPropagation>
+                    <header id="@DomId("issues-panel-header")"
+                            class="issues-panel-header"
+                            @onpointerdown="StartIssuesPanelMove"
+                            @onpointerdown:preventDefault
+                            @onpointermove="MoveIssuesPanel"
+                            @onpointerup="EndIssuesPanelMove"
+                            @onpointercancel="EndIssuesPanelMove"
+                            @onlostpointercapture="CancelIssuesPanelMove">
+                        <h2>Issues</h2>
+                    </header>
+                    <button id="@DomId("issues-close")"
+                            class="issues-close"
+                            type="button"
+                            aria-label="Close Issues"
+                            title="Close Issues"
+                            @onclick="CloseIssuesPanel">×</button>
+                    <div class="issues-panel-summary issues-counts"
+                         aria-label="Validation issue counts">
+                        <span data-severity="error">Errors @ValidationErrorCount</span>
+                        <span data-severity="warning">Warnings @ValidationWarningCount</span>
+                        <span data-severity="info">Info @ValidationInfoCount</span>
+                    </div>
+                    <div class="issues-panel-body">
+                        @if (CurrentValidation is null)
+                        {
+                            <p class="issues-empty">Not validated.</p>
+                        }
+                        else if (CurrentValidation.Issues.IsEmpty)
+                        {
+                            <p class="issues-empty">No issues found.</p>
+                        }
+                        else
+                        {
+                            <ul class="issues-list">
+                                @foreach (var issue in CurrentValidation.Issues)
+                                {
+                                    <li>
+                                        <button type="button"
+                                                class="issue-row"
+                                                data-issue-id="@issue.Id.Value"
+                                                data-issue-code="@issue.Code"
+                                                data-issue-severity="@issue.Severity.ToString().ToLowerInvariant()"
+                                                disabled="@(issue.Target.VisualStateId is null)"
+                                                @onclick="() => SelectValidationIssueAsync(issue.Id)">
+                                            <span class="issue-severity" aria-hidden="true"></span>
+                                            <span class="issue-content">
+                                                <strong>@issue.Code</strong>
+                                                <span>@issue.Message</span>
+                                                <small>@ValidationTargetLabel(issue.Target)</small>
+                                            </span>
+                                        </button>
+                                    </li>
+                                }
+                            </ul>
+                        }
+                    </div>
+                </aside>
+            }
+        </div>
+
+        <footer id="@DomId("editor-status")" class="editor-status-row">
+            <button id="@DomId("issues-toggle")"
+                    class="issues-toggle"
+                    type="button"
+                    aria-controls="@DomId("issues-panel")"
+                    aria-expanded="@IssuesPanelOpenValue"
+                    @onclick="ToggleIssuesPanel">
+                <span>Issues</span>
+                <span class="issues-disclosure" aria-hidden="true">@IssuesDisclosure</span>
+            </button>
+            <div class="canvas-presentation-status" role="status" aria-live="polite">
+                <span class="status-indicator" aria-hidden="true"></span>
+                <span>@StatusMessage</span>
+            </div>
+            @if (CurrentValidation is null)
+            {
+                <span class="validation-currency">Not validated</span>
+            }
+            <div class="issues-counts status-issue-counts"
+                 aria-label="Validation issue counts">
+                <span data-severity="error">Errors @ValidationErrorCount</span>
+                <span data-severity="warning">Warnings @ValidationWarningCount</span>
+                <span data-severity="info">Info @ValidationInfoCount</span>
+            </div>
+        </footer>
+
+        @if (ErrorMessage is not null)
+        {
+            <p class="presentation-error" role="alert">@ErrorMessage</p>
+        }
+        @if (_nativeDocumentOperationErrorMessage is not null)
+        {
+            <p id="@DomId("native-document-error")"
+               class="presentation-error native-document-error"
+               role="alert">@_nativeDocumentOperationErrorMessage</p>
+        }
+        @if (_newDiagramOperationErrorMessage is not null)
+        {
+            <p id="@DomId("new-diagram-error")"
+               class="presentation-error new-diagram-error"
+               role="alert">@_newDiagramOperationErrorMessage</p>
+        }
+        @if (_publishOperationErrorMessage is not null)
+        {
+            <section id="@DomId("publish-error")"
+                     class="presentation-error publish-error"
+                     role="alert"
+                     aria-labelledby="@DomId("publish-error-title")">
+                <div class="publish-error-header">
+                    <h2 id="@DomId("publish-error-title")">@_publishOperationErrorHeading</h2>
+                    <button type="button"
+                            aria-label="Dismiss publication feedback"
+                            @onclick="DismissPublishOperationError">Dismiss</button>
+                </div>
+                <ul>
+                    @foreach (var diagnostic in _publishOperationDiagnostics)
+                    {
+                        <li data-publish-diagnostic-code="@diagnostic.Code">
+                            @if (PublishDiagnosticTarget(diagnostic) is { } target)
+                            {
+                                <strong>@target</strong>
+                            }
+                            <p>@diagnostic.Message</p>
+                            @if (diagnostic.Context.TryGetValue("SuggestedAction", out var hint))
+                            {
+                                <p>@hint</p>
+                            }
+                            <small>@diagnostic.Code</small>
+                        </li>
+                    }
+                </ul>
+            </section>
+        }
+            </div>
+        </div>
+    </section>
+    @if (_newDiagramConfirmationOpen)
+    {
+        <div class="new-diagram-confirmation-backdrop"
+             @onclick="CancelNewDiagramConfirmation">
+            <section id="@DomId("new-diagram-dialog")"
+                     class="new-diagram-confirmation"
+                     role="dialog"
+                     aria-modal="true"
+                     aria-labelledby="@DomId("new-diagram-title")"
+                     aria-describedby="@DomId("new-diagram-description")"
+                     @onclick:stopPropagation>
+                <h2 id="@DomId("new-diagram-title")">Create a new diagram?</h2>
+                <p id="@DomId("new-diagram-description")">
+                    The current diagram and its change history will be cleared.
+                </p>
+                <div class="new-diagram-confirmation-actions">
+                    <button id="@DomId("new-diagram-cancel")"
+                            @ref="_newDiagramCancelButton"
+                            type="button"
+                            autofocus
+                            disabled="@_newDiagramInProgress"
+                            @onclick="CancelNewDiagramConfirmation">Cancel</button>
+                    <button id="@DomId("new-diagram-confirm")"
+                            class="primary"
+                            type="button"
+                            disabled="@_newDiagramInProgress"
+                            @onclick="ConfirmNewDiagramAsync">New diagram</button>
+                </div>
+            </section>
+        </div>
+    }
+    @if (_publicationDialogOpen)
+    {
+        <div class="publication-dialog-backdrop"
+             @onclick="CancelPublicationDialog">
+            <section id="@DomId("publication-dialog")"
+                     class="publication-dialog"
+                     role="dialog"
+                     aria-modal="true"
+                     aria-labelledby="@DomId("publication-title")"
+                     @onclick:stopPropagation>
+                <h2 id="@DomId("publication-title")">Publication</h2>
+                <div class="publication-fields">
+                    <label for="@DomId("publication-code")">Code</label>
+                    <input id="@DomId("publication-code")"
+                           @ref="_publicationCodeInput"
+                           type="text"
+                           autocomplete="off"
+                           spellcheck="false"
+                           aria-describedby="@DomId("publication-code-help")"
+                           aria-invalid="@(!PublicationCodeIsValid)"
+                           @bind="_publicationCodeDraft"
+                           @bind:event="oninput" />
+                    <span id="@DomId("publication-code-help")" class="publication-field-help">
+                        Lower-case letters, numbers, and single hyphens only.
+                    </span>
+
+                    <label for="@DomId("publication-title-input")">Title</label>
+                    <input id="@DomId("publication-title-input")"
+                           type="text"
+                           aria-invalid="@(!PublicationTitleIsValid)"
+                           @bind="_publicationTitleDraft"
+                           @bind:event="oninput" />
+
+                    <label for="@DomId("publication-description")">Description</label>
+                    <textarea id="@DomId("publication-description")"
+                              rows="4"
+                              @bind="_publicationDescriptionDraft"
+                              @bind:event="oninput"></textarea>
+                </div>
+                <div class="publication-dialog-actions">
+                    <button id="@DomId("publication-cancel")"
+                            type="button"
+                            disabled="@_publishInProgress"
+                            @onclick="CancelPublicationDialog">Cancel</button>
+                    <button id="@DomId("publication-save")"
+                            type="button"
+                            disabled="@(!CanAcceptPublicationDraft)"
+                            @onclick="SavePublicationDraftAsync">Save</button>
+                    <button id="@DomId("publication-publish")"
+                            class="primary"
+                            type="button"
+                            disabled="@(!CanAcceptPublicationDraft)"
+                            @onclick="PublishPublicationDraftAsync">Publish</button>
+                </div>
+            </section>
+        </div>
+    }
+</main>
+
+@code {
+    [CascadingParameter]
+    internal BpmnModelerFacade? ModelerFacade { get; set; }
+
+    private readonly string _domIdPrefix = $"inceptus-{Guid.NewGuid():N}";
+    private BpmnModelerCompositionFactory? _compositionFactory;
+    private BpmnModelerCompositionFactory CompositionFactory =>
+        _compositionFactory ??= ModelerFacade?.CompositionFactory ??
+            new BpmnModelerCompositionFactory(
+                () => Services.GetServices<IBpmnModelerStartupDocumentProvider>());
+    private static ToolboxCatalog ToolboxCatalog =>
+        BpmnModelerCompositionFactory.ToolboxCatalog;
+
+    private string CanvasElementId => DomId("document-canvas");
+    private string StandbyCanvasElementId => DomId("document-canvas-standby");
+    private string ContainerElementId => DomId("document-canvas-container");
+    private string DomId(string suffix) => $"{_domIdPrefix}-{suffix}";
+    internal const string NativeDocumentContentType = "application/json";
+    internal const string NativeDocumentFileName = "document.inceptus.json";
+    internal const string PublishContentType = "application/zip";
+    internal const string PublishFileName = "published-process.zip";
+    internal const long MaximumNativeDocumentFileSize = 16L * 1024L * 1024L;
+    internal const string NativeDocumentFileTooLargeCode =
+        "CANVAS_NATIVE_DOCUMENT_FILE_TOO_LARGE";
+    internal const string NativeDocumentFileTooLargeMessage =
+        "The selected native Document exceeds the 16 MiB browser import limit.";
+    private readonly CancellationTokenSource _componentLifetime = new();
+    private readonly ToolboxSelectionState _toolboxSelection = new();
+    private readonly FloatingIssuesPanelState _issuesPanel = new();
+    private DocumentCanvasHost? _host;
+    private DocumentCanvasHostState? _state;
+    private DocumentCanvasPropertiesDraft? _propertiesDraft;
+    private DocumentCanvasModelViewPropertiesDraft? _modelViewPropertiesDraft;
+    private IJSObjectReference? _issuesPanelModule;
+    private IJSObjectReference? _issuesPanelPointerCapture;
+    private bool _propertiesApplying;
+    private string _propertiesApplyStatus = "idle";
+    private bool _modelViewPropertiesApplying;
+    private string _modelViewPropertiesApplyStatus = "idle";
+    private bool _disposed;
+    private bool _nativeDocumentImportInProgress;
+    private bool _nativeDocumentExportInProgress;
+    private int _nativeDocumentInputKey;
+    private string _nativeDocumentOperationStatus = "idle";
+    private string? _nativeDocumentOperationErrorCode;
+    private string? _nativeDocumentOperationErrorMessage;
+    private bool _newDiagramConfirmationOpen;
+    private bool _newDiagramConfirmationFocusPending;
+    private bool _newDiagramInProgress;
+    private ElementReference _newDiagramCancelButton;
+    private string _newDiagramOperationStatus = "idle";
+    private string? _newDiagramOperationErrorCode;
+    private string? _newDiagramOperationErrorMessage;
+    private bool _publishInProgress;
+    private string _publishOperationStatus = "idle";
+    private string? _publishOperationErrorCode;
+    private string? _publishOperationErrorMessage;
+    private string _publishOperationErrorHeading = "Publish failed";
+    private ImmutableArray<Diagnostic> _publishOperationDiagnostics = [];
+    private long? _publishOperationSessionVersion;
+    private CancellationTokenSource? _publishOperationCancellation;
+    private bool _publicationDialogOpen;
+    private bool _publicationDialogFocusPending;
+    private long _publicationSourceSessionVersion;
+    private DocumentId? _publicationSourceDocumentId;
+    private DocumentRevision? _publicationSourceRevision;
+    private string _publicationCodeDraft = string.Empty;
+    private string _publicationTitleDraft = string.Empty;
+    private string _publicationDescriptionDraft = string.Empty;
+    private ElementReference _publicationCodeInput;
+    private readonly object _lifecycleSync = new();
+
+    private string ActiveCanvasElementId =>
+        _state?.ActiveCanvasElementId ?? CanvasElementId;
+
+    private bool IsActiveCanvas(string canvasElementId) =>
+        string.Equals(ActiveCanvasElementId, canvasElementId, StringComparison.Ordinal);
+
+    private string CanvasClass(string canvasElementId) => IsActiveCanvas(canvasElementId)
+        ? "document-canvas-buffer document-canvas-buffer-active"
+        : "document-canvas-buffer";
+
+    private int CanvasTabIndex(string canvasElementId) =>
+        IsActiveCanvas(canvasElementId) ? 0 : -1;
+
+    private string CanvasAriaHidden(string canvasElementId) =>
+        IsActiveCanvas(canvasElementId) ? "false" : "true";
+
+    private string SceneStatusValue => _state switch
+    {
+        { Session.IsClosed: true } or { IsDisposed: true } => "closed",
+        { Session: not null } state => state.Session.Status.ToString().ToLowerInvariant(),
+        _ => "uninitialized",
+    };
+
+    private string StatusValue => _state switch
+    {
+        { Session.Status: EditingSessionStatus.Ready, LatestPresentationSucceeded: false } =>
+            "renderfaulted",
+        { InitializationAttempted: true, IsInitialized: false } => "initializationfaulted",
+        _ => SceneStatusValue,
+    };
+
+    private string SceneRevision =>
+        (_state?.Session?.CurrentScene ?? _state?.Session?.LastKnownGoodScene)
+        ?.SourceRevision.Value.ToString(
+            System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty;
+
+    private string DocumentRevision =>
+        _state?.Session?.DocumentRevision.Value.ToString(
+            System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty;
+
+    private string DocumentId => _state?.Session?.DocumentId.Value ?? string.Empty;
+
+    private string ActiveScopeId => _state?.Session?.ActiveScopeId.Value ?? string.Empty;
+
+    private ImmutableArray<DocumentCanvasScopeBreadcrumbSegment> ScopeBreadcrumb =>
+        _state?.ScopeBreadcrumb ?? DocumentCanvasScopeBreadcrumb.Empty;
+
+    private string ScopeBreadcrumbValue => string.Join(
+        " > ",
+        ScopeBreadcrumb.Select(static segment => segment.Label));
+
+    private bool CanNavigateScope =>
+        _state?.Session is
+        {
+            IsClosed: false,
+            Status: EditingSessionStatus.Ready,
+            EditorState.ActiveGesture: null,
+        } && !_publicationDialogOpen &&
+        _propertiesDraft is null && _modelViewPropertiesDraft is null &&
+        _state?.PropertiesFormOpen != true &&
+        _state?.ModelViewPropertiesFormOpen != true;
+
+    private string HistoryEntryCount =>
+        _state?.Session?.HistoryStatus.EntryCount.ToString(
+            System.Globalization.CultureInfo.InvariantCulture) ?? "0";
+
+    private bool CanUndo =>
+        _state?.Session is { IsClosed: false } session &&
+        session.EditorState.ActiveGesture is null &&
+        session.Status is EditingSessionStatus.Ready or EditingSessionStatus.RuntimeFaulted &&
+        !_publicationDialogOpen &&
+        !AnyPropertiesDirty &&
+        !AnyPropertiesApplying &&
+        session.HistoryStatus.CanUndo;
+
+    private bool CanRedo =>
+        _state?.Session is { IsClosed: false } session &&
+        session.EditorState.ActiveGesture is null &&
+        session.Status is EditingSessionStatus.Ready or EditingSessionStatus.RuntimeFaulted &&
+        !_publicationDialogOpen &&
+        !AnyPropertiesDirty &&
+        !AnyPropertiesApplying &&
+        session.HistoryStatus.CanRedo;
+
+    private string CanUndoValue => CanUndo ? "true" : "false";
+
+    private string CanRedoValue => CanRedo ? "true" : "false";
+
+    private bool CanUseNativeDocumentTransfer =>
+        !_nativeDocumentImportInProgress &&
+        !_nativeDocumentExportInProgress &&
+        !_newDiagramInProgress &&
+        !_newDiagramConfirmationOpen &&
+        !_publicationDialogOpen &&
+        !_publishInProgress &&
+        _state is
+        {
+            IsInitialized: true,
+            IsDisposed: false,
+            Session:
+            {
+                IsClosed: false,
+                Status: EditingSessionStatus.Ready,
+                EditorState.ActiveGesture: null,
+            },
+        } && _propertiesDraft is null && _modelViewPropertiesDraft is null &&
+        _state.PropertiesFormOpen == false &&
+        _state.ModelViewPropertiesFormOpen == false;
+
+    private bool CanPublish => CanUseNativeDocumentTransfer;
+
+    private bool PublicationCodeIsValid =>
+        DocumentPublicationSnapshot.IsValidCode(_publicationCodeDraft);
+
+    private bool PublicationTitleIsValid =>
+        !string.IsNullOrWhiteSpace(_publicationTitleDraft);
+
+    private bool PublicationDraftIsValid =>
+        DocumentPublicationSnapshot.TryCreate(
+            _publicationCodeDraft,
+            _publicationTitleDraft,
+            _publicationDescriptionDraft,
+            out _);
+
+    private bool CanAcceptPublicationDraft =>
+        _publicationDialogOpen && !_publishInProgress && PublicationDraftIsValid;
+
+    private bool CanCreateNewDiagram => CanUseNativeDocumentTransfer;
+
+    private bool CanUseZoom =>
+        _state is
+        {
+            IsInitialized: true,
+            IsDisposed: false,
+            SurfaceSize: not null,
+            Session:
+            {
+                IsClosed: false,
+                Status: EditingSessionStatus.Ready,
+                CurrentScene: not null,
+                EditorState.ActiveGesture: null,
+            },
+        } && !_publicationDialogOpen &&
+        _propertiesDraft is null && _modelViewPropertiesDraft is null &&
+        _state?.PropertiesFormOpen != true &&
+        _state?.ModelViewPropertiesFormOpen != true;
+
+    private bool CanZoomOut => CanUseZoom &&
+        DocumentCanvasZoomPolicy.CanZoomOut(CurrentZoom);
+
+    private bool CanZoomIn => CanUseZoom &&
+        DocumentCanvasZoomPolicy.CanZoomIn(CurrentZoom);
+
+    private bool CanSetZoomToActualSize => CanUseZoom &&
+        !DocumentCanvasZoomPolicy.IsActualSize(CurrentZoom);
+
+    private string CanZoomOutValue => CanZoomOut ? "true" : "false";
+
+    private string CanZoomInValue => CanZoomIn ? "true" : "false";
+
+    private string CanSetZoomToActualSizeValue =>
+        CanSetZoomToActualSize ? "true" : "false";
+
+    private double CurrentZoom => _state?.Session is { } session
+        ? session.EditorState.Viewport.Zoom
+        : DocumentCanvasZoomPolicy.ActualSize;
+
+    private int ZoomPercentage => DocumentCanvasZoomPolicy.ToPercentage(CurrentZoom);
+
+    private string ViewportZoom => Format(CurrentZoom);
+
+    private string ViewportPanX => Format(
+        _state?.Session?.EditorState.Viewport.Pan.X ?? 0d);
+
+    private string ViewportPanY => Format(
+        _state?.Session?.EditorState.Viewport.Pan.Y ?? 0d);
+
+    private bool PropertiesAvailable =>
+        _state?.Session is
+        {
+            IsClosed: false,
+            Status: EditingSessionStatus.Ready,
+            EditorState.ActiveGesture: null,
+        } session &&
+        ((_state.ContextMenu?.TargetVisualStateId is { } targetVisualStateId &&
+          session.EditorState.Selection.Contains(targetVisualStateId)) ||
+         (_state.ContextMenu?.TargetSemanticElementId is { } targetSemanticElementId &&
+          session.EditorState.Selection.IsEmpty &&
+          session.EditorState.SemanticSceneSelection == targetSemanticElementId));
+
+    private string PropertiesAvailableValue => PropertiesAvailable ? "true" : "false";
+
+    private string ContextMenuOpenValue =>
+        _state?.ContextMenu is not null && _propertiesDraft is null &&
+        _modelViewPropertiesDraft is null
+            ? "true"
+            : "false";
+
+    private string ContextMenuKindValue => _state?.ContextMenu?.Kind switch
+    {
+        DocumentCanvasContextMenuKind.Element => "element",
+        DocumentCanvasContextMenuKind.Background => "background",
+        _ => string.Empty,
+    };
+
+    private string ContextMenuTargetVisualStateId =>
+        _state?.ContextMenu?.TargetVisualStateId?.Value ?? string.Empty;
+
+    private string ContextMenuTargetSemanticElementId =>
+        _state?.ContextMenu?.TargetSemanticElementId?.Value ?? string.Empty;
+
+    private string OpenScopeAvailableValue =>
+        _state?.ContextMenu?.ScopeNavigationAction is not null ? "true" : "false";
+
+    private string AddConnectorPointAvailableValue =>
+        _state?.ContextMenu?.ConnectorRouteAction?.Kind is
+            Canvas2DConnectorRouteContextActionKind.AddPoint
+                ? "true"
+                : "false";
+
+    private string DeleteConnectorPointAvailableValue =>
+        _state?.ContextMenu?.ConnectorRouteAction?.Kind is
+            Canvas2DConnectorRouteContextActionKind.DeletePoint
+                ? "true"
+                : "false";
+
+    private string DeleteElementAvailableValue =>
+        _state?.ContextMenu?.DeletionAction?.TargetKind is
+            DiagramDeletionTargetKind.Element
+                ? "true"
+                : "false";
+
+    private string DeleteConnectionAvailableValue =>
+        _state?.ContextMenu?.DeletionAction?.TargetKind is
+            DiagramDeletionTargetKind.Connection
+                ? "true"
+                : "false";
+
+    private bool PropertiesDirty => _propertiesDraft?.IsDirty == true;
+
+    private bool ModelViewPropertiesDirty =>
+        _modelViewPropertiesDraft?.IsDirty == true;
+
+    private bool AnyPropertiesDirty => PropertiesDirty || ModelViewPropertiesDirty;
+
+    private bool AnyPropertiesApplying =>
+        _propertiesApplying || _modelViewPropertiesApplying;
+
+    private string PropertiesDirtyValue => PropertiesDirty ? "true" : "false";
+
+    private string PropertiesFormOpenValue => _propertiesDraft is null ? "false" : "true";
+
+    private string PropertiesTargetVisualStateId =>
+        _propertiesDraft?.Authoritative.VisualStateId?.Value ?? string.Empty;
+
+    private string PropertiesTargetSemanticElementId =>
+        _propertiesDraft?.Authoritative.SemanticId.Value ?? string.Empty;
+
+    private string PropertiesAuthoritativeBounds => _propertiesDraft is { } draft
+        ? FormatBounds(draft.Authoritative.Bounds)
+        : string.Empty;
+
+    private string PropertiesDraftBounds => _propertiesDraft is { } draft &&
+        draft.TryParseBounds(out var bounds, out _)
+            ? FormatBounds(bounds)
+            : string.Empty;
+
+    private int PropertiesDataFieldCount => _propertiesDraft?.DataFields.Length ?? 0;
+
+    private string PropertiesDataFieldIds => _propertiesDraft is { } draft
+        ? string.Join(",", draft.DataFields.Select(static item => item.FieldId.Value))
+        : string.Empty;
+
+    private string ModelViewPropertiesFormOpenValue =>
+        _modelViewPropertiesDraft is null ? "false" : "true";
+
+    private string ModelViewPropertiesDirtyValue =>
+        ModelViewPropertiesDirty ? "true" : "false";
+
+    private int SuccessfulRenderCount => _state?.SuccessfulRenderCount ?? 0;
+
+    private int ProjectionRuleInvocationCount =>
+        _state?.PipelineCounters?.ProjectionRuleInvocationCount ?? 0;
+
+    private int LayoutInvocationCount => _state?.PipelineCounters?.LayoutInvocationCount ?? 0;
+
+    private int RoutingInvocationCount => _state?.PipelineCounters?.RoutingInvocationCount ?? 0;
+
+    private int SceneContributionInvocationCount =>
+        _state?.PipelineCounters?.SceneContributionInvocationCount ?? 0;
+
+    private string GraphicalInteractionEnabled =>
+        _state?.Session?.IsGraphicalInteractionEnabled == true ? "true" : "false";
+
+    private int SelectionCount => _state?.Session?.EditorState.Selection.Length ?? 0;
+
+    private string SelectedVisualStateIds => _state?.Session is { } session
+        ? string.Join(
+            ",",
+            session.EditorState.Selection
+                .Select(static id => id.Value)
+                .OrderBy(static value => value, StringComparer.Ordinal))
+        : string.Empty;
+
+    private string SelectedSceneObjectId =>
+        ResolveSelectedSceneObject()?.Id.Value ?? string.Empty;
+
+    private string HoveredSceneObjectId =>
+        _state?.Session?.EditorState.HoveredObjectId?.Value ?? string.Empty;
+
+    private string SelectedSemanticElementId =>
+        ResolveSelectedSceneObject()?.Origin.SemanticElementId?.Value ?? string.Empty;
+
+    private string HoveredSemanticElementId => ResolveSemanticElementId(
+        _state?.Session?.EditorState.HoveredObjectId);
+
+    private string SelectedVisualStateId => ResolveSelectedVisualStateId()?.Value ?? string.Empty;
+
+    private string SelectedDocumentBounds
+    {
+        get
+        {
+            var item = ResolveSelectedPersistentItem(preferPath: false);
+            return item is null
+                ? string.Empty
+                : string.Join(",",
+                    Format(item.Bounds.X),
+                    Format(item.Bounds.Y),
+                    Format(item.Bounds.Width),
+                    Format(item.Bounds.Height));
+        }
+    }
+
+    private string SelectedRoute
+    {
+        get
+        {
+            var item = ResolveSelectedPersistentItem(preferPath: true);
+            if (item?.Geometry.Kind != Canvas2DSceneGeometryKind.Path)
+            {
+                return string.Empty;
+            }
+
+            return string.Join(
+                ";",
+                item.Geometry.Points.Select(point => item.Transform.TransformPoint(point))
+                    .Select(point => $"{Format(point.X)},{Format(point.Y)}"));
+        }
+    }
+
+    private string ActiveGestureKind =>
+        _state?.Session?.EditorState.ActiveGesture?.Kind ?? string.Empty;
+
+    private string CanvasCursor => _state?.CssCursor ?? "default";
+
+    private string InteractionDiagnosticCode =>
+        _state?.InteractionDiagnostics.FirstOrDefault()?.Code ?? string.Empty;
+
+    private string CssWidth => Format(_state?.SurfaceSize?.CssWidth);
+
+    private string CssHeight => Format(_state?.SurfaceSize?.CssHeight);
+
+    private string DevicePixelRatio => Format(
+        _state?.SurfaceSize?.DevicePixelRatio);
+
+    private ValidationSnapshot? CurrentValidation =>
+        _state is { ValidationSnapshot: { } validation, Session: { } session } &&
+        validation.DocumentId == session.DocumentId &&
+        validation.SourceRevision == session.DocumentRevision &&
+        validation.ScopeId == session.ActiveScopeId
+            ? validation
+            : null;
+
+    private bool CanValidate =>
+        _state is
+        {
+            IsInitialized: true,
+            IsDisposed: false,
+            ValidationInFlight: false,
+            Session:
+            {
+                IsClosed: false,
+                Status: EditingSessionStatus.Ready,
+                CurrentScene: not null,
+                ProjectedGraph: not null,
+                LayoutResult: not null,
+                RoutingResult: not null,
+                EditorState.ActiveGesture: null,
+            },
+        } && _propertiesDraft is null && _modelViewPropertiesDraft is null &&
+        _state?.PropertiesFormOpen != true &&
+        _state?.ModelViewPropertiesFormOpen != true;
+
+    private string CanValidateValue => CanValidate ? "true" : "false";
+
+    private string ValidationStateValue => CurrentValidation is null
+        ? "not-validated"
+        : "current";
+
+    private int ValidationIssueCount => CurrentValidation?.Issues.Length ?? 0;
+
+    private int ValidationErrorCount => CurrentValidation?.ErrorCount ?? 0;
+
+    private int ValidationWarningCount => CurrentValidation?.WarningCount ?? 0;
+
+    private int ValidationInfoCount => CurrentValidation?.InfoCount ?? 0;
+
+    private string IssuesPanelOpenValue => _issuesPanel.IsOpen ? "true" : "false";
+
+    private string IssuesPanelLeft => Format(_issuesPanel.Left);
+
+    private string IssuesPanelTop => Format(_issuesPanel.Top);
+
+    private string IssuesDisclosure => _issuesPanel.IsOpen ? "▾" : "▸";
+
+    private string IssuesPanelStyle => string.Join(
+        " ",
+        $"left: {Format(_issuesPanel.Left)}px;",
+        $"top: {Format(_issuesPanel.Top)}px;",
+        $"width: {Format(_issuesPanel.Width)}px;",
+        $"height: {Format(_issuesPanel.Height)}px;");
+
+    private string StatusMessage => _state switch
+    {
+        { IsDisposed: true } or { Session.IsClosed: true } => "Canvas presentation disposed",
+        { Session.Status: EditingSessionStatus.Ready, LatestPresentationSucceeded: true } =>
+            "Canvas presentation ready",
+        { Session.Status: EditingSessionStatus.Ready } =>
+            "Scene is current, but canvas rendering failed",
+        { Session.Status: EditingSessionStatus.Rebuilding } => "Building current scene",
+        { Session.Status: EditingSessionStatus.RuntimeFaulted } => "Scene presentation failed",
+        { InitializationAttempted: true, IsInitialized: false } =>
+            "Browser canvas initialization failed",
+        _ => "Preparing browser canvas",
+    };
+
+    private string? ErrorMessage => Diagnostics
+        .FirstOrDefault(static diagnostic =>
+            diagnostic.Severity == Inceptus.DocumentEngine.Contracts.Diagnostics.DiagnosticSeverity.Error)
+        ?.Message;
+
+    private IEnumerable<Inceptus.DocumentEngine.Contracts.Diagnostics.Diagnostic> Diagnostics =>
+        (_state?.HostDiagnostics ?? [])
+        .Concat(_state?.InteractionDiagnostics ?? [])
+        .Concat(_state?.Session?.RuntimeDiagnostics ?? [])
+        .Concat(_state?.Session?.PresentationDiagnostics ?? []);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            DocumentCanvasHost host;
+            lock (_lifecycleSync)
+            {
+                if (_disposed || _host is not null)
+                {
+                    return;
+                }
+
+                host = new DocumentCanvasHost(
+                    JavaScript,
+                    CompositionFactory,
+                    _toolboxSelection);
+                host.StateChanged += HandleHostStateChangedAsync;
+                ModelerFacade?.Attach(host);
+                _host = host;
+            }
+
+            await host.InitializeAsync(
+                CanvasElementId,
+                StandbyCanvasElementId,
+                ContainerElementId,
+                _componentLifetime.Token);
+            await InvokeAsync(() =>
+            {
+                lock (_lifecycleSync)
+                {
+                    if (_disposed || !ReferenceEquals(_host, host))
+                    {
+                        return;
+                    }
+
+                    _state = host.CaptureState();
+                }
+
+                SynchronizeIssuesPanelSurface();
+                StateHasChanged();
+            });
+        }
+
+        await SynchronizeIssuesPanelPointerCaptureAsync();
+        await FocusNewDiagramConfirmationAsync();
+        await FocusPublicationDialogAsync();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        DocumentCanvasHost? host;
+        lock (_lifecycleSync)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+            _componentLifetime.Cancel();
+            _propertiesDraft = null;
+            _modelViewPropertiesDraft = null;
+            _newDiagramConfirmationOpen = false;
+            _newDiagramConfirmationFocusPending = false;
+            DiscardPublicationDialogDraft();
+            _issuesPanel.CancelMove();
+            host = _host;
+            _host = null;
+            if (host is not null)
+            {
+                host.StateChanged -= HandleHostStateChangedAsync;
+            }
+        }
+
+        if (host is not null)
+        {
+            await host.DisposeAsync();
+        }
+
+        if (_issuesPanelPointerCapture is { } issuesPanelPointerCapture)
+        {
+            await issuesPanelPointerCapture.InvokeVoidAsync("dispose");
+            await issuesPanelPointerCapture.DisposeAsync();
+            _issuesPanelPointerCapture = null;
+        }
+
+        if (_issuesPanelModule is { } issuesPanelModule)
+        {
+            await issuesPanelModule.DisposeAsync();
+            _issuesPanelModule = null;
+        }
+
+        _componentLifetime.Dispose();
+    }
+
+    private Task HandleHostStateChangedAsync() => InvokeAsync(() =>
+    {
+        lock (_lifecycleSync)
+        {
+            if (_disposed || _host is null)
+            {
+                return;
+            }
+
+            _state = _host.CaptureState();
+        }
+
+        SynchronizeIssuesPanelSurface();
+        ReconcilePropertiesForm();
+        ReconcileModelViewPropertiesForm();
+        ReconcilePublicationDialog();
+        ReconcilePublishOperation();
+
+        StateHasChanged();
+    });
+
+    private void OpenNewDiagramConfirmation()
+    {
+        lock (_lifecycleSync)
+        {
+            if (_disposed || !CanCreateNewDiagram)
+            {
+                return;
+            }
+
+            ClearNewDiagramOperationError();
+            _newDiagramOperationStatus = "confirming";
+            _newDiagramConfirmationOpen = true;
+            _newDiagramConfirmationFocusPending = true;
+        }
+    }
+
+    private void CancelNewDiagramConfirmation()
+    {
+        lock (_lifecycleSync)
+        {
+            if (_disposed || _newDiagramInProgress)
+            {
+                return;
+            }
+
+            _newDiagramConfirmationOpen = false;
+            _newDiagramConfirmationFocusPending = false;
+            _newDiagramOperationStatus = "idle";
+        }
+    }
+
+    private async Task ConfirmNewDiagramAsync()
+    {
+        DocumentCanvasHost? host;
+        lock (_lifecycleSync)
+        {
+            if (_disposed || !_newDiagramConfirmationOpen || _newDiagramInProgress)
+            {
+                return;
+            }
+
+            host = _host;
+            _newDiagramConfirmationOpen = false;
+            _newDiagramConfirmationFocusPending = false;
+            _newDiagramInProgress = true;
+            ClearNewDiagramOperationError();
+            _newDiagramOperationStatus = "creating";
+        }
+
+        await InvokeAsync(StateHasChanged);
+        try
+        {
+            if (host is null)
+            {
+                CompleteNewDiagramOperation(
+                    "CANVAS_NEW_DIAGRAM_UNAVAILABLE",
+                    "New diagram is unavailable while the editor is not ready.");
+                return;
+            }
+
+            var result = await host.NewDiagramAsync(_componentLifetime.Token);
+            if (result.Status == NewDiagramHostOperationStatus.Cancelled)
+            {
+                return;
+            }
+            if (!result.Succeeded)
+            {
+                var diagnostic = result.Diagnostics.FirstOrDefault();
+                CompleteNewDiagramOperation(
+                    diagnostic?.Code ?? "CANVAS_NEW_DIAGRAM_FAILED",
+                    diagnostic?.Message ?? "A new diagram could not be created.");
+                return;
+            }
+
+            lock (_lifecycleSync)
+            {
+                if (_disposed || !ReferenceEquals(_host, host))
+                {
+                    return;
+                }
+
+                _state = host.CaptureState();
+                _propertiesDraft = null;
+                _modelViewPropertiesDraft = null;
+                _propertiesApplying = false;
+                _propertiesApplyStatus = "idle";
+                _modelViewPropertiesApplying = false;
+                _modelViewPropertiesApplyStatus = "idle";
+                _issuesPanel.Close();
+                _nativeDocumentInputKey++;
+                ClearNativeDocumentOperationError();
+                _nativeDocumentOperationStatus = "idle";
+                ClearPublishOperationError();
+                _publishOperationStatus = "idle";
+                ClearNewDiagramOperationError();
+                _newDiagramOperationStatus = "idle";
+            }
+        }
+        catch (OperationCanceledException) when (_componentLifetime.IsCancellationRequested)
+        {
+            // Component disposal cancels replacement without surfacing a stale message.
+        }
+#pragma warning disable CA1031 // Browser host failures become bounded operation messages.
+        catch (Exception exception) when (IsNonFatalNativeDocumentException(exception))
+        {
+            CompleteNewDiagramOperation(
+                "CANVAS_NEW_DIAGRAM_FAILED",
+                "A new diagram could not be created.");
+        }
+#pragma warning restore CA1031
+        finally
+        {
+            lock (_lifecycleSync)
+            {
+                _newDiagramInProgress = false;
+                if (!_disposed && _newDiagramOperationStatus == "creating")
+                {
+                    _newDiagramOperationStatus = "idle";
+                }
+            }
+        }
+    }
+
+    private void CompleteNewDiagramOperation(string code, string message)
+    {
+        lock (_lifecycleSync)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _newDiagramOperationErrorCode = code;
+            _newDiagramOperationErrorMessage = message;
+            _newDiagramOperationStatus = "failed";
+        }
+    }
+
+    private void ClearNewDiagramOperationError()
+    {
+        _newDiagramOperationErrorCode = null;
+        _newDiagramOperationErrorMessage = null;
+    }
+
+    private async Task FocusNewDiagramConfirmationAsync()
+    {
+        lock (_lifecycleSync)
+        {
+            if (_disposed || !_newDiagramConfirmationOpen ||
+                !_newDiagramConfirmationFocusPending)
+            {
+                return;
+            }
+
+            _newDiagramConfirmationFocusPending = false;
+        }
+
+#pragma warning disable CA1031 // Focus failure must not break the editor lifecycle.
+        try
+        {
+            await _newDiagramCancelButton.FocusAsync(preventScroll: true);
+        }
+        catch (Exception exception) when (IsNonFatalNativeDocumentException(exception))
+        {
+            // The native dialog controls remain keyboard-operable even if focus transfer fails.
+        }
+#pragma warning restore CA1031
+    }
+
+    private async Task ExportNativeDocumentAsync()
+    {
+        DocumentCanvasHost? host;
+        lock (_lifecycleSync)
+        {
+            if (_disposed || !CanUseNativeDocumentTransfer)
+            {
+                return;
+            }
+
+            host = _host;
+            _nativeDocumentExportInProgress = true;
+            ClearNativeDocumentOperationError();
+            _nativeDocumentOperationStatus = "exporting";
+        }
+
+        try
+        {
+            if (host is null)
+            {
+                CompleteNativeDocumentOperation(
+                    "CANVAS_NATIVE_DOCUMENT_EXPORT_UNAVAILABLE",
+                    "Native Document export is unavailable while the editor is not ready.");
+                return;
+            }
+
+            await InvokeAsync(StateHasChanged);
+            var export = await host.ExportNativeDocumentAsync(_componentLifetime.Token);
+            if (export.Status == NativeDocumentHostOperationStatus.Cancelled)
+            {
+                return;
+            }
+            if (!export.Succeeded)
+            {
+                var diagnostic = export.Diagnostics.FirstOrDefault();
+                CompleteNativeDocumentOperation(
+                    diagnostic?.Code ?? "CANVAS_NATIVE_DOCUMENT_EXPORT_FAILED",
+                    diagnostic?.Message ?? "The current Document could not be exported.");
+                return;
+            }
+
+            await BrowserFileDownload.DownloadAsync(
+                JavaScript,
+                export.Payload.AsMemory(),
+                NativeDocumentContentType,
+                NativeDocumentFileName,
+                _componentLifetime.Token);
+            lock (_lifecycleSync)
+            {
+                if (!_disposed)
+                {
+                    _state = host.CaptureState();
+                    _nativeDocumentOperationStatus = "idle";
+                }
+            }
+        }
+        catch (OperationCanceledException) when (_componentLifetime.IsCancellationRequested)
+        {
+            // Component disposal cancels the browser operation without surfacing a stale error.
+        }
+#pragma warning disable CA1031 // Browser failures become bounded user-facing operation messages.
+        catch (Exception exception) when (IsNonFatalNativeDocumentException(exception))
+        {
+            CompleteNativeDocumentOperation(
+                "CANVAS_NATIVE_DOCUMENT_DOWNLOAD_FAILED",
+                "The native Document download could not be started by the browser.");
+        }
+#pragma warning restore CA1031
+        finally
+        {
+            lock (_lifecycleSync)
+            {
+                _nativeDocumentExportInProgress = false;
+                if (!_disposed && _nativeDocumentOperationStatus == "exporting")
+                {
+                    _nativeDocumentOperationStatus = "idle";
+                }
+            }
+        }
+    }
+
+    private void OpenPublicationDialog()
+    {
+        lock (_lifecycleSync)
+        {
+            if (_disposed || !CanPublish || _state?.Session is not { } session)
+            {
+                return;
+            }
+
+            InitializePublicationDialogDraft(_state, session);
+        }
+    }
+
+    private void InitializePublicationDialogDraft(
+        DocumentCanvasHostState state,
+        EditingSessionState session)
+    {
+        var publication = state.Publication;
+        _publicationSourceSessionVersion = state.DocumentSessionVersion;
+        _publicationSourceDocumentId = session.DocumentId;
+        _publicationSourceRevision = session.DocumentRevision;
+        _publicationCodeDraft = publication?.Code ?? string.Empty;
+        _publicationTitleDraft = publication?.Title ?? string.Empty;
+        _publicationDescriptionDraft = publication?.Description ?? string.Empty;
+        _publicationDialogOpen = true;
+        _publicationDialogFocusPending = true;
+        _publishOperationStatus = _publishOperationDiagnostics.IsEmpty ? "editing" : "failed";
+    }
+
+    private void CancelPublicationDialog()
+    {
+        lock (_lifecycleSync)
+        {
+            if (_disposed || !_publicationDialogOpen || _publishInProgress)
+            {
+                return;
+            }
+
+            DiscardPublicationDialogDraft();
+            _publishOperationStatus = _publishOperationDiagnostics.IsEmpty ? "idle" : "failed";
+        }
+    }
+
+    private Task SavePublicationDraftAsync() =>
+        ExecutePublicationDialogActionAsync(publish: false);
+
+    private Task PublishPublicationDraftAsync() =>
+        ExecutePublicationDialogActionAsync(publish: true);
+
+    private async Task ExecutePublicationDialogActionAsync(bool publish)
+    {
+        DocumentCanvasHost? host;
+        long sourceSessionVersion;
+        DocumentId sourceDocumentId;
+        DocumentRevision sourceRevision;
+        DocumentPublicationSnapshot publication;
+        CancellationTokenSource operation;
+        lock (_lifecycleSync)
+        {
+            if (_disposed || !CanAcceptPublicationDraft ||
+                _publicationSourceDocumentId is not { } documentId ||
+                _publicationSourceRevision is not { } revision ||
+                !DocumentPublicationSnapshot.TryCreate(
+                    _publicationCodeDraft,
+                    _publicationTitleDraft,
+                    _publicationDescriptionDraft,
+                    out var normalizedPublication))
+            {
+                return;
+            }
+
+            host = _host;
+            publication = normalizedPublication;
+            sourceSessionVersion = _publicationSourceSessionVersion;
+            sourceDocumentId = documentId;
+            sourceRevision = revision;
+            DiscardPublicationDialogDraft();
+            operation = CancellationTokenSource.CreateLinkedTokenSource(_componentLifetime.Token);
+            _publishOperationCancellation = operation;
+            _publishOperationSessionVersion = sourceSessionVersion;
+            _publishInProgress = true;
+            _publishOperationStatus = publish ? "publishing" : "saving";
+        }
+
+        using var operationLifetime = operation;
+        var downloading = false;
+        try
+        {
+            if (host is null)
+            {
+                CompletePublishOperation(
+                    host, sourceSessionVersion, operation, publish,
+                    [new Diagnostic("CANVAS_PUBLICATION_UNAVAILABLE", DiagnosticSeverity.Error,
+                        "Publication is unavailable while the editor is not ready.")]);
+                return;
+            }
+
+            await InvokeAsync(StateHasChanged);
+            var result = publish
+                ? await host.PublishPublicationAsync(
+                    sourceSessionVersion,
+                    sourceDocumentId,
+                    sourceRevision,
+                    publication,
+                    operation.Token)
+                : await host.SavePublicationAsync(
+                    sourceSessionVersion,
+                    sourceDocumentId,
+                    sourceRevision,
+                    publication,
+                    operation.Token);
+            if (result.Status == PublishedProcessHostOperationStatus.Cancelled)
+            {
+                return;
+            }
+
+            if (!result.Succeeded)
+            {
+                CompletePublishOperation(
+                    host, sourceSessionVersion, operation, publish, result.Diagnostics);
+                return;
+            }
+
+            lock (_lifecycleSync)
+            {
+                if (!IsCurrentPublishOperation(host, sourceSessionVersion, operation))
+                {
+                    return;
+                }
+            }
+
+            if (publish)
+            {
+                downloading = true;
+                await BrowserFileDownload.DownloadAsync(
+                    JavaScript,
+                    result.Payload.AsMemory(),
+                    PublishContentType,
+                    PublishFileName,
+                    operation.Token);
+            }
+
+            lock (_lifecycleSync)
+            {
+                if (IsCurrentPublishOperation(host, sourceSessionVersion, operation))
+                {
+                    _state = host.CaptureState();
+                    ClearPublishOperationError();
+                    _publishOperationStatus = "idle";
+                }
+            }
+        }
+        catch (OperationCanceledException) when (operation.IsCancellationRequested)
+        {
+            // Disposal or a replacement session cancels delivery without a stale failure.
+        }
+#pragma warning disable CA1031 // Browser failures become bounded user-facing operation messages.
+        catch (Exception exception) when (IsNonFatalNativeDocumentException(exception))
+        {
+            CompletePublishOperation(
+                host, sourceSessionVersion, operation, publish,
+                [new Diagnostic(
+                    downloading
+                        ? "CANVAS_PUBLISH_DOWNLOAD_FAILED"
+                        : publish ? "CANVAS_PUBLISH_FAILED" : "CANVAS_PUBLICATION_PERSISTENCE_FAILED",
+                    DiagnosticSeverity.Error,
+                    downloading
+                        ? "The published process download could not be started by the browser."
+                        : publish
+                            ? "The publication package could not be generated."
+                            : "Publication metadata could not be saved.")]);
+        }
+#pragma warning restore CA1031
+        finally
+        {
+            lock (_lifecycleSync)
+            {
+                if (ReferenceEquals(_publishOperationCancellation, operation))
+                {
+                    _publishOperationCancellation = null;
+                    _publishInProgress = false;
+                    if (!_disposed && _publishOperationStatus is "publishing" or "saving")
+                    {
+                        _publishOperationStatus = _publishOperationDiagnostics.IsEmpty
+                            ? "idle"
+                            : "failed";
+                    }
+                }
+            }
+        }
+    }
+
+    private void ReconcilePublicationDialog()
+    {
+        if (!_publicationDialogOpen || _state?.Session is not { } session)
+        {
+            return;
+        }
+
+        if (_state.DocumentSessionVersion != _publicationSourceSessionVersion ||
+            session.DocumentId != _publicationSourceDocumentId ||
+            session.DocumentRevision != _publicationSourceRevision)
+        {
+            DiscardPublicationDialogDraft();
+            _publishOperationStatus = _publishOperationDiagnostics.IsEmpty ? "idle" : "failed";
+        }
+    }
+
+    private async Task FocusPublicationDialogAsync()
+    {
+        lock (_lifecycleSync)
+        {
+            if (_disposed || !_publicationDialogOpen || !_publicationDialogFocusPending)
+            {
+                return;
+            }
+
+            _publicationDialogFocusPending = false;
+        }
+
+#pragma warning disable CA1031 // Focus failure must not break the editor lifecycle.
+        try
+        {
+            await _publicationCodeInput.FocusAsync(preventScroll: true);
+        }
+        catch (Exception exception) when (IsNonFatalNativeDocumentException(exception))
+        {
+            // The dialog remains keyboard-operable if focus transfer is unavailable.
+        }
+#pragma warning restore CA1031
+    }
+
+    private void DiscardPublicationDialogDraft()
+    {
+        _publicationDialogOpen = false;
+        _publicationDialogFocusPending = false;
+        _publicationSourceSessionVersion = 0;
+        _publicationSourceDocumentId = null;
+        _publicationSourceRevision = null;
+        _publicationCodeDraft = string.Empty;
+        _publicationTitleDraft = string.Empty;
+        _publicationDescriptionDraft = string.Empty;
+    }
+
+    private bool IsCurrentPublishOperation(
+        DocumentCanvasHost? host,
+        long sourceSessionVersion,
+        CancellationTokenSource operation) =>
+        !_disposed &&
+        !operation.IsCancellationRequested &&
+        ReferenceEquals(_host, host) &&
+        ReferenceEquals(_publishOperationCancellation, operation) &&
+        (host is null || host.CaptureState().DocumentSessionVersion == sourceSessionVersion);
+
+    private void CompletePublishOperation(
+        DocumentCanvasHost? host,
+        long sourceSessionVersion,
+        CancellationTokenSource operation,
+        bool publish,
+        ImmutableArray<Diagnostic> diagnostics)
+    {
+        lock (_lifecycleSync)
+        {
+            if (!IsCurrentPublishOperation(host, sourceSessionVersion, operation))
+            {
+                return;
+            }
+
+            _publishOperationDiagnostics = diagnostics.IsDefaultOrEmpty
+                ? [new Diagnostic("CANVAS_PUBLISH_FAILED", DiagnosticSeverity.Error,
+                    "The Publication operation could not be completed. Please retry.")]
+                : diagnostics;
+            _publishOperationErrorCode = _publishOperationDiagnostics[0].Code;
+            _publishOperationErrorMessage = _publishOperationDiagnostics[0].Message;
+            _publishOperationErrorHeading = publish ? "Publish failed" : "Publication could not be saved";
+            _publishOperationStatus = "failed";
+        }
+    }
+
+    private void ClearPublishOperationError()
+    {
+        _publishOperationDiagnostics = [];
+        _publishOperationErrorCode = null;
+        _publishOperationErrorMessage = null;
+    }
+
+    private void DismissPublishOperationError()
+    {
+        lock (_lifecycleSync)
+        {
+            ClearPublishOperationError();
+            if (_publishOperationStatus == "failed")
+            {
+                _publishOperationStatus = "idle";
+            }
+        }
+    }
+
+    private void ReconcilePublishOperation()
+    {
+        lock (_lifecycleSync)
+        {
+            if (_publishOperationSessionVersion is not { } sourceVersion ||
+                _state?.DocumentSessionVersion == sourceVersion)
+            {
+                return;
+            }
+
+            var operation = _publishOperationCancellation;
+            _publishOperationCancellation = null;
+            _publishOperationSessionVersion = null;
+            _publishInProgress = false;
+            ClearPublishOperationError();
+            _publishOperationStatus = "idle";
+            operation?.Cancel();
+        }
+    }
+
+    private static string? PublishDiagnosticTarget(Diagnostic diagnostic)
+    {
+        var context = diagnostic.Context;
+        if (context.TryGetValue("ElementId", out var elementId))
+        {
+            return context.TryGetValue("ElementName", out var name) && !string.IsNullOrWhiteSpace(name)
+                ? $"Element '{name}' (ID: {elementId})"
+                : context.TryGetValue("ElementType", out var type)
+                    ? $"Element type '{type}' (ID: {elementId})"
+                    : $"Element (ID: {elementId})";
+        }
+
+        if (context.TryGetValue("ConnectorId", out var connectorId))
+        {
+            return context.TryGetValue("SourceElementId", out var source) &&
+                context.TryGetValue("TargetElementId", out var target)
+                    ? $"Connector (ID: {connectorId}; from {source} to {target})"
+                    : $"Connector (ID: {connectorId})";
+        }
+
+        return diagnostic.SourceIdentity is { } identity ? $"Source: {identity}" : null;
+    }
+
+    private async Task ImportNativeDocumentAsync(InputFileChangeEventArgs args)
+    {
+        ArgumentNullException.ThrowIfNull(args);
+        DocumentCanvasHost? host;
+        lock (_lifecycleSync)
+        {
+            if (_disposed || !CanUseNativeDocumentTransfer)
+            {
+                return;
+            }
+
+            host = _host;
+            _nativeDocumentImportInProgress = true;
+            ClearNativeDocumentOperationError();
+            _nativeDocumentOperationStatus = "importing";
+        }
+
+        await InvokeAsync(StateHasChanged);
+        try
+        {
+            if (host is null)
+            {
+                CompleteNativeDocumentOperation(
+                    "CANVAS_NATIVE_DOCUMENT_IMPORT_UNAVAILABLE",
+                    "Native Document import is unavailable while the editor is not ready.");
+                return;
+            }
+
+            var browserImport = await ReadAndImportNativeDocumentFileAsync(
+                args.File,
+                host.ImportNativeDocumentAsync,
+                _componentLifetime.Token);
+            if (browserImport.FileTooLarge)
+            {
+                CompleteNativeDocumentOperation(
+                    NativeDocumentFileTooLargeCode,
+                    NativeDocumentFileTooLargeMessage);
+                return;
+            }
+
+            var import = browserImport.ImportResult!;
+            if (import.Status == NativeDocumentHostOperationStatus.Cancelled)
+            {
+                return;
+            }
+            if (!import.Succeeded)
+            {
+                var (code, message) = NativeDocumentImportMessage(import);
+                CompleteNativeDocumentOperation(code, message);
+                return;
+            }
+
+            lock (_lifecycleSync)
+            {
+                if (_disposed || !ReferenceEquals(_host, host))
+                {
+                    return;
+                }
+
+                _state = host.CaptureState();
+                _propertiesDraft = null;
+                _modelViewPropertiesDraft = null;
+                _propertiesApplying = false;
+                _propertiesApplyStatus = "idle";
+                _modelViewPropertiesApplying = false;
+                _modelViewPropertiesApplyStatus = "idle";
+                _issuesPanel.Close();
+                ClearNativeDocumentOperationError();
+                _nativeDocumentOperationStatus = "idle";
+            }
+        }
+        catch (OperationCanceledException) when (_componentLifetime.IsCancellationRequested)
+        {
+            // Component disposal cancels the file operation without surfacing a stale error.
+        }
+#pragma warning disable CA1031 // Browser file failures become bounded user-facing operation messages.
+        catch (Exception exception) when (IsNonFatalNativeDocumentException(exception))
+        {
+            CompleteNativeDocumentOperation(
+                "CANVAS_NATIVE_DOCUMENT_FILE_READ_FAILED",
+                "The selected native Document file could not be read by the browser.");
+        }
+#pragma warning restore CA1031
+        finally
+        {
+            lock (_lifecycleSync)
+            {
+                _nativeDocumentImportInProgress = false;
+                _nativeDocumentInputKey++;
+                if (!_disposed && _nativeDocumentOperationStatus == "importing")
+                {
+                    _nativeDocumentOperationStatus = "idle";
+                }
+            }
+        }
+    }
+
+    internal static async ValueTask<(
+        bool FileTooLarge,
+        NativeDocumentHostImportResult? ImportResult)> ReadAndImportNativeDocumentFileAsync(
+        IBrowserFile file,
+        Func<ReadOnlyMemory<byte>, CancellationToken, ValueTask<NativeDocumentHostImportResult>>
+            importer,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(file);
+        ArgumentNullException.ThrowIfNull(importer);
+        if (file.Size > MaximumNativeDocumentFileSize)
+        {
+            return (true, null);
+        }
+
+        byte[] payload;
+        await using (var stream = file.OpenReadStream(
+            MaximumNativeDocumentFileSize,
+            cancellationToken))
+        {
+            using var buffer = new MemoryStream(checked((int)file.Size));
+            await stream.CopyToAsync(buffer, cancellationToken);
+            payload = buffer.ToArray();
+        }
+
+        return (false, await importer(payload, cancellationToken));
+    }
+
+    internal static (string Code, string Message) NativeDocumentImportMessage(
+        NativeDocumentHostImportResult result)
+    {
+        var code = result.Diagnostics.FirstOrDefault()?.Code ??
+            "CANVAS_NATIVE_DOCUMENT_IMPORT_FAILED";
+        var message = code switch
+        {
+            "NATIVE_DOCUMENT_JSON_MALFORMED" =>
+                "The selected file is not valid native Document JSON.",
+            "NATIVE_DOCUMENT_FORMAT_INVALID" =>
+                "The selected file is not an Inceptus native Document.",
+            "NATIVE_DOCUMENT_VERSION_UNSUPPORTED" =>
+                "The selected native Document version is not supported.",
+            "CANVAS_NATIVE_DOCUMENT_IMPORT_UNAVAILABLE" =>
+                "Native Document import is unavailable while the editor is not ready.",
+            "CANVAS_NATIVE_DOCUMENT_REPLACEMENT_FAILED" =>
+                "The native Document was valid, but its editor session could not be opened.",
+            _ => "The selected file does not contain a structurally valid native Document.",
+        };
+        return (code, message);
+    }
+
+    private void CompleteNativeDocumentOperation(string code, string message)
+    {
+        lock (_lifecycleSync)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _nativeDocumentOperationErrorCode = code;
+            _nativeDocumentOperationErrorMessage = message;
+            _nativeDocumentOperationStatus = "error";
+        }
+    }
+
+    private void ClearNativeDocumentOperationError()
+    {
+        _nativeDocumentOperationErrorCode = null;
+        _nativeDocumentOperationErrorMessage = null;
+    }
+
+    private static bool IsNonFatalNativeDocumentException(Exception exception) =>
+        exception is not OutOfMemoryException and
+        not StackOverflowException and
+        not AccessViolationException;
+
+    private async Task OpenPropertiesAsync()
+    {
+        DocumentCanvasHost? host;
+        VisualStateId? targetVisualStateId;
+        SemanticElementId? targetSemanticElementId;
+        lock (_lifecycleSync)
+        {
+            if (_disposed || _propertiesDraft is not null ||
+                _modelViewPropertiesDraft is not null)
+            {
+                return;
+            }
+
+            host = _host;
+            targetVisualStateId = _state?.ContextMenu?.TargetVisualStateId;
+            targetSemanticElementId = _state?.ContextMenu?.TargetSemanticElementId;
+        }
+
+        if (host is null ||
+            (targetVisualStateId is null) == (targetSemanticElementId is null))
+        {
+            return;
+        }
+
+        var snapshot = targetVisualStateId is not null
+            ? await host.OpenPropertiesAsync(
+                targetVisualStateId,
+                _componentLifetime.Token)
+            : await host.OpenPropertiesAsync(
+                targetSemanticElementId!,
+                _componentLifetime.Token);
+        if (snapshot is null)
+        {
+            return;
+        }
+
+        var openedDraft = new DocumentCanvasPropertiesDraft(snapshot);
+        var current = host.CaptureState();
+        RefreshHostState(host, current);
+        if (IsCurrentPropertiesTarget(current, openedDraft.Authoritative))
+        {
+            _propertiesDraft = openedDraft;
+            _propertiesApplyStatus = "idle";
+            _ = TryPublishPropertiesFormState(host, openedDraft);
+        }
+        else
+        {
+            SynchronizePropertiesFormAfterStaleCallback(host, rejectedDraft: null);
+        }
+    }
+
+    private async Task ExecuteBackgroundContextActionAsync(
+        CanvasBackgroundActionId actionId)
+    {
+        ArgumentNullException.ThrowIfNull(actionId);
+        DocumentCanvasHost? host;
+        lock (_lifecycleSync)
+        {
+            host = _disposed ? null : _host;
+        }
+
+        if (host is null)
+        {
+            return;
+        }
+
+        _ = await host.ExecuteBackgroundContextActionAsync(
+            actionId,
+            _componentLifetime.Token);
+        RefreshHostState(host);
+    }
+
+    private async Task ExecuteSemanticSceneViewContextActionAsync(
+        SemanticSceneViewActionId actionId)
+    {
+        ArgumentNullException.ThrowIfNull(actionId);
+        DocumentCanvasHost? host;
+        lock (_lifecycleSync)
+        {
+            host = _disposed ? null : _host;
+        }
+
+        if (host is null)
+        {
+            return;
+        }
+
+        _ = await host.ExecuteSemanticSceneViewContextActionAsync(
+            actionId,
+            _componentLifetime.Token);
+        RefreshHostState(host);
+    }
+
+    private async Task ExecuteSemanticSceneCommandContextActionAsync(
+        SemanticSceneCommandActionId actionId)
+    {
+        ArgumentNullException.ThrowIfNull(actionId);
+        DocumentCanvasHost? host;
+        lock (_lifecycleSync)
+        {
+            host = _disposed ? null : _host;
+        }
+
+        if (host is null)
+        {
+            return;
+        }
+
+        _ = await host.ExecuteSemanticSceneCommandContextActionAsync(
+            actionId,
+            _componentLifetime.Token);
+        RefreshHostState(host);
+    }
+
+    private async Task OpenModelViewPropertiesAsync()
+    {
+        DocumentCanvasHost? host;
+        lock (_lifecycleSync)
+        {
+            if (_disposed || _propertiesDraft is not null ||
+                _modelViewPropertiesDraft is not null)
+            {
+                return;
+            }
+
+            host = _host;
+        }
+
+        if (host is null)
+        {
+            return;
+        }
+
+        var snapshot = await host.OpenModelViewPropertiesAsync(
+            _componentLifetime.Token);
+        if (snapshot is null)
+        {
+            return;
+        }
+
+        var openedDraft = new DocumentCanvasModelViewPropertiesDraft(snapshot);
+        var current = host.CaptureState();
+        RefreshHostState(host, current);
+        if (IsCurrentModelViewPropertiesForm(current, openedDraft.Authoritative.ScopeId))
+        {
+            _modelViewPropertiesDraft = openedDraft;
+            _modelViewPropertiesApplyStatus = "idle";
+            _ = TryPublishModelViewPropertiesFormState(host, openedDraft);
+        }
+        else
+        {
+            SynchronizeModelViewPropertiesFormAfterStaleCallback(host);
+        }
+    }
+
+    private void CloseContextMenu() => _host?.CloseContextMenu();
+
+    private async Task NavigateToScopeAsync(DocumentScopeId scopeId)
+    {
+        ArgumentNullException.ThrowIfNull(scopeId);
+        DocumentCanvasHost? host;
+        lock (_lifecycleSync)
+        {
+            host = _disposed ? null : _host;
+        }
+
+        if (host is null)
+        {
+            return;
+        }
+
+        _ = await host.NavigateToScopeAsync(scopeId, _componentLifetime.Token);
+        RefreshHostState(host);
+    }
+
+    private async Task ExecuteScopeNavigationContextActionAsync()
+    {
+        DocumentCanvasHost? host;
+        lock (_lifecycleSync)
+        {
+            host = _disposed ? null : _host;
+        }
+
+        if (host is null)
+        {
+            return;
+        }
+
+        _ = await host.ExecuteScopeNavigationContextActionAsync(
+            _componentLifetime.Token);
+        RefreshHostState(host);
+    }
+
+    private void ToggleIssuesPanel()
+    {
+        var (width, height) = CurrentIssuesPanelSurface();
+        _issuesPanel.Toggle(width, height);
+    }
+
+    private void CloseIssuesPanel() => _issuesPanel.Close();
+
+    private void StartIssuesPanelMove(PointerEventArgs args)
+    {
+        ArgumentNullException.ThrowIfNull(args);
+        if (!_issuesPanel.IsOpen || args.Button != 0 || !args.IsPrimary ||
+            _issuesPanel.ActivePointerId is not null)
+        {
+            return;
+        }
+
+        _ = _issuesPanel.TryBeginMove(args.PointerId, args.ClientX, args.ClientY);
+    }
+
+    private void MoveIssuesPanel(PointerEventArgs args)
+    {
+        ArgumentNullException.ThrowIfNull(args);
+        _ = _issuesPanel.Move(args.PointerId, args.ClientX, args.ClientY);
+    }
+
+    private void EndIssuesPanelMove(PointerEventArgs args)
+    {
+        ArgumentNullException.ThrowIfNull(args);
+        _ = _issuesPanel.EndMove(args.PointerId);
+    }
+
+    private void CancelIssuesPanelMove(PointerEventArgs args)
+    {
+        ArgumentNullException.ThrowIfNull(args);
+        _ = _issuesPanel.EndMove(args.PointerId);
+    }
+
+    private async Task ValidateAsync()
+    {
+        DocumentCanvasHost? host;
+        lock (_lifecycleSync)
+        {
+            host = _disposed ? null : _host;
+        }
+
+        if (host is null)
+        {
+            return;
+        }
+
+        _ = await host.ValidateAsync(_componentLifetime.Token);
+        RefreshHostState(host);
+    }
+
+    private async Task SelectValidationIssueAsync(ModelValidationIssueId issueId)
+    {
+        ArgumentNullException.ThrowIfNull(issueId);
+        DocumentCanvasHost? host;
+        lock (_lifecycleSync)
+        {
+            host = _disposed ? null : _host;
+        }
+
+        if (host is null)
+        {
+            return;
+        }
+
+        _ = await host.SelectValidationIssueAsync(issueId, _componentLifetime.Token);
+        RefreshHostState(host);
+    }
+
+    private async Task SelectToolboxItemAsync(ToolboxItemId itemId)
+    {
+        ArgumentNullException.ThrowIfNull(itemId);
+        if (!ToolboxCatalog.TryGetItem(itemId, out _) || !_toolboxSelection.Select(itemId))
+        {
+            return;
+        }
+
+        DocumentCanvasHost? host;
+        lock (_lifecycleSync)
+        {
+            host = _disposed ? null : _host;
+        }
+
+        if (host is not null)
+        {
+            await host.RefreshToolboxPlacementAsync(_componentLifetime.Token);
+            RefreshHostState(host);
+        }
+    }
+
+    private async Task HandleEditorKeyDownAsync(KeyboardEventArgs args)
+    {
+        ArgumentNullException.ThrowIfNull(args);
+        if (!StringComparer.Ordinal.Equals(args.Key, "Escape"))
+        {
+            return;
+        }
+
+        DocumentCanvasHost? host;
+        lock (_lifecycleSync)
+        {
+            if (_newDiagramConfirmationOpen && !_newDiagramInProgress)
+            {
+                _newDiagramConfirmationOpen = false;
+                _newDiagramOperationStatus = "idle";
+                return;
+            }
+
+            if (_publicationDialogOpen && !_publishInProgress)
+            {
+                DiscardPublicationDialogDraft();
+                _publishOperationStatus = _publishOperationDiagnostics.IsEmpty ? "idle" : "failed";
+                return;
+            }
+
+            host = _disposed ? null : _host;
+        }
+
+        if (host is null)
+        {
+            _toolboxSelection.Clear();
+            return;
+        }
+
+        await host.CancelActiveInteractionAsync(_componentLifetime.Token);
+        RefreshHostState(host);
+    }
+
+    private async Task ExecuteNodeLabelContextActionAsync()
+    {
+        DocumentCanvasHost? host;
+        lock (_lifecycleSync)
+        {
+            host = _disposed ? null : _host;
+        }
+
+        if (host is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _ = await host.ExecuteNodeLabelContextActionAsync(_componentLifetime.Token);
+        }
+        catch (OperationCanceledException) when (_componentLifetime.IsCancellationRequested)
+        {
+            return;
+        }
+
+        RefreshHostState(host);
+    }
+
+    private async Task ExecuteDeletionContextActionAsync()
+    {
+        DocumentCanvasHost? host;
+        lock (_lifecycleSync)
+        {
+            host = _disposed ? null : _host;
+        }
+
+        if (host is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _ = await host.ExecuteDeletionContextActionAsync(_componentLifetime.Token);
+        }
+        catch (OperationCanceledException) when (_componentLifetime.IsCancellationRequested)
+        {
+            return;
+        }
+
+        RefreshHostState(host);
+    }
+
+    private async Task ExecuteConnectorRouteContextActionAsync()
+    {
+        DocumentCanvasHost? host;
+        lock (_lifecycleSync)
+        {
+            host = _disposed ? null : _host;
+        }
+
+        if (host is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _ = await host.ExecuteConnectorRouteContextActionAsync(_componentLifetime.Token);
+        }
+        catch (OperationCanceledException) when (_componentLifetime.IsCancellationRequested)
+        {
+            return;
+        }
+
+        RefreshHostState(host);
+    }
+
+    private async Task ExecuteConnectorAnchorContextActionAsync(ConnectorAnchorRole? addRole)
+    {
+        DocumentCanvasHost? host;
+        lock (_lifecycleSync)
+        {
+            host = _disposed ? null : _host;
+        }
+
+        if (host is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _ = await host.ExecuteConnectorAnchorContextActionAsync(
+                addRole,
+                _componentLifetime.Token);
+        }
+        catch (OperationCanceledException) when (_componentLifetime.IsCancellationRequested)
+        {
+            return;
+        }
+
+        RefreshHostState(host);
+    }
+
+    private void CancelModelViewProperties()
+    {
+        _modelViewPropertiesDraft = null;
+        _modelViewPropertiesApplying = false;
+        _modelViewPropertiesApplyStatus = "idle";
+        if (_host is { } host)
+        {
+            _ = host.UpdateModelViewPropertiesFormState(
+                isOpen: false,
+                isDirty: false);
+            RefreshHostState(host);
+        }
+    }
+
+    private void UpdateModelProfileAvailability(ModelProfileId profileId, object? value)
+    {
+        ArgumentNullException.ThrowIfNull(profileId);
+        if (_modelViewPropertiesDraft is not { } draft ||
+            _modelViewPropertiesApplying ||
+            !draft.TryGetProfile(profileId, out var profile) ||
+            profile is null)
+        {
+            return;
+        }
+
+        profile.IsAvailable = ResolveCheckboxValue(value);
+        PublishUpdatedModelViewPropertiesDraft(draft);
+    }
+
+    private void UpdateModelProfileVisibility(ModelProfileId profileId, object? value)
+    {
+        ArgumentNullException.ThrowIfNull(profileId);
+        if (_modelViewPropertiesDraft is not { } draft ||
+            _modelViewPropertiesApplying ||
+            !draft.TryGetProfile(profileId, out var profile) ||
+            profile is null ||
+            !profile.IsAvailable)
+        {
+            return;
+        }
+
+        profile.IsPreferredVisible = ResolveCheckboxValue(value);
+        PublishUpdatedModelViewPropertiesDraft(draft);
+    }
+
+    private void PublishUpdatedModelViewPropertiesDraft(
+        DocumentCanvasModelViewPropertiesDraft draft)
+    {
+        draft.Feedback = null;
+        _modelViewPropertiesApplyStatus = draft.IsDirty ? "dirty" : "idle";
+        if (_host is { } host)
+        {
+            _ = TryPublishModelViewPropertiesFormState(host, draft);
+        }
+    }
+
+    private async Task ApplyModelViewPropertiesAsync()
+    {
+        if (_modelViewPropertiesDraft is not { } draft ||
+            _modelViewPropertiesApplying ||
+            _host is not { } host)
+        {
+            return;
+        }
+
+        _modelViewPropertiesApplying = true;
+        _modelViewPropertiesApplyStatus = "applying";
+        draft.Feedback = null;
+        try
+        {
+            if (!TryPublishModelViewPropertiesFormState(host, draft))
+            {
+                return;
+            }
+
+            var result = await host.ApplyModelViewPropertiesAsync(
+                draft,
+                _componentLifetime.Token);
+            var current = host.CaptureState();
+            RefreshHostState(host, current);
+            _modelViewPropertiesApplyStatus = result.Status.ToString().ToLowerInvariant();
+            if (result.Succeeded && result.Authoritative is not null)
+            {
+                _modelViewPropertiesDraft = null;
+                return;
+            }
+
+            if (!ReferenceEquals(_modelViewPropertiesDraft, draft) ||
+                !IsCurrentModelViewPropertiesForm(
+                    current,
+                    draft.Authoritative.ScopeId))
+            {
+                SynchronizeModelViewPropertiesFormAfterStaleCallback(host);
+                return;
+            }
+
+            draft.Feedback = result.Message ??
+                "View and model properties could not be applied.";
+            _ = TryPublishModelViewPropertiesFormState(host, draft);
+        }
+        catch (OperationCanceledException) when (_componentLifetime.IsCancellationRequested)
+        {
+            // Component disposal owns this cancellation. The host preserves any
+            // authoritative command outcome and releases its host gate.
+        }
+        finally
+        {
+            _modelViewPropertiesApplying = false;
+            RefreshHostState(host);
+            ReconcileModelViewPropertiesForm();
+        }
+    }
+
+    private bool TryPublishModelViewPropertiesFormState(
+        DocumentCanvasHost host,
+        DocumentCanvasModelViewPropertiesDraft draft)
+    {
+        if (host.UpdateModelViewPropertiesFormState(
+                isOpen: true,
+                draft.IsDirty))
+        {
+            RefreshHostState(host);
+            return true;
+        }
+
+        SynchronizeModelViewPropertiesFormAfterStaleCallback(host);
+        return false;
+    }
+
+    private void ReconcileModelViewPropertiesForm()
+    {
+        if (_host is not { } host || _state?.Session is not { } session)
+        {
+            return;
+        }
+
+        if (_modelViewPropertiesDraft is not { } draft)
+        {
+            if (!_state.ModelViewPropertiesFormOpen ||
+                session.Status == EditingSessionStatus.Rebuilding ||
+                _modelViewPropertiesApplying)
+            {
+                return;
+            }
+
+            if (host.TryCaptureCurrentModelViewPropertiesForm(out var current) &&
+                current is not null)
+            {
+                _modelViewPropertiesDraft =
+                    new DocumentCanvasModelViewPropertiesDraft(current);
+                _modelViewPropertiesApplyStatus = "idle";
+            }
+
+            return;
+        }
+
+        if (!_state.ModelViewPropertiesFormOpen)
+        {
+            _modelViewPropertiesDraft = null;
+            _modelViewPropertiesApplying = false;
+            _modelViewPropertiesApplyStatus = "idle";
+            return;
+        }
+
+        if (session.Status == EditingSessionStatus.Rebuilding ||
+            _modelViewPropertiesApplying)
+        {
+            return;
+        }
+
+        if (!host.TryCaptureCurrentModelViewPropertiesForm(out var refreshed) ||
+            refreshed is null ||
+            refreshed.ScopeId != draft.Authoritative.ScopeId)
+        {
+            SynchronizeModelViewPropertiesFormAfterStaleCallback(host);
+            return;
+        }
+
+        if (ModelViewSnapshotsEqual(refreshed, draft.Authoritative))
+        {
+            return;
+        }
+
+        if (draft.IsDirty)
+        {
+            draft.IsStale = true;
+            draft.Feedback =
+                "The model or active view changed after the form was opened. Cancel and reopen View and model properties.";
+            _modelViewPropertiesApplyStatus = "stale";
+            _ = TryPublishModelViewPropertiesFormState(host, draft);
+            return;
+        }
+
+        _modelViewPropertiesDraft = new DocumentCanvasModelViewPropertiesDraft(refreshed);
+        _modelViewPropertiesApplyStatus = "idle";
+    }
+
+    private void SynchronizeModelViewPropertiesFormAfterStaleCallback(
+        DocumentCanvasHost host)
+    {
+        var current = host.CaptureState();
+        RefreshHostState(host, current);
+        if (current.ModelViewPropertiesFormOpen &&
+            host.TryCaptureCurrentModelViewPropertiesForm(out var replacement) &&
+            replacement is not null)
+        {
+            _modelViewPropertiesDraft =
+                new DocumentCanvasModelViewPropertiesDraft(replacement);
+            _modelViewPropertiesApplying = false;
+            _modelViewPropertiesApplyStatus = "idle";
+            return;
+        }
+
+        _modelViewPropertiesDraft = null;
+        _modelViewPropertiesApplying = false;
+        _modelViewPropertiesApplyStatus = "idle";
+    }
+
+    private static bool ModelViewSnapshotsEqual(
+        DocumentCanvasModelViewPropertiesSnapshot left,
+        DocumentCanvasModelViewPropertiesSnapshot right) =>
+        left.DocumentId == right.DocumentId &&
+        left.Revision == right.Revision &&
+        left.ScopeId == right.ScopeId &&
+        left.Profiles.Length == right.Profiles.Length &&
+        left.Profiles.Zip(right.Profiles).All(static pair =>
+            pair.First.Definition.Id == pair.Second.Definition.Id &&
+            pair.First.IsAvailable == pair.Second.IsAvailable &&
+            pair.First.IsPreferredVisible == pair.Second.IsPreferredVisible);
+
+    private static bool IsCurrentModelViewPropertiesForm(
+        DocumentCanvasHostState state,
+        DocumentScopeId scopeId) =>
+        state.ModelViewPropertiesFormOpen &&
+        state.Session is { IsClosed: false } session &&
+        session.ActiveScopeId == scopeId;
+
+    private string BackgroundActionControlId(CanvasBackgroundActionId actionId) =>
+        DomId($"background-action-{CreateHtmlIdFragment(actionId.Value)}");
+
+    private string SemanticSceneViewActionControlId(
+        SemanticSceneViewActionId actionId) =>
+        DomId($"semantic-view-action-{CreateHtmlIdFragment(actionId.Value)}");
+
+    private string SemanticSceneCommandActionControlId(
+        SemanticSceneCommandActionId actionId) =>
+        DomId($"semantic-command-action-{CreateHtmlIdFragment(actionId.Value)}");
+
+    private string ModelProfileAvailableControlId(ModelProfileId profileId) =>
+        DomId($"model-profile-{CreateHtmlIdFragment(profileId.Value)}-available");
+
+    private string ModelProfileVisibleControlId(ModelProfileId profileId) =>
+        DomId($"model-profile-{CreateHtmlIdFragment(profileId.Value)}-visible");
+
+    private static string CreateHtmlIdFragment(string value) =>
+        string.Concat(value.Select(static character =>
+            char.IsLetterOrDigit(character) ? character : '-'));
+
+    private static bool ResolveCheckboxValue(object? value) => value switch
+    {
+        bool boolean => boolean,
+        string text when bool.TryParse(text, out var parsed) => parsed,
+        _ => false,
+    };
+
+    private void CancelProperties()
+    {
+        _propertiesDraft = null;
+        _propertiesApplying = false;
+        _propertiesApplyStatus = "idle";
+        if (_host is { } host)
+        {
+            _ = host.UpdatePropertiesFormState(
+                isOpen: false,
+                targetVisualStateId: null,
+                isDirty: false);
+            RefreshHostState(host);
+        }
+    }
+
+    private void UpdateDataDraftValue(ElementPropertyFieldId fieldId, object? value)
+    {
+        if (_propertiesDraft is not { } draft || _propertiesApplying)
+        {
+            return;
+        }
+
+        if (!draft.TryGetDataField(fieldId, out var field) ||
+            field is null ||
+            !field.CanEdit)
+        {
+            return;
+        }
+
+        field.EditorValue = value?.ToString() ?? string.Empty;
+        PublishUpdatedPropertiesDraft(draft);
+    }
+
+    private void UpdateVisualDraftValue(PropertiesVisualDraftField field, object? value)
+    {
+        if (_propertiesDraft is not { } draft ||
+            _propertiesApplying ||
+            !draft.Authoritative.CanEditBounds ||
+            draft.IsSemanticDirty)
+        {
+            return;
+        }
+
+        var text = value?.ToString() ?? string.Empty;
+        switch (field)
+        {
+            case PropertiesVisualDraftField.X:
+                draft.X = text;
+                break;
+            case PropertiesVisualDraftField.Y:
+                draft.Y = text;
+                break;
+            case PropertiesVisualDraftField.Width:
+                draft.Width = text;
+                break;
+            case PropertiesVisualDraftField.Height:
+                draft.Height = text;
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(field), field, null);
+        }
+
+        PublishUpdatedPropertiesDraft(draft);
+    }
+
+    private void PublishUpdatedPropertiesDraft(DocumentCanvasPropertiesDraft draft)
+    {
+        draft.Feedback = draft.TryValidate(out _, out var validationMessages)
+            ? null
+            : string.Join(" ", validationMessages);
+        _propertiesApplyStatus = draft.IsDirty ? "dirty" : "idle";
+        if (_host is { } host)
+        {
+            _ = TryPublishPropertiesFormState(host, draft);
+        }
+    }
+
+    private string PropertiesFieldControlId(ElementPropertyFieldId fieldId) =>
+        DomId($"properties-data-field-{fieldId.Value}");
+
+    private static bool ResolveBooleanEditorValue(DocumentCanvasDataPropertyDraft field) =>
+        field.TryParseBoolean(out var value) && value;
+
+    private async Task ApplyPropertiesAsync()
+    {
+        if (_propertiesDraft is not { } draft || _propertiesApplying || _host is not { } host)
+        {
+            return;
+        }
+
+        _propertiesApplying = true;
+        _propertiesApplyStatus = "applying";
+        draft.Feedback = null;
+        try
+        {
+            if (!TryPublishPropertiesFormState(host, draft))
+            {
+                return;
+            }
+
+            var result = await host.ApplyPropertiesAsync(draft, _componentLifetime.Token);
+            var current = host.CaptureState();
+            RefreshHostState(host, current);
+            if (!ReferenceEquals(_propertiesDraft, draft) ||
+                !IsCurrentPropertiesTarget(
+                    current,
+                    draft.Authoritative))
+            {
+                SynchronizePropertiesFormAfterStaleCallback(host, draft);
+                return;
+            }
+
+            _propertiesApplyStatus = result.Status.ToString().ToLowerInvariant();
+            if (result.Succeeded && result.Authoritative is { } authoritative)
+            {
+                _propertiesDraft = new DocumentCanvasPropertiesDraft(authoritative);
+                _ = TryPublishPropertiesFormState(host, _propertiesDraft);
+            }
+            else
+            {
+                draft.Feedback = result.Message ?? "The property change could not be applied.";
+                _ = TryPublishPropertiesFormState(host, draft);
+            }
+        }
+        catch (OperationCanceledException) when (_componentLifetime.IsCancellationRequested)
+        {
+            // Component disposal owns this cancellation. The host preserves any
+            // authoritative command outcome and its finally block releases its gate.
+        }
+        finally
+        {
+            _propertiesApplying = false;
+            RefreshHostState(host);
+            ReconcilePropertiesForm();
+        }
+    }
+
+    private void ReconcilePropertiesForm()
+    {
+        if (_host is not { } host || _state?.Session is not { } session)
+        {
+            return;
+        }
+
+        if (_propertiesDraft is not { } draft)
+        {
+            if (!_state.PropertiesFormOpen)
+            {
+                return;
+            }
+
+            if (session.Status == EditingSessionStatus.Rebuilding || _propertiesApplying)
+            {
+                return;
+            }
+
+            if (host.TryCaptureCurrentPropertiesForm(out var current) && current is not null)
+            {
+                _propertiesDraft = new DocumentCanvasPropertiesDraft(current);
+                _propertiesApplyStatus = "idle";
+                _ = TryPublishPropertiesFormState(host, _propertiesDraft);
+            }
+
+            return;
+        }
+
+        if (!_state.PropertiesFormOpen)
+        {
+            CancelProperties();
+            return;
+        }
+
+        if (!IsCurrentPropertiesTarget(_state, draft.Authoritative))
+        {
+            SynchronizePropertiesFormAfterStaleCallback(host, draft);
+            return;
+        }
+
+        if (session.Status == EditingSessionStatus.Rebuilding || _propertiesApplying)
+        {
+            return;
+        }
+
+        if (session.DocumentRevision == draft.Authoritative.Revision)
+        {
+            return;
+        }
+
+        if (draft.IsDirty)
+        {
+            draft.IsStale = true;
+            draft.Feedback =
+                "The selected object changed after the form was opened. Cancel and reopen Properties.";
+            _propertiesApplyStatus = "stale";
+            _ = TryPublishPropertiesFormState(host, draft);
+            return;
+        }
+
+        if (host.TryCaptureCurrentPropertiesForm(out var refreshed) &&
+            refreshed is not null)
+        {
+            _propertiesDraft = new DocumentCanvasPropertiesDraft(refreshed);
+            _propertiesApplyStatus = "idle";
+            _ = TryPublishPropertiesFormState(host, _propertiesDraft);
+        }
+        else
+        {
+            SynchronizePropertiesFormAfterStaleCallback(host, draft);
+        }
+    }
+
+    private bool TryPublishPropertiesFormState(
+        DocumentCanvasHost host,
+        DocumentCanvasPropertiesDraft? draft)
+    {
+        if (draft is not null && host.UpdatePropertiesFormState(
+                isOpen: true,
+                draft.Authoritative.VisualStateId,
+                draft.IsDirty,
+                targetSemanticElementId: draft.Authoritative.VisualStateId is null
+                    ? draft.Authoritative.SemanticId
+                    : null,
+                targetPresentationId: draft.Authoritative.SpatialRegion?.Id))
+        {
+            RefreshHostState(host);
+            return true;
+        }
+
+        SynchronizePropertiesFormAfterStaleCallback(host, draft);
+        return false;
+    }
+
+    private void SynchronizePropertiesFormAfterStaleCallback(
+        DocumentCanvasHost host,
+        DocumentCanvasPropertiesDraft? rejectedDraft)
+    {
+        var current = host.CaptureState();
+        RefreshHostState(host, current);
+        if (_propertiesDraft is { } existingDraft &&
+            IsCurrentPropertiesTarget(current, existingDraft.Authoritative))
+        {
+            if (!ReferenceEquals(existingDraft, rejectedDraft))
+            {
+                return;
+            }
+
+            if (host.TryCaptureCurrentPropertiesForm(out var replacement) &&
+                replacement is not null)
+            {
+                var replacementDraft = new DocumentCanvasPropertiesDraft(replacement);
+                _propertiesDraft = replacementDraft;
+                _propertiesApplying = false;
+                _propertiesApplyStatus = "idle";
+                RefreshHostState(host);
+                return;
+            }
+        }
+
+        // A failed stale publication must never close a newer singleton target.
+        // The host is authoritative for whether a form is still open; session
+        // notifications reconcile any target installed after this atomic capture.
+        _propertiesDraft = null;
+        _propertiesApplying = false;
+        _propertiesApplyStatus = "idle";
+        RefreshHostState(host);
+    }
+
+    private void RefreshHostState(
+        DocumentCanvasHost host,
+        DocumentCanvasHostState? captured = null)
+    {
+        lock (_lifecycleSync)
+        {
+            if (!_disposed && ReferenceEquals(_host, host))
+            {
+                _state = captured ?? host.CaptureState();
+            }
+        }
+
+        SynchronizeIssuesPanelSurface();
+    }
+
+    private void SynchronizeIssuesPanelSurface()
+    {
+        if (_state?.SurfaceSize is { } surfaceSize)
+        {
+            _issuesPanel.ResizeSurface(surfaceSize.CssWidth, surfaceSize.CssHeight);
+        }
+    }
+
+    private async ValueTask SynchronizeIssuesPanelPointerCaptureAsync()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        if (_issuesPanel.IsOpen)
+        {
+            if (_issuesPanelPointerCapture is not null)
+            {
+                return;
+            }
+
+            _issuesPanelModule ??= await JavaScript.InvokeAsync<IJSObjectReference>(
+                "import",
+                _componentLifetime.Token,
+                "./_content/Inceptus.DocumentEngine.Bpmn.Blazor/inceptus.presentation.js");
+            var pointerCapture = await _issuesPanelModule.InvokeAsync<IJSObjectReference>(
+                "createDomPointerCaptureObserver",
+                _componentLifetime.Token,
+                DomId("issues-panel-header"));
+            await pointerCapture.InvokeVoidAsync("start", _componentLifetime.Token);
+            _issuesPanelPointerCapture = pointerCapture;
+            return;
+        }
+
+        if (_issuesPanelPointerCapture is { } existing)
+        {
+            _issuesPanelPointerCapture = null;
+            await existing.InvokeVoidAsync("dispose", _componentLifetime.Token);
+            await existing.DisposeAsync();
+        }
+    }
+
+    private (double Width, double Height) CurrentIssuesPanelSurface() =>
+        _state?.SurfaceSize is { } surfaceSize
+            ? (surfaceSize.CssWidth, surfaceSize.CssHeight)
+            : (
+                FloatingIssuesPanelState.PreferredWidth +
+                    (FloatingIssuesPanelState.DefaultMargin * 2d),
+                FloatingIssuesPanelState.PreferredHeight +
+                    (FloatingIssuesPanelState.DefaultMargin * 2d));
+
+    private static bool IsCurrentPropertiesTarget(
+        DocumentCanvasHostState state,
+        DocumentCanvasPropertySnapshot target) =>
+        state.PropertiesFormOpen &&
+        state.Session is { IsClosed: false } session &&
+        (target.VisualStateId is { } targetVisualStateId
+            ? state.PropertiesTargetVisualStateId == targetVisualStateId &&
+              state.PropertiesTargetSemanticElementId is null &&
+              session.EditorState.Selection.Contains(targetVisualStateId) &&
+              session.CurrentScene?.GetVisualRegion(targetVisualStateId)?.Id ==
+                  target.SpatialRegion?.Id
+            : state.PropertiesTargetVisualStateId is null &&
+              state.PropertiesTargetSemanticElementId == target.SemanticId &&
+              session.EditorState.Selection.IsEmpty &&
+              session.EditorState.SemanticSceneSelection == target.SemanticId);
+
+    private Task UndoAsync() => ExecuteHistoryOperationAsync(isUndo: true);
+
+    private Task RedoAsync() => ExecuteHistoryOperationAsync(isUndo: false);
+
+    private Task ZoomOutAsync() => ExecuteZoomOperationAsync(
+        static (host, cancellationToken) => host.ZoomOutAsync(cancellationToken));
+
+    private Task SetZoomToActualSizeAsync() => ExecuteZoomOperationAsync(
+        static (host, cancellationToken) =>
+            host.SetZoomToActualSizeAsync(cancellationToken));
+
+    private Task ZoomInAsync() => ExecuteZoomOperationAsync(
+        static (host, cancellationToken) => host.ZoomInAsync(cancellationToken));
+
+    private async Task ExecuteHistoryOperationAsync(bool isUndo)
+    {
+        DocumentCanvasHost? host;
+        lock (_lifecycleSync)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            host = _host;
+        }
+
+        if (host is null)
+        {
+            return;
+        }
+
+        if (isUndo)
+        {
+            await host.UndoAsync(_componentLifetime.Token);
+        }
+        else
+        {
+            await host.RedoAsync(_componentLifetime.Token);
+        }
+
+        lock (_lifecycleSync)
+        {
+            if (!_disposed && ReferenceEquals(_host, host))
+            {
+                _state = host.CaptureState();
+            }
+        }
+    }
+
+    private async Task ExecuteZoomOperationAsync(
+        Func<DocumentCanvasHost, CancellationToken, ValueTask> operation)
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+        DocumentCanvasHost? host;
+        lock (_lifecycleSync)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            host = _host;
+        }
+
+        if (host is null)
+        {
+            return;
+        }
+
+        await operation(host, _componentLifetime.Token);
+        lock (_lifecycleSync)
+        {
+            if (!_disposed && ReferenceEquals(_host, host))
+            {
+                _state = host.CaptureState();
+            }
+        }
+    }
+
+    private static string Format(double? value) => value?.ToString(
+        "0.###",
+        System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty;
+
+    private static string FormatBounds(RectD bounds) => string.Join(",",
+        Format(bounds.X),
+        Format(bounds.Y),
+        Format(bounds.Width),
+        Format(bounds.Height));
+
+    private static string ValidationTargetLabel(ModelValidationTarget target)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        if (target.VisualStateId is { } visualStateId)
+        {
+            return $"Visual {visualStateId.Value} · Semantic {target.SemanticElementId!.Value}";
+        }
+
+        return target.SemanticElementId is { } semanticElementId
+            ? $"Semantic {semanticElementId.Value}"
+            : "Document";
+    }
+
+    private enum PropertiesVisualDraftField
+    {
+        X,
+        Y,
+        Width,
+        Height,
+    }
+
+    private string ResolveSemanticElementId(
+        Inceptus.DocumentEngine.Contracts.Primitives.SceneObjectId? sceneObjectId)
+    {
+        if (sceneObjectId is null || _state?.Session?.CurrentScene is not { } scene)
+        {
+            return string.Empty;
+        }
+
+        return scene.Items.FirstOrDefault(item => item.Id == sceneObjectId)
+            ?.Origin.SemanticElementId?.Value ?? string.Empty;
+    }
+
+    private Inceptus.DocumentEngine.Contracts.Primitives.VisualStateId?
+        ResolveSelectedVisualStateId()
+    {
+        return _state?.Session?.EditorState.Selection.FirstOrDefault();
+    }
+
+    private Canvas2DSceneItem? ResolveSelectedSceneObject()
+    {
+        var visualStateId = ResolveSelectedVisualStateId();
+        var session = _state?.Session;
+        var scene = session?.CurrentScene;
+        return visualStateId is null || scene is null
+            ? null
+            : scene.Items.FirstOrDefault(item =>
+                item.Layer is Canvas2DSceneLayer.Content or Canvas2DSceneLayer.Connector &&
+                item.Origin.VisualStateId == visualStateId);
+    }
+
+    private Canvas2DSceneItem? ResolveSelectedPersistentItem(bool preferPath)
+    {
+        var visualStateId = ResolveSelectedVisualStateId();
+        var session = _state?.Session;
+        var scene = session?.CurrentScene;
+        if (visualStateId is null || scene is null)
+        {
+            return null;
+        }
+
+        var items = scene.Items.Where(item =>
+            item.Layer is Canvas2DSceneLayer.Content or Canvas2DSceneLayer.Connector &&
+            item.Origin.VisualStateId == visualStateId);
+        return preferPath
+            ? items.FirstOrDefault(item => item.Geometry.Kind == Canvas2DSceneGeometryKind.Path)
+            : items.FirstOrDefault(item => item.Geometry.Kind is
+                Canvas2DSceneGeometryKind.Rectangle or Canvas2DSceneGeometryKind.Ellipse)
+                ?? items.FirstOrDefault();
+    }
+}

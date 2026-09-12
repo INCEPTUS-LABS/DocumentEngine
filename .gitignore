@@ -1,0 +1,12 @@
+[Bb]in/
+[Oo]bj/
+.vs/
+.vscode/
+*.user
+*.suo
+TestResults/
+playwright-report/
+blob-report/
+
+# Local Codex review reports
+docs/reviews/
