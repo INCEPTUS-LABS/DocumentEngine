@@ -285,88 +285,6 @@ public sealed class PhaseN80ProcessScopeArchitectureTests
             type.Name.Contains("Viewport", StringComparison.OrdinalIgnoreCase));
     }
 
-    [Fact]
-    public void N80DocumentationDurablyDefinesScopeContainmentAndPersistenceBoundaries()
-    {
-        var semanticArchitecture = ReadDocumentationFile(
-            "architecture",
-            "04-SemanticModel.md");
-        var visualArchitecture = ReadDocumentationFile(
-            "architecture",
-            "05-VisualModel.md");
-        var serializationArchitecture = ReadDocumentationFile(
-            "architecture",
-            "18-Serialization.md");
-        var semanticContract = ReadDocumentationFile(
-            "contracts",
-            "01-SemanticModelContract.md");
-        var visualContract = ReadDocumentationFile(
-            "contracts",
-            "02-VisualModelContract.md");
-
-        Assert.Contains("# Semantic Scope and Containment", semanticArchitecture,
-            StringComparison.Ordinal);
-        Assert.Contains("one canonical implicit semantic root scope", semanticArchitecture,
-            StringComparison.Ordinal);
-        Assert.Contains("`SemanticElementScopeMembershipSnapshot`", semanticArchitecture,
-            StringComparison.Ordinal);
-        Assert.Contains("relationship does not persist an independent scope membership",
-            semanticArchitecture,
-            StringComparison.Ordinal);
-        Assert.Contains("nested Canvas transforms", semanticArchitecture,
-            StringComparison.Ordinal);
-
-        Assert.Contains("- Semantic Scope Membership", visualArchitecture,
-            StringComparison.Ordinal);
-        Assert.Contains("- Scope Parentage", visualArchitecture, StringComparison.Ordinal);
-        Assert.Contains("- Semantic Container Ownership", visualArchitecture,
-            StringComparison.Ordinal);
-        Assert.Contains("does not persist a `ScopeId`, parent scope, or container owner",
-            visualArchitecture,
-            StringComparison.Ordinal);
-        Assert.Contains("active-scope navigation, breadcrumbs, and per-scope viewport state",
-            visualArchitecture,
-            StringComparison.Ordinal);
-
-        Assert.Contains("Explicit peer-root and nested semantic scopes", serializationArchitecture,
-            StringComparison.Ordinal);
-        Assert.Contains("Explicit non-root element-to-scope memberships",
-            serializationArchitecture,
-            StringComparison.Ordinal);
-        Assert.Contains("canonical root semantic scope is implicit", serializationArchitecture,
-            StringComparison.Ordinal);
-        Assert.Contains("Relationships do not serialize scope independently",
-            serializationArchitecture,
-            StringComparison.Ordinal);
-        Assert.Contains("Root-only Documents written before semantic scopes or optional profiles were introduced",
-            serializationArchitecture,
-            StringComparison.Ordinal);
-
-        Assert.Contains("# Semantic Scope and Containment", semanticContract,
-            StringComparison.Ordinal);
-        Assert.Contains("Explicit scope records MUST form an acyclic forest", semanticContract,
-            StringComparison.Ordinal);
-        Assert.Contains("This distinction MUST remain", semanticContract,
-            StringComparison.Ordinal);
-        Assert.Contains("Relationship scope is derived from the source element",
-            semanticContract,
-            StringComparison.Ordinal);
-        Assert.Contains("Semantic containment MUST NOT imply visual overlap", semanticContract,
-            StringComparison.Ordinal);
-
-        Assert.Contains("NOT persist an independent semantic scope", visualContract,
-            StringComparison.Ordinal);
-        Assert.Contains("Semantic scopes MUST NOT introduce relative child coordinates",
-            visualContract,
-            StringComparison.Ordinal);
-        Assert.Contains("Semantic containment has no duplicate authority in the Visual Model",
-            visualContract,
-            StringComparison.Ordinal);
-        Assert.Contains("Serialization MUST NOT add semantic containment or runtime navigation",
-            visualContract,
-            StringComparison.Ordinal);
-    }
-
     private static bool ContainsContainmentName(string name) =>
         name.Contains("Contain", StringComparison.OrdinalIgnoreCase) ||
         name.Contains("Owner", StringComparison.OrdinalIgnoreCase) ||
@@ -413,9 +331,6 @@ public sealed class PhaseN80ProcessScopeArchitectureTests
         string directory,
         string fileName) =>
         File.ReadAllText(Path.Combine(RepositoryRoot, "src", project, directory, fileName));
-
-    private static string ReadDocumentationFile(string directory, string fileName) =>
-        File.ReadAllText(Path.Combine(RepositoryRoot, "docs", directory, fileName));
 
     private static string RepositoryRoot
     {

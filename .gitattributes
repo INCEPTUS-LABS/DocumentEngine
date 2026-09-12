@@ -3,3 +3,4 @@
 AGENTS.md export-ignore
 VERIFICATION.md export-ignore
 docs export-ignore
+tests/Inceptus.DocumentEngine.UnitTests/DevelopmentGovernance export-ignore

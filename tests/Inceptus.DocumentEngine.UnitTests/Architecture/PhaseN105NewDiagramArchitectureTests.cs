@@ -26,8 +26,11 @@ public sealed class PhaseN105NewDiagramArchitectureTests
         Assert.DoesNotContain("Organizational", lifecycle, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
-    public void ImportAndNewDiagramShareOneStandbyCanvasReplacementAuthority()
+    [Theory]
+    [InlineData("\n")]
+    [InlineData("\r\n")]
+    [InlineData("\r")]
+    public void ImportAndNewDiagramShareOneStandbyCanvasReplacementAuthority(string newLine)
     {
         var import = ReadProductionFile(
             "Inceptus.DocumentEngine.Bpmn.Blazor",
@@ -40,7 +43,7 @@ public sealed class PhaseN105NewDiagramArchitectureTests
         var replacement = ReadProductionFile(
             "Inceptus.DocumentEngine.Bpmn.Blazor",
             "Presentation",
-            "DocumentCanvasHost.SessionReplacement.cs");
+            "DocumentCanvasHost.SessionReplacement.cs").ReplaceLineEndings(newLine);
 
         Assert.Contains("ReplaceDocumentUnderGateAsync(", import, StringComparison.Ordinal);
         Assert.Contains("ReplaceDocumentUnderGateAsync(", newDiagram, StringComparison.Ordinal);
@@ -52,12 +55,34 @@ public sealed class PhaseN105NewDiagramArchitectureTests
             StringComparison.Ordinal);
         Assert.Contains("HasError(candidateState.PresentationDiagnostics)", replacement,
             StringComparison.Ordinal);
-        Assert.True(
-            replacement.IndexOf("_session = candidateSession;", StringComparison.Ordinal) <
-            replacement.IndexOf("oldSession.StateChanged -=", StringComparison.Ordinal));
-        Assert.True(
-            replacement.IndexOf("oldSession.StateChanged -=", StringComparison.Ordinal) <
-            replacement.IndexOf("DisposeDocumentSessionResourcesAsync(\n                oldPointerObserver", StringComparison.Ordinal));
+        AssertSessionReplacementOrdering(replacement);
+    }
+
+    [Theory]
+    [InlineData("_session = candidateSession;")]
+    [InlineData("oldSession.StateChanged -=")]
+    [InlineData("DisposeDocumentSessionResourcesAsync(\n                oldPointerObserver")]
+    public void ReplacementOrderingGuardRejectsMissingStages(string missingStage)
+    {
+        var replacement = ReadProductionFile(
+            "Inceptus.DocumentEngine.Bpmn.Blazor",
+            "Presentation",
+            "DocumentCanvasHost.SessionReplacement.cs").ReplaceLineEndings("\n");
+
+        Assert.Contains(missingStage, replacement, StringComparison.Ordinal);
+        var incomplete = replacement.Replace(missingStage, string.Empty, StringComparison.Ordinal);
+
+        Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => AssertSessionReplacementOrdering(incomplete));
+    }
+
+    [Fact]
+    public void ReplacementOrderingGuardRejectsRetirementBeforePromotion()
+    {
+        const string reversed = "oldSession.StateChanged -= HandleSessionStateChanged;\n" +
+            "_session = candidateSession;\n" +
+            "DisposeDocumentSessionResourcesAsync(\n                oldPointerObserver";
+
+        Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => AssertSessionReplacementOrdering(reversed));
     }
 
     [Fact]
@@ -126,6 +151,26 @@ public sealed class PhaseN105NewDiagramArchitectureTests
             token,
             phase,
             StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static void AssertSessionReplacementOrdering(string source)
+    {
+        // Git checkouts may use LF or CRLF; source retirement order must not depend on that encoding.
+        var normalized = source.ReplaceLineEndings("\n");
+        string[] stages =
+        [
+            "_session = candidateSession;",
+            "oldSession.StateChanged -=",
+            "DisposeDocumentSessionResourcesAsync(\n                oldPointerObserver",
+        ];
+        var previousPosition = -1;
+        foreach (var stage in stages)
+        {
+            var position = normalized.IndexOf(stage, StringComparison.Ordinal);
+            Assert.True(position >= 0, $"Missing replacement stage: {stage}");
+            Assert.True(position > previousPosition, $"Replacement stage is out of order: {stage}");
+            previousPosition = position;
+        }
     }
 
     private static int CountOccurrences(string source, string value)
