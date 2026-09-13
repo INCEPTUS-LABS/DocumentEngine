@@ -8,6 +8,18 @@
     <PackageTags>inceptus;document-engine;bpmn;blazor;modeler</PackageTags>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <!-- Razor's source generator embeds physical path literals before Roslyn applies PathMap.
+         Release uses SDK-generated files so their directives can be mapped before compilation.
+         Debug retains source generation and its normal Hot Reload support. -->
+    <UseRazorSourceGenerator>false</UseRazorSourceGenerator>
+    <!-- Windows qualifies /_/ directives with the current drive before recording authored documents.
+         Map that virtual root too, using native separators so compiler prefix matching is exact. -->
+    <PathMap>$(PathMap),$([System.IO.Path]::GetPathRoot('$(MSBuildProjectDirectory)'))_$([System.IO.Path]::DirectorySeparatorChar)=/_/</PathMap>
+  </PropertyGroup>
+
+  <Import Project="../../build/RazorSourcePaths.targets" />
+
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Components.Web" />
     <PackageReference Include="Microsoft.JSInterop" />

@@ -4,6 +4,8 @@
 
 - Prepares the first public-source release snapshot, with the approved GitHub RepositoryUrl and commit metadata derived from the public build checkout.
 - Uses the pinned .NET SDK's built-in Source Link and portable `.snupkg` symbols for all six packages. Public source and symbol retrieval must be verified before release.
+- Maps Release Razor-generated source directives before compilation, preserving generated EmbeddedSource and authored-source stepping without embedding checkout-specific paths. Debug retains the SDK's normal source generator and Hot Reload support.
+- Aligns SDK Source Link roots with the existing compiler PathMap in ordinary local builds as well as CI builds.
 - Adds public-source validation and a separate, manually dispatched, tag-gated NuGet Trusted Publishing workflow. Preparation does not publish packages or create a release tag.
 - Corrects a session-shutdown lock-order inversion with in-flight document-change observation, preserving notification delivery and deterministic resource cleanup.
 - Preserves the accepted 0.1.2 D1 diagnostic lifetime correction and existing multiple-Start Publishing behavior. No public API, native format or PublishedProcess format changes are introduced.

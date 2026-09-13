@@ -124,6 +124,19 @@ public static class ReleaseSymbols
         return reader.Documents.Select(handle => reader.GetString(reader.GetDocument(handle).Name)).ToArray();
     }
 
+    public static bool SourceMatches(byte[] pdb, string name, byte[] source)
+    {
+        using var provider = MetadataReaderProvider.FromPortablePdbStream(new MemoryStream(pdb));
+        var reader = provider.GetMetadataReader();
+        var document = reader.Documents.Select(handle => reader.GetDocument(handle))
+            .Single(item => reader.GetString(item.Name) == name);
+        var algorithm = reader.GetGuid(document.HashAlgorithm);
+        var actual = algorithm == new Guid("8829d00f-11b8-4213-878b-770e8597ac16") ? SHA256.HashData(source) :
+            algorithm == new Guid("ff1816ec-aa5e-4d10-87f7-6f4963833460") ? SHA1.HashData(source) :
+            throw new InvalidDataException($"Unsupported source checksum algorithm: {name}");
+        return actual.SequenceEqual(reader.GetBlobBytes(document.Hash));
+    }
+
     public static byte[] Resource(byte[] assembly, string name)
     {
         using var pe = new PEReader(new MemoryStream(assembly));
@@ -185,6 +198,9 @@ Require ($Commit -cmatch '^[0-9a-f]{40}$') 'Expected an actual full Git commit.'
 if ($RequireSourceLink) {
     Require (@(git status --porcelain=v1 --untracked-files=all).Count -eq 0) 'Public artifacts require a clean checkout.'
     Require ((git rev-parse HEAD) -ceq $Commit) 'Artifact commit differs from the public checkout.'
+    $trackedSources = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    git -c core.quotepath=false ls-files | ForEach-Object { [void]$trackedSources.Add($_) }
+    Require ($LASTEXITCODE -eq 0) 'Could not enumerate committed source files.'
 }
 $packages = @(Get-ChildItem -LiteralPath $PackageDirectory -Filter '*.nupkg')
 $symbols = @(Get-ChildItem -LiteralPath $PackageDirectory -Filter '*.snupkg')
@@ -245,9 +261,18 @@ $records = foreach ($name in $family) {
             $links = ($sourceLinkText | ConvertFrom-Json -AsHashtable).documents
             Require ($links.ContainsKey('/_/*')) "Source Link does not cover deterministic source paths: $id"
             $documents = [ReleaseSymbols]::Documents($pdb)
+            $unmapped = @($documents | Where-Object { -not $_.StartsWith('/_/', [StringComparison]::Ordinal) })
+            Require ($unmapped.Count -eq 0) "Unmapped PDB document paths: $id $($unmapped -join ', ')"
             Require (@($documents | Where-Object { $_.StartsWith("/_/src/$id/") }).Count -gt 0) "Missing package source documents: $id"
             foreach ($url in $links.Values) {
                 Require ($url -ceq "https://raw.githubusercontent.com/INCEPTUS-LABS/DocumentEngine/$Commit/*") "Unexpected Source Link target: $id"
+            }
+            foreach ($document in $documents) {
+                if ($embeddedSources.Document -ccontains $document) { continue }
+                $relative = $document.Substring(3)
+                Require ($trackedSources.Contains($relative)) "Non-embedded PDB source is not in the committed tree: $id $document"
+                $source = [IO.File]::ReadAllBytes((Join-Path $PWD $relative))
+                Require ([ReleaseSymbols]::SourceMatches($pdb, $document, $source)) "Authored source checksum mismatch: $id $document"
             }
         }
         $entries = @($zip.Entries.FullName)

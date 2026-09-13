@@ -97,6 +97,7 @@ public sealed class SolutionArchitectureTests
         Assert.Equal("enable", ReadElementValue(buildProperties, "ImplicitUsings"));
         Assert.Equal("true", ReadElementValue(buildProperties, "TreatWarningsAsErrors"));
         Assert.Equal("true", ReadElementValue(buildProperties, "Deterministic"));
+        Assert.Equal("true", ReadElementValue(buildProperties, "DeterministicSourcePaths"));
         Assert.Equal("$(MSBuildThisFileDirectory)=/_/", ReadElementValue(buildProperties, "PathMap"));
         Assert.Equal("true", ReadElementValue(buildProperties, "EnableNETAnalyzers"));
         Assert.Equal("14.0", ReadElementValue(buildProperties, "LangVersion"));
