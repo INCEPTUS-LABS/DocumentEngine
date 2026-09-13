@@ -32,6 +32,7 @@ public sealed partial class EditingSession
                     // Graphics execution is post-install presentation work. A failure never
                     // invalidates the current scene or changes Ready to RuntimeFaulted.
                     _presentationDiagnostics = result.Diagnostics;
+                    _presentedGeneration = result.Succeeded ? generation : null;
                     stateChanged = true;
                 }
             }
@@ -112,6 +113,7 @@ public sealed partial class EditingSession
                     if (!_closing && !_closed)
                     {
                         _presentationDiagnostics = result.Diagnostics;
+                        _presentedGeneration = null;
                         stateChanged = true;
                     }
                 }
@@ -225,6 +227,7 @@ public sealed partial class EditingSession
                     ReferenceEquals(scene, _currentScene))
                 {
                     _presentationDiagnostics = renderResult.Diagnostics;
+                    _presentedGeneration = renderResult.Succeeded ? generation : null;
                     stateChanged = true;
                 }
             }

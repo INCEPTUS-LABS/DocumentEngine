@@ -190,8 +190,7 @@ internal sealed partial class DocumentCanvasHost
                 _activePointerCaptureGeneration = 0;
                 _consumedPlacementPointerId = null;
                 _viewportPanGesture = null;
-                _awaitingScenePresentation = false;
-                _sceneInstalledAwaitingPresentation = false;
+                _successfulPresentationGeneration = candidateState.Generation;
                 _surfaceRenderPending = false;
                 _contextMenu = null;
                 _propertiesTargetVisualStateId = null;

@@ -127,8 +127,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
     private long _activePointerCaptureGeneration;
     private long? _consumedPlacementPointerId;
     private ViewportPanGesture? _viewportPanGesture;
-    private bool _awaitingScenePresentation;
-    private bool _sceneInstalledAwaitingPresentation;
+    private EditingSessionGeneration? _successfulPresentationGeneration;
     private bool _surfaceRenderPending;
     private DocumentCanvasContextMenuState? _contextMenu;
     private VisualStateId? _propertiesTargetVisualStateId;
@@ -2469,6 +2468,8 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                     _hostDiagnostics = [];
                     _observedActiveGestureId = sessionState.EditorState.ActiveGesture?.Id;
                     _observedDocumentRevision = sessionState.DocumentRevision;
+                    _successfulPresentationGeneration = presentationSucceeded
+                        ? sessionState.Generation : null;
                     _latestPresentationSucceeded = presentationSucceeded;
                     if (presentationSucceeded)
                     {
@@ -4318,43 +4319,26 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
             switch (eventArgs.State.Status)
             {
                 case EditingSessionStatus.Rebuilding:
-                    _awaitingScenePresentation = true;
-                    _sceneInstalledAwaitingPresentation = false;
                     _latestPresentationSucceeded = false;
                     break;
                 case EditingSessionStatus.RuntimeFaulted:
-                    _awaitingScenePresentation = false;
-                    _sceneInstalledAwaitingPresentation = false;
                     _latestPresentationSucceeded = false;
                     _ = ReplaceInteractionDiagnosticsUnderLock([]);
                     break;
-                case EditingSessionStatus.Ready
-                    when _awaitingScenePresentation && !_sceneInstalledAwaitingPresentation:
-                    // EditingSession installs and announces a current scene before its
-                    // renderer call. Do not report presentation success until the next
-                    // notification confirms that graphics execution has completed.
-                    _sceneInstalledAwaitingPresentation = true;
-                    _latestPresentationSucceeded = false;
-                    break;
-                case EditingSessionStatus.Ready
-                    when _awaitingScenePresentation:
-                    _awaitingScenePresentation = false;
-                    _sceneInstalledAwaitingPresentation = false;
-                    _latestPresentationSucceeded =
-                        !HasError(eventArgs.State.PresentationDiagnostics);
-                    if (_latestPresentationSucceeded)
-                    {
-                        checked { _successfulRenderCount++; }
-                    }
-
-                    break;
                 case EditingSessionStatus.Ready:
-                    // Explicit Resize/RenderCurrent calls report presentation diagnostics
-                    // without changing the Editing Session generation.
+                    // Notifications capture current state and may omit or repeat intermediate
+                    // states. Graphics completion belongs to the session's renderer result,
+                    // never to an assumed Rebuilding -> Ready -> Ready notification sequence.
+                    var scenePresented = eventArgs.State.IsCurrentScenePresented;
                     if (!_surfaceRenderPending)
                     {
-                        _latestPresentationSucceeded =
-                            !HasError(eventArgs.State.PresentationDiagnostics);
+                        _latestPresentationSucceeded = scenePresented;
+                    }
+                    if (scenePresented &&
+                        _successfulPresentationGeneration != eventArgs.State.Generation)
+                    {
+                        _successfulPresentationGeneration = eventArgs.State.Generation;
+                        checked { _successfulRenderCount++; }
                     }
 
                     break;

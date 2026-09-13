@@ -36,6 +36,7 @@ public sealed partial class EditingSession : IAsyncDisposable
     private readonly CancellationTokenSource _lifetime = new();
     private EditingSessionStatus _status = EditingSessionStatus.Rebuilding;
     private EditingSessionGeneration _generation;
+    private EditingSessionGeneration? _presentedGeneration;
     private Canvas2DScene? _currentScene;
     private Canvas2DScene? _lastKnownGoodScene;
     private Canvas2DScene? _activeGestureFallbackScene;

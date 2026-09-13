@@ -53,7 +53,8 @@ public sealed partial class EditingSession
             _modelProfileCatalog,
             snapshot?.SemanticModel.ModelProfiles ?? _lastModelProfileState,
             _activeModelProfileViewState,
-            _activeModelProfileElementViewState);
+            _activeModelProfileElementViewState,
+            _presentedGeneration == _generation);
     }
 
     private bool IsUnavailable(out EditingSessionState state)

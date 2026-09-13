@@ -6222,6 +6222,14 @@ public sealed partial class DocumentCanvasHostTests
 
         internal bool BlockResize { get; set; }
 
+        internal bool BlockRender { get; set; }
+
+        internal TaskCompletionSource RenderStarted { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        private TaskCompletionSource RenderRelease { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
         internal TaskCompletionSource ResizeStarted { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -6260,13 +6268,19 @@ public sealed partial class DocumentCanvasHostTests
             }
         }
 
-        public ValueTask<Canvas2DInteropOperationResult> RenderAsync(Canvas2DRenderFrame frame)
+        public async ValueTask<Canvas2DInteropOperationResult> RenderAsync(Canvas2DRenderFrame frame)
         {
             Enter();
             try
             {
                 Calls.Add("render");
-                return ValueTask.FromResult(RenderResult);
+                if (BlockRender)
+                {
+                    RenderStarted.TrySetResult();
+                    await RenderRelease.Task.ConfigureAwait(false);
+                }
+
+                return RenderResult;
             }
             finally
             {
@@ -6319,6 +6333,8 @@ public sealed partial class DocumentCanvasHostTests
         private static Canvas2DInteropOperationResult Success() => new() { Succeeded = true };
 
         internal void ReleaseResize() => ResizeRelease.TrySetResult();
+
+        internal void ReleaseRender() => RenderRelease.TrySetResult();
 
         private void Enter()
         {

@@ -35,7 +35,8 @@ public sealed class EditingSessionState
         ModelProfileCatalog? modelProfileCatalog = null,
         ModelProfileStateSnapshot? modelProfileState = null,
         ModelProfileViewStateSnapshot? modelProfileViewState = null,
-        ModelProfileElementViewStateSnapshot? modelProfileElementViewState = null)
+        ModelProfileElementViewStateSnapshot? modelProfileElementViewState = null,
+        bool isCurrentScenePresented = false)
         : this(
             documentId,
             documentRevision,
@@ -55,7 +56,8 @@ public sealed class EditingSessionState
             modelProfileCatalog,
             modelProfileState,
             modelProfileViewState,
-            modelProfileElementViewState)
+            modelProfileElementViewState,
+            isCurrentScenePresented)
     {
     }
 
@@ -78,7 +80,8 @@ public sealed class EditingSessionState
         ModelProfileCatalog? modelProfileCatalog = null,
         ModelProfileStateSnapshot? modelProfileState = null,
         ModelProfileViewStateSnapshot? modelProfileViewState = null,
-        ModelProfileElementViewStateSnapshot? modelProfileElementViewState = null)
+        ModelProfileElementViewStateSnapshot? modelProfileElementViewState = null,
+        bool isCurrentScenePresented = false)
     {
         ArgumentNullException.ThrowIfNull(documentId);
         ArgumentNullException.ThrowIfNull(activeScopeId);
@@ -152,6 +155,8 @@ public sealed class EditingSessionState
             presentationDiagnostics,
             nameof(presentationDiagnostics));
         IsClosed = isClosed;
+        IsCurrentScenePresented = !isClosed && status == EditingSessionStatus.Ready &&
+            isCurrentScenePresented;
     }
 
     public DocumentId DocumentId { get; }
@@ -191,6 +196,12 @@ public sealed class EditingSessionState
     public ImmutableArray<Diagnostic> PresentationDiagnostics { get; }
 
     public bool IsClosed { get; }
+
+    /// <summary>
+    /// True only after graphics execution for the current scene generation succeeds.
+    /// Ready alone means that the scene is installed, not that it has been presented.
+    /// </summary>
+    public bool IsCurrentScenePresented { get; }
 
     public bool IsGraphicalInteractionEnabled =>
         !IsClosed && Status == EditingSessionStatus.Ready && CurrentScene is not null;

@@ -102,7 +102,17 @@ public sealed partial class DocumentCanvasHostTests
     public async Task RetainedContextDiagnosticClearsOnAuthoritativeOrInteractionTransition(string transition)
     {
         var log = new ConcurrentQueue<object>();
-        using var notifications = RecordModelerNotifications(log);
+        var changeReceived = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var notifications = new BpmnModelerNotifications(notification =>
+        {
+            log.Enqueue(notification);
+            if (notification is BpmnModelerDocumentChangedEventArgs)
+            {
+                changeReceived.TrySetResult();
+            }
+
+            return Task.CompletedTask;
+        });
         var surface = new RecordingSurfaceObserver(new Canvas2DSurfaceSize(1400d, 900d, 1d));
         await using var host = CreateHost(new RecordingRenderExecution(), surface,
             compositionFactory: new RejectingContextAnchorCompositionFactory(),
@@ -141,13 +151,31 @@ public sealed partial class DocumentCanvasHostTests
         Assert.Equal(diagnostics, host.CaptureState().InteractionDiagnostics);
         if (transition == "revision")
         {
-            var visual = snapshot.VisualModel.VisualStates.Single(item => item.Id == BpmnDemoPipeline.TaskVisualId);
-            Assert.True((await session.ExecuteAsync(new MoveVisualStateCommand(snapshot.DocumentId,
-                snapshot.Revision, visual.Id, visual.Position + new VectorD(10d, 10d),
-                VisualPlacementMode.Pinned))).IsCommitted);
-            await session.WaitForIdleAsync();
-            Assert.Equal(snapshot.Revision.Increment(), session.CaptureState().DocumentRevision);
-            Assert.Equal(history.EntryCount + 1, session.CaptureState().HistoryStatus.EntryCount);
+            // A direct session command does not own the host's callback completion.
+            // Hold the existing host gate so deferred cursor cleanup/notification collection
+            // cannot race this test's observation of the already-completed Pending task.
+            var hostGate = (SemaphoreSlim)PresentationField(host, "_gate");
+            await notifications.Pending.WaitAsync(TimeSpan.FromSeconds(10));
+            await hostGate.WaitAsync();
+            try
+            {
+                var visual = snapshot.VisualModel.VisualStates.Single(item => item.Id == BpmnDemoPipeline.TaskVisualId);
+                Assert.True((await session.ExecuteAsync(new MoveVisualStateCommand(snapshot.DocumentId,
+                    snapshot.Revision, visual.Id, visual.Position + new VectorD(10d, 10d),
+                    VisualPlacementMode.Pinned))).IsCommitted);
+                await session.WaitForIdleAsync();
+                Assert.Equal(snapshot.Revision.Increment(), session.CaptureState().DocumentRevision);
+                Assert.Equal(history.EntryCount + 1, session.CaptureState().HistoryStatus.EntryCount);
+                Assert.Empty(host.CaptureState().InteractionDiagnostics);
+                Assert.True(notifications.Pending.IsCompletedSuccessfully);
+                Assert.Empty(ModelerChanges(log));
+            }
+            finally
+            {
+                hostGate.Release();
+            }
+
+            await changeReceived.Task.WaitAsync(TimeSpan.FromSeconds(10));
         }
         else if (transition == "scope")
         {
