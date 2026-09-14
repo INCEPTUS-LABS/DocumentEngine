@@ -23,6 +23,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Components.Web" />
     <PackageReference Include="Microsoft.JSInterop" />
+    <PackageReference Include="Microsoft.Extensions.Localization" />
   </ItemGroup>
 
   <ItemGroup>

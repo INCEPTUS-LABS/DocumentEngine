@@ -98,8 +98,8 @@ public sealed class PhaseN314DeletionArchitectureTests
             "DocumentCanvas.razor");
         var genericSource = host + properties + razor;
 
-        Assert.Contains("Delete element", razor, StringComparison.Ordinal);
-        Assert.Contains("Delete connection", razor, StringComparison.Ordinal);
+        Assert.Contains("@Text[\"Context_DeleteElement\"]", razor, StringComparison.Ordinal);
+        Assert.Contains("@Text[\"Context_DeleteConnection\"]", razor, StringComparison.Ordinal);
         Assert.Contains("ExecuteDeletionContextActionAsync", host,
             StringComparison.Ordinal);
         Assert.Contains("TryCaptureDocumentSnapshot", host, StringComparison.Ordinal);

@@ -19,11 +19,11 @@ public sealed class PhaseN51IssuesPresentationArchitectureTests
         Assert.Contains("class=\"canvas-presentation-status\"", statusRow,
             StringComparison.Ordinal);
         Assert.Contains("@StatusMessage", statusRow, StringComparison.Ordinal);
-        Assert.Contains("Errors @ValidationErrorCount", statusRow,
+        Assert.Contains("@Text[\"Status_Errors\"] @ValidationErrorCount", statusRow,
             StringComparison.Ordinal);
-        Assert.Contains("Warnings @ValidationWarningCount", statusRow,
+        Assert.Contains("@Text[\"Status_Warnings\"] @ValidationWarningCount", statusRow,
             StringComparison.Ordinal);
-        Assert.Contains("Info @ValidationInfoCount", statusRow,
+        Assert.Contains("@Text[\"Status_Info\"] @ValidationInfoCount", statusRow,
             StringComparison.Ordinal);
         Assert.DoesNotContain("class=\"presentation-status\"", component,
             StringComparison.Ordinal);

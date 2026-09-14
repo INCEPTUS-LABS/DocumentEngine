@@ -1,4 +1,6 @@
 @using Inceptus.DocumentEngine.Bpmn.Blazor
+@using Microsoft.Extensions.Localization
+@inject IStringLocalizer<ModelerStrings> Text
 @using Inceptus.DocumentEngine.Bpmn.Blazor.Composition
 @using Inceptus.DocumentEngine.Bpmn.Blazor.Presentation
 @using Inceptus.DocumentEngine.Canvas2D.EditingSession
@@ -108,15 +110,15 @@
              data-issues-panel-open="@IssuesPanelOpenValue"
              data-issues-panel-left="@IssuesPanelLeft"
              data-issues-panel-top="@IssuesPanelTop"
-             aria-label="Document presentation">
+             aria-label="@Text["Accessibility_DocumentPresentation"]">
         <div class="document-editor-layout">
             <ToolboxPanel Catalog="@ToolboxCatalog"
                           DomIdPrefix="@_domIdPrefix"
                           SelectedItemId="@_toolboxSelection.SelectedItemId"
                           SelectedItemIdChanged="SelectToolboxItemAsync" />
             <div class="document-editor-workspace">
-        <div class="editor-toolbar" role="toolbar" aria-label="Editor toolbar">
-            <nav class="scope-breadcrumb" aria-label="Process scope">
+        <div class="editor-toolbar" role="toolbar" aria-label="@Text["Accessibility_EditorToolbar"]">
+            <nav class="scope-breadcrumb" aria-label="@Text["Accessibility_ProcessScope"]">
                 @for (var index = 0; index < ScopeBreadcrumb.Length; index++)
                 {
                     var segment = ScopeBreadcrumb[index];
@@ -128,7 +130,7 @@
                     {
                         <span class="scope-breadcrumb-current"
                               aria-current="page"
-                              title="@segment.ScopeId.Value">@segment.Label</span>
+                              title="@segment.ScopeId.Value">@BreadcrumbLabel(segment)</span>
                     }
                     else
                     {
@@ -136,17 +138,17 @@
                                 type="button"
                                 disabled="@(!CanNavigateScope)"
                                 title="@segment.ScopeId.Value"
-                                @onclick="() => NavigateToScopeAsync(segment.ScopeId)">@segment.Label</button>
+                                @onclick="() => NavigateToScopeAsync(segment.ScopeId)">@BreadcrumbLabel(segment)</button>
                     }
                 }
             </nav>
-            <div class="toolbar-group document-file-controls" role="group" aria-label="Document file">
+            <div class="toolbar-group document-file-controls" role="group" aria-label="@Text["Accessibility_DocumentFile"]">
                 <button id="@DomId("new-diagram")"
                         class="native-document-action new-diagram-action"
                         type="button"
                         disabled="@(!CanCreateNewDiagram)"
-                        aria-label="New diagram"
-                        title="New diagram"
+                        aria-label="@Text["Toolbar_NewDiagram"]"
+                        title="@Text["Toolbar_NewDiagram"]"
                         @onclick="OpenNewDiagramConfirmation">
                     <span class="native-document-action-icon" aria-hidden="true">▧</span>
                 </button>
@@ -154,12 +156,12 @@
                        class="native-document-action native-document-import-action"
                        for="@DomId("import-file")"
                        aria-disabled="@(!CanUseNativeDocumentTransfer)"
-                       title="Import native Document (maximum 16 MiB)">
+                       title="@Text["Toolbar_ImportHint"]">
                     <span class="native-document-action-icon" aria-hidden="true">⇩</span>
                     <InputFile @key="_nativeDocumentInputKey"
                                id="@DomId("import-file")"
                                class="native-document-file-input"
-                               aria-label="Import native Document"
+                               aria-label="@Text["Toolbar_Import"]"
                                disabled="@(!CanUseNativeDocumentTransfer)"
                                accept=".inceptus.json,application/json"
                                OnChange="ImportNativeDocumentAsync" />
@@ -168,8 +170,8 @@
                         class="native-document-action"
                         type="button"
                         disabled="@(!CanUseNativeDocumentTransfer)"
-                        aria-label="Export native Document"
-                        title="Export native Document"
+                        aria-label="@Text["Toolbar_Export"]"
+                        title="@Text["Toolbar_Export"]"
                         @onclick="ExportNativeDocumentAsync">
                     <span class="native-document-action-icon" aria-hidden="true">⇧</span>
                 </button>
@@ -177,52 +179,52 @@
                         class="native-document-action publish-action"
                         type="button"
                         disabled="@(!CanPublish)"
-                        aria-label="Publish"
-                        title="Publish"
+                        aria-label="@Text["Toolbar_Publish"]"
+                        title="@Text["Toolbar_Publish"]"
                         @onclick="OpenPublicationDialog">
                     <span class="native-document-action-icon" aria-hidden="true">◈</span>
                 </button>
             </div>
-            <div class="toolbar-group history-controls" role="group" aria-label="Editing history">
+            <div class="toolbar-group history-controls" role="group" aria-label="@Text["Accessibility_History"]">
                 <button id="@DomId("undo")"
                         type="button"
                         disabled="@(!CanUndo)"
-                        title="Undo"
-                        @onclick="UndoAsync">Undo</button>
+                        title="@Text["Toolbar_Undo"]"
+                        @onclick="UndoAsync">@Text["Toolbar_Undo"]</button>
                 <button id="@DomId("redo")"
                         type="button"
                         disabled="@(!CanRedo)"
-                        title="Redo"
-                        @onclick="RedoAsync">Redo</button>
+                        title="@Text["Toolbar_Redo"]"
+                        @onclick="RedoAsync">@Text["Toolbar_Redo"]</button>
             </div>
 
-            <div class="toolbar-group zoom-controls" role="group" aria-label="Viewport zoom">
+            <div class="toolbar-group zoom-controls" role="group" aria-label="@Text["Accessibility_Zoom"]">
                 <button id="@DomId("zoom-out")"
                         type="button"
                         disabled="@(!CanZoomOut)"
-                        aria-label="Zoom out"
-                        title="Zoom out"
+                        aria-label="@Text["Toolbar_ZoomOut"]"
+                        title="@Text["Toolbar_ZoomOut"]"
                         @onclick="ZoomOutAsync">−</button>
                 <button id="@DomId("zoom-100")"
                         class="zoom-percentage"
                         type="button"
                         disabled="@(!CanSetZoomToActualSize)"
-                        aria-label="Set zoom to 100%"
-                        title="Set zoom to 100%"
+                        aria-label="@Text["Toolbar_ZoomActualSize"]"
+                        title="@Text["Toolbar_ZoomActualSize"]"
                         @onclick="SetZoomToActualSizeAsync">@ZoomPercentage%</button>
                 <button id="@DomId("zoom-in")"
                         type="button"
                         disabled="@(!CanZoomIn)"
-                        aria-label="Zoom in"
-                        title="Zoom in"
+                        aria-label="@Text["Toolbar_ZoomIn"]"
+                        title="@Text["Toolbar_ZoomIn"]"
                         @onclick="ZoomInAsync">+</button>
             </div>
-            <div class="toolbar-group validation-controls" role="group" aria-label="Model validation">
+            <div class="toolbar-group validation-controls" role="group" aria-label="@Text["Accessibility_ModelValidation"]">
                 <button id="@DomId("validate")"
                         type="button"
                         disabled="@(!CanValidate)"
-                        title="Validate model"
-                        @onclick="ValidateAsync">Validate</button>
+                        title="@Text["Toolbar_ValidateHint"]"
+                        @onclick="ValidateAsync">@Text["Toolbar_Validate"]</button>
             </div>
         </div>
 
@@ -231,12 +233,12 @@
                     class="@CanvasClass(CanvasElementId)"
                     tabindex="@CanvasTabIndex(CanvasElementId)"
                     aria-hidden="@CanvasAriaHidden(CanvasElementId)"
-                    aria-label="Rendered document diagram"></canvas>
+                    aria-label="@Text["Accessibility_RenderedDiagram"]"></canvas>
             <canvas id="@StandbyCanvasElementId"
                     class="@CanvasClass(StandbyCanvasElementId)"
                     tabindex="@CanvasTabIndex(StandbyCanvasElementId)"
                     aria-hidden="@CanvasAriaHidden(StandbyCanvasElementId)"
-                    aria-label="Rendered document diagram"></canvas>
+                    aria-label="@Text["Accessibility_RenderedDiagram"]"></canvas>
             @if (_state?.ContextMenu is { } contextMenu &&
                 _propertiesDraft is null && _modelViewPropertiesDraft is null)
             {
@@ -246,8 +248,8 @@
                      class="object-context-menu"
                      role="menu"
                      aria-label="@(contextMenu.Kind == DocumentCanvasContextMenuKind.Background
-                                      ? "Model and view actions"
-                                      : "Diagram object actions")"
+                                      ? Text["Accessibility_ModelActions"]
+                                      : Text["Accessibility_ObjectActions"])"
                      @onclick:stopPropagation
                      @onpointerdown:stopPropagation
                      @onpointerup:stopPropagation
@@ -268,19 +270,19 @@
                                         type="button"
                                         role="menuitem"
                                         aria-haspopup="menu">
-                                    <span>@group.Key</span>
+                                    <span>@BackgroundGroupLabel(group)</span>
                                     <span aria-hidden="true">›</span>
                                 </button>
                                 <div class="model-context-submenu-items"
                                      role="menu"
-                                     aria-label="@group.Key">
+                                     aria-label="@BackgroundGroupLabel(group)">
                                     @foreach (var action in group)
                                     {
                                         <button id="@BackgroundActionControlId(action.Id)"
                                                 type="button"
                                                 role="menuitem"
                                                 data-background-action-id="@action.Id.Value"
-                                                @onclick="() => ExecuteBackgroundContextActionAsync(action.Id)">@action.DisplayName</button>
+                                                @onclick="() => ExecuteBackgroundContextActionAsync(action.Id)">@ModelerLabels.ActionLabel(Text, action.Id.Value, action.DisplayName)</button>
                                     }
                                 </div>
                             </div>
@@ -288,7 +290,7 @@
                         <button id="@DomId("model-view-properties-action")"
                                 type="button"
                                 role="menuitem"
-                                @onclick="OpenModelViewPropertiesAsync">View and model properties...</button>
+                                @onclick="OpenModelViewPropertiesAsync">@Text["Context_ModelProperties"]</button>
                     }
                     else
                     {
@@ -298,7 +300,7 @@
                                     type="button"
                                     role="menuitem"
                                     data-semantic-scene-command-action-id="@action.Id.Value"
-                                    @onclick="() => ExecuteSemanticSceneCommandContextActionAsync(action.Id)">@action.DisplayName</button>
+                                    @onclick="() => ExecuteSemanticSceneCommandContextActionAsync(action.Id)">@ModelerLabels.ActionLabel(Text, action.Id.Value, action.DisplayName)</button>
                         }
                         @foreach (var action in contextMenu.SemanticViewActions)
                         {
@@ -306,27 +308,27 @@
                                     type="button"
                                     role="menuitem"
                                     data-semantic-scene-view-action-id="@action.Id.Value"
-                                    @onclick="() => ExecuteSemanticSceneViewContextActionAsync(action.Id)">@action.DisplayName</button>
+                                    @onclick="() => ExecuteSemanticSceneViewContextActionAsync(action.Id)">@ModelerLabels.ActionLabel(Text, action.Id.Value, action.DisplayName)</button>
                         }
                         @if (contextMenu.ScopeNavigationAction is { } scopeNavigationAction)
                         {
                             <button id="@DomId("open-scope-action")"
                                     type="button"
                                     role="menuitem"
-                                    @onclick="ExecuteScopeNavigationContextActionAsync">@scopeNavigationAction.Label</button>
+                                    @onclick="ExecuteScopeNavigationContextActionAsync">@ScopeActionLabel(scopeNavigationAction)</button>
                         }
                         <button id="@DomId("properties-action")"
                                 type="button"
                                 role="menuitem"
                                 disabled="@(!PropertiesAvailable)"
-                                @onclick="OpenPropertiesAsync">Properties...</button>
+                                @onclick="OpenPropertiesAsync">@Text["Context_Properties"]</button>
                         @if (contextMenu.ConnectorRouteAction?.Kind is
                             Canvas2DConnectorRouteContextActionKind.AddPoint)
                         {
                             <button id="@DomId("add-connector-point-action")"
                                     type="button"
                                     role="menuitem"
-                                    @onclick="ExecuteConnectorRouteContextActionAsync">Add point here</button>
+                                    @onclick="ExecuteConnectorRouteContextActionAsync">@Text["Context_AddPoint"]</button>
                         }
                         else if (contextMenu.ConnectorRouteAction?.Kind is
                                  Canvas2DConnectorRouteContextActionKind.DeletePoint)
@@ -334,7 +336,7 @@
                             <button id="@DomId("delete-connector-point-action")"
                                     type="button"
                                     role="menuitem"
-                                    @onclick="ExecuteConnectorRouteContextActionAsync">Delete point</button>
+                                    @onclick="ExecuteConnectorRouteContextActionAsync">@Text["Context_DeletePoint"]</button>
                         }
                         @if (contextMenu.ConnectorAnchorAction?.Kind is
                             Canvas2DConnectorAnchorContextActionKind.AddAnchor)
@@ -344,14 +346,14 @@
                                 <button id="@DomId("add-connector-source-anchor-action")"
                                         type="button"
                                         role="menuitem"
-                                        @onclick="() => ExecuteConnectorAnchorContextActionAsync(ConnectorAnchorRole.Source)">Add connector start point here</button>
+                                        @onclick="() => ExecuteConnectorAnchorContextActionAsync(ConnectorAnchorRole.Source)">@Text["Context_AddSourceAnchor"]</button>
                             }
                             @if (contextMenu.ConnectorAnchorAction.CanAdd(ConnectorAnchorRole.Target))
                             {
                                 <button id="@DomId("add-connector-target-anchor-action")"
                                         type="button"
                                         role="menuitem"
-                                        @onclick="() => ExecuteConnectorAnchorContextActionAsync(ConnectorAnchorRole.Target)">Add connector end point here</button>
+                                        @onclick="() => ExecuteConnectorAnchorContextActionAsync(ConnectorAnchorRole.Target)">@Text["Context_AddTargetAnchor"]</button>
                             }
                         }
                         else if (contextMenu.ConnectorAnchorAction is
@@ -363,14 +365,14 @@
                             <button id="@DomId("delete-connector-anchor-action")"
                                     type="button"
                                     role="menuitem"
-                                    @onclick="() => ExecuteConnectorAnchorContextActionAsync(null)">Delete attachment point</button>
+                                    @onclick="() => ExecuteConnectorAnchorContextActionAsync(null)">@Text["Context_DeleteAnchor"]</button>
                         }
                         @if (contextMenu.NodeLabelAction is not null)
                         {
                             <button id="@DomId("reset-node-label-action")"
                                     type="button"
                                     role="menuitem"
-                                    @onclick="ExecuteNodeLabelContextActionAsync">Reset label position</button>
+                                    @onclick="ExecuteNodeLabelContextActionAsync">@Text["Context_ResetLabel"]</button>
                         }
                         @if (contextMenu.DeletionAction?.TargetKind is
                             DiagramDeletionTargetKind.Element)
@@ -378,7 +380,7 @@
                             <button id="@DomId("delete-element-action")"
                                     type="button"
                                     role="menuitem"
-                                    @onclick="ExecuteDeletionContextActionAsync">Delete element</button>
+                                    @onclick="ExecuteDeletionContextActionAsync">@Text["Context_DeleteElement"]</button>
                         }
                         else if (contextMenu.DeletionAction?.TargetKind is
                                  DiagramDeletionTargetKind.Connection)
@@ -386,7 +388,7 @@
                             <button id="@DomId("delete-connection-action")"
                                     type="button"
                                     role="menuitem"
-                                    @onclick="ExecuteDeletionContextActionAsync">Delete connection</button>
+                                    @onclick="ExecuteDeletionContextActionAsync">@Text["Context_DeleteConnection"]</button>
                         }
                     }
                 </div>
@@ -399,34 +401,34 @@
                      @oncontextmenu:preventDefault></div>
                 <form id="@DomId("model-view-properties-form")"
                       class="properties-form model-view-properties-form"
-                      aria-label="View and model properties"
+                      aria-label="@Text["Properties_ModelTitle"]"
                       @onsubmit="ApplyModelViewPropertiesAsync"
                       @onsubmit:preventDefault>
                     <header class="properties-form-header">
-                        <h2>View and model properties</h2>
+                        <h2>@Text["Properties_ModelTitle"]</h2>
                         <button id="@DomId("model-view-properties-close")"
                                 class="properties-close"
                                 type="button"
-                                aria-label="Close view and model properties"
-                                title="Close view and model properties"
+                                aria-label="@Text["Properties_CloseModel"]"
+                                title="@Text["Properties_CloseModel"]"
                                 disabled="@_modelViewPropertiesApplying"
                                 @onclick="CancelModelViewProperties">×</button>
                     </header>
 
                     <fieldset data-property-group="profiles">
-                        <legend>Profiles</legend>
+                        <legend>@Text["Properties_Profiles"]</legend>
                         @foreach (var profile in modelViewDraft.Profiles)
                         {
                             <section class="model-profile-row"
                                      data-model-profile-id="@profile.Definition.Id.Value">
-                                <h3>@profile.Definition.DisplayName</h3>
+                                <h3>@ModelerLabels.ProfileLabel(Text, profile.Definition)</h3>
                                 <label>
                                     <input id="@ModelProfileAvailableControlId(profile.Definition.Id)"
                                            type="checkbox"
                                            checked="@profile.IsAvailable"
                                            disabled="@_modelViewPropertiesApplying"
                                            @onchange="eventArgs => UpdateModelProfileAvailability(profile.Definition.Id, eventArgs.Value)" />
-                                    <span>Available in model</span>
+                                    <span>@Text["Properties_Available"]</span>
                                 </label>
                                 <label>
                                     <input id="@ModelProfileVisibleControlId(profile.Definition.Id)"
@@ -434,7 +436,7 @@
                                            checked="@profile.IsEffectivelyVisible"
                                            disabled="@(_modelViewPropertiesApplying || !profile.IsAvailable)"
                                            @onchange="eventArgs => UpdateModelProfileVisibility(profile.Definition.Id, eventArgs.Value)" />
-                                    <span>Visible in view</span>
+                                    <span>@Text["Properties_Visible"]</span>
                                 </label>
                             </section>
                         }
@@ -442,18 +444,18 @@
 
                     @if (!string.IsNullOrWhiteSpace(modelViewDraft.Feedback))
                     {
-                        <p class="properties-feedback" role="alert">@modelViewDraft.Feedback</p>
+                        <p class="properties-feedback" role="alert">@ModelViewFeedback(modelViewDraft)</p>
                     }
 
                     <footer class="properties-form-actions">
                         <button id="@DomId("model-view-properties-cancel")"
                                 type="button"
                                 disabled="@_modelViewPropertiesApplying"
-                                @onclick="CancelModelViewProperties">Cancel</button>
+                                @onclick="CancelModelViewProperties">@Text["Action_Cancel"]</button>
                         <button id="@DomId("model-view-properties-apply")"
                                 class="primary"
                                 type="submit"
-                                disabled="@(_modelViewPropertiesApplying || modelViewDraft.IsStale)">Apply</button>
+                                disabled="@(_modelViewPropertiesApplying || modelViewDraft.IsStale)">@Text["Action_Apply"]</button>
                     </footer>
                 </form>
             }
@@ -465,26 +467,26 @@
                      @oncontextmenu:preventDefault></div>
                 <form id="@DomId("properties-form")"
                       class="properties-form"
-                      aria-label="Selected object properties"
+                      aria-label="@Text["Accessibility_SelectedProperties"]"
                       @onsubmit="ApplyPropertiesAsync"
                       @onsubmit:preventDefault>
                     <header class="properties-form-header">
-                        <h2>Properties</h2>
+                        <h2>@Text["Properties_Title"]</h2>
                         <button id="@DomId("properties-close")"
                                 class="properties-close"
                                 type="button"
-                                aria-label="Close properties"
-                                title="Close properties"
+                                aria-label="@Text["Properties_Close"]"
+                                title="@Text["Properties_Close"]"
                                 disabled="@_propertiesApplying"
                                 @onclick="CancelProperties">×</button>
                     </header>
 
                     <fieldset data-property-group="data">
-                        <legend>Data</legend>
+                        <legend>@Text["Properties_Data"]</legend>
                         @foreach (var field in draft.DataFields)
                         {
                             <label>
-                                @field.Definition.DisplayName
+                                @PropertyFieldLabel(field.Definition)
                                 @switch (field.Definition.EditorKind)
                                 {
                                     case ElementPropertyEditorKind.SingleLineText:
@@ -533,21 +535,21 @@
                     </fieldset>
 
                     <fieldset data-property-group="identity">
-                        <legend>Identity</legend>
-                        <label>Semantic ID
+                        <legend>@Text["Properties_Identity"]</legend>
+                        <label>@Text["Properties_SemanticId"]
                             <input id="@DomId("properties-semantic-id")"
                                    value="@draft.Authoritative.SemanticId.Value"
                                    readonly />
                         </label>
                         @if (draft.Authoritative.VisualStateId is { } propertyVisualStateId)
                         {
-                            <label>Visual State ID
+                            <label>@Text["Properties_VisualId"]
                                 <input id="@DomId("properties-visual-id")"
                                        value="@propertyVisualStateId.Value"
                                        readonly />
                             </label>
                         }
-                        <label>Type
+                        <label>@Text["Properties_Type"]
                             <input id="@DomId("properties-type")"
                                    value="@draft.Authoritative.TypeId.Value"
                                    readonly />
@@ -555,37 +557,37 @@
                     </fieldset>
 
                     <fieldset data-property-group="visual">
-                        <legend>Visual</legend>
-                        <label>Placement
+                        <legend>@Text["Properties_Visual"]</legend>
+                        <label>@Text["Properties_Placement"]
                             <input id="@DomId("properties-placement")"
-                                   value="@draft.Authoritative.PlacementMode"
+                                   value="@Text[$"Placement_{draft.Authoritative.PlacementMode}"]"
                                    readonly />
                         </label>
                         @if (draft.Authoritative.CanEditBounds)
                         {
                             <div class="properties-grid">
-                                <label>X
+                                <label>@Text["Properties_X"]
                                     <input id="@DomId("properties-x")"
                                            inputmode="decimal"
                                            value="@draft.X"
                                            disabled="@(_propertiesApplying || draft.IsSemanticDirty)"
                                            @oninput="eventArgs => UpdateVisualDraftValue(PropertiesVisualDraftField.X, eventArgs.Value)" />
                                 </label>
-                                <label>Y
+                                <label>@Text["Properties_Y"]
                                     <input id="@DomId("properties-y")"
                                            inputmode="decimal"
                                            value="@draft.Y"
                                            disabled="@(_propertiesApplying || draft.IsSemanticDirty)"
                                            @oninput="eventArgs => UpdateVisualDraftValue(PropertiesVisualDraftField.Y, eventArgs.Value)" />
                                 </label>
-                                <label>Width
+                                <label>@Text["Properties_Width"]
                                     <input id="@DomId("properties-width")"
                                            inputmode="decimal"
                                            value="@draft.Width"
                                            disabled="@(_propertiesApplying || draft.IsSemanticDirty)"
                                            @oninput="eventArgs => UpdateVisualDraftValue(PropertiesVisualDraftField.Width, eventArgs.Value)" />
                                 </label>
-                                <label>Height
+                                <label>@Text["Properties_Height"]
                                     <input id="@DomId("properties-height")"
                                            inputmode="decimal"
                                            value="@draft.Height"
@@ -596,27 +598,27 @@
                         }
                         else if (draft.Authoritative.IsConnector)
                         {
-                            <label>Source
+                            <label>@Text["Properties_Source"]
                                 <input id="@DomId("properties-source")"
                                        value="@draft.Authoritative.SourceId?.Value"
                                        readonly />
                             </label>
-                            <label>Target
+                            <label>@Text["Properties_Target"]
                                 <input id="@DomId("properties-target")"
                                        value="@draft.Authoritative.TargetId?.Value"
                                        readonly />
                             </label>
-                            <label>Label path position
+                            <label>@Text["Properties_LabelPath"]
                                 <input id="@DomId("properties-label-path-position")"
                                        value="@Format(draft.Authoritative.LabelPlacement!.PathPosition)"
                                        readonly />
                             </label>
-                            <label>Label offset X
+                            <label>@Text["Properties_LabelOffsetX"]
                                 <input id="@DomId("properties-label-offset-x")"
                                        value="@Format(draft.Authoritative.LabelPlacement!.Offset.X)"
                                        readonly />
                             </label>
-                            <label>Label offset Y
+                            <label>@Text["Properties_LabelOffsetY"]
                                 <input id="@DomId("properties-label-offset-y")"
                                        value="@Format(draft.Authoritative.LabelPlacement!.Offset.Y)"
                                        readonly />
@@ -626,18 +628,18 @@
 
                     @if (!string.IsNullOrWhiteSpace(draft.Feedback))
                     {
-                        <p class="properties-feedback" role="alert">@draft.Feedback</p>
+                        <p class="properties-feedback" role="alert">@PropertyFeedback(draft)</p>
                     }
 
                     <footer class="properties-form-actions">
                         <button id="@DomId("properties-cancel")"
                                 type="button"
                                 disabled="@_propertiesApplying"
-                                @onclick="CancelProperties">Cancel</button>
+                                @onclick="CancelProperties">@Text["Action_Cancel"]</button>
                         <button id="@DomId("properties-apply")"
                                 class="primary"
                                 type="submit"
-                                disabled="@(_propertiesApplying || draft.IsStale || !draft.IsValid)">Apply</button>
+                                disabled="@(_propertiesApplying || draft.IsStale || !draft.IsValid)">@Text["Action_Apply"]</button>
                     </footer>
                 </form>
             }
@@ -646,7 +648,7 @@
             {
                 <aside id="@DomId("issues-panel")"
                        class="issues-floating-panel"
-                       aria-label="Validation issues"
+                       aria-label="@Text["Accessibility_ValidationIssues"]"
                        aria-live="polite"
                        style="@IssuesPanelStyle"
                        @onclick:stopPropagation
@@ -667,28 +669,28 @@
                             @onpointerup="EndIssuesPanelMove"
                             @onpointercancel="EndIssuesPanelMove"
                             @onlostpointercapture="CancelIssuesPanelMove">
-                        <h2>Issues</h2>
+                        <h2>@Text["Status_Issues"]</h2>
                     </header>
                     <button id="@DomId("issues-close")"
                             class="issues-close"
                             type="button"
-                            aria-label="Close Issues"
-                            title="Close Issues"
+                            aria-label="@Text["Status_CloseIssues"]"
+                            title="@Text["Status_CloseIssues"]"
                             @onclick="CloseIssuesPanel">×</button>
                     <div class="issues-panel-summary issues-counts"
-                         aria-label="Validation issue counts">
-                        <span data-severity="error">Errors @ValidationErrorCount</span>
-                        <span data-severity="warning">Warnings @ValidationWarningCount</span>
-                        <span data-severity="info">Info @ValidationInfoCount</span>
+                         aria-label="@Text["Accessibility_IssueCounts"]">
+                        <span data-severity="error">@Text["Status_Errors"] @ValidationErrorCount</span>
+                        <span data-severity="warning">@Text["Status_Warnings"] @ValidationWarningCount</span>
+                        <span data-severity="info">@Text["Status_Info"] @ValidationInfoCount</span>
                     </div>
                     <div class="issues-panel-body">
                         @if (CurrentValidation is null)
                         {
-                            <p class="issues-empty">Not validated.</p>
+                            <p class="issues-empty">@Text["Status_NotValidatedSentence"]</p>
                         }
                         else if (CurrentValidation.Issues.IsEmpty)
                         {
-                            <p class="issues-empty">No issues found.</p>
+                            <p class="issues-empty">@Text["Status_NoIssues"]</p>
                         }
                         else
                         {
@@ -726,7 +728,7 @@
                     aria-controls="@DomId("issues-panel")"
                     aria-expanded="@IssuesPanelOpenValue"
                     @onclick="ToggleIssuesPanel">
-                <span>Issues</span>
+                <span>@Text["Status_Issues"]</span>
                 <span class="issues-disclosure" aria-hidden="true">@IssuesDisclosure</span>
             </button>
             <div class="canvas-presentation-status" role="status" aria-live="polite">
@@ -735,13 +737,13 @@
             </div>
             @if (CurrentValidation is null)
             {
-                <span class="validation-currency">Not validated</span>
+                <span class="validation-currency">@Text["Status_NotValidated"]</span>
             }
             <div class="issues-counts status-issue-counts"
-                 aria-label="Validation issue counts">
-                <span data-severity="error">Errors @ValidationErrorCount</span>
-                <span data-severity="warning">Warnings @ValidationWarningCount</span>
-                <span data-severity="info">Info @ValidationInfoCount</span>
+                 aria-label="@Text["Accessibility_IssueCounts"]">
+                <span data-severity="error">@Text["Status_Errors"] @ValidationErrorCount</span>
+                <span data-severity="warning">@Text["Status_Warnings"] @ValidationWarningCount</span>
+                <span data-severity="info">@Text["Status_Info"] @ValidationInfoCount</span>
             </div>
         </footer>
 
@@ -753,13 +755,13 @@
         {
             <p id="@DomId("native-document-error")"
                class="presentation-error native-document-error"
-               role="alert">@_nativeDocumentOperationErrorMessage</p>
+               role="alert">@Text[_nativeDocumentOperationErrorMessage]</p>
         }
         @if (_newDiagramOperationErrorMessage is not null)
         {
             <p id="@DomId("new-diagram-error")"
                class="presentation-error new-diagram-error"
-               role="alert">@_newDiagramOperationErrorMessage</p>
+               role="alert">@Text[_newDiagramOperationErrorMessage]</p>
         }
         @if (_publishOperationErrorMessage is not null)
         {
@@ -768,10 +770,10 @@
                      role="alert"
                      aria-labelledby="@DomId("publish-error-title")">
                 <div class="publish-error-header">
-                    <h2 id="@DomId("publish-error-title")">@_publishOperationErrorHeading</h2>
+                    <h2 id="@DomId("publish-error-title")">@Text[_publishOperationErrorHeading]</h2>
                     <button type="button"
-                            aria-label="Dismiss publication feedback"
-                            @onclick="DismissPublishOperationError">Dismiss</button>
+                            aria-label="@Text["Publication_DismissFeedback"]"
+                            @onclick="DismissPublishOperationError">@Text["Action_Dismiss"]</button>
                 </div>
                 <ul>
                     @foreach (var diagnostic in _publishOperationDiagnostics)
@@ -806,9 +808,9 @@
                      aria-labelledby="@DomId("new-diagram-title")"
                      aria-describedby="@DomId("new-diagram-description")"
                      @onclick:stopPropagation>
-                <h2 id="@DomId("new-diagram-title")">Create a new diagram?</h2>
+                <h2 id="@DomId("new-diagram-title")">@Text["Dialog_NewDocument_Title"]</h2>
                 <p id="@DomId("new-diagram-description")">
-                    The current diagram and its change history will be cleared.
+                    @Text["Dialog_NewDocument_Description"]
                 </p>
                 <div class="new-diagram-confirmation-actions">
                     <button id="@DomId("new-diagram-cancel")"
@@ -816,12 +818,12 @@
                             type="button"
                             autofocus
                             disabled="@_newDiagramInProgress"
-                            @onclick="CancelNewDiagramConfirmation">Cancel</button>
+                            @onclick="CancelNewDiagramConfirmation">@Text["Action_Cancel"]</button>
                     <button id="@DomId("new-diagram-confirm")"
                             class="primary"
                             type="button"
                             disabled="@_newDiagramInProgress"
-                            @onclick="ConfirmNewDiagramAsync">New diagram</button>
+                            @onclick="ConfirmNewDiagramAsync">@Text["Toolbar_NewDiagram"]</button>
                 </div>
             </section>
         </div>
@@ -836,9 +838,9 @@
                      aria-modal="true"
                      aria-labelledby="@DomId("publication-title")"
                      @onclick:stopPropagation>
-                <h2 id="@DomId("publication-title")">Publication</h2>
+                <h2 id="@DomId("publication-title")">@Text["Publication_Title"]</h2>
                 <div class="publication-fields">
-                    <label for="@DomId("publication-code")">Code</label>
+                    <label for="@DomId("publication-code")">@Text["Field_Code"]</label>
                     <input id="@DomId("publication-code")"
                            @ref="_publicationCodeInput"
                            type="text"
@@ -849,17 +851,17 @@
                            @bind="_publicationCodeDraft"
                            @bind:event="oninput" />
                     <span id="@DomId("publication-code-help")" class="publication-field-help">
-                        Lower-case letters, numbers, and single hyphens only.
+                        @Text["Publication_CodeHelp"]
                     </span>
 
-                    <label for="@DomId("publication-title-input")">Title</label>
+                    <label for="@DomId("publication-title-input")">@Text["Field_Title"]</label>
                     <input id="@DomId("publication-title-input")"
                            type="text"
                            aria-invalid="@(!PublicationTitleIsValid)"
                            @bind="_publicationTitleDraft"
                            @bind:event="oninput" />
 
-                    <label for="@DomId("publication-description")">Description</label>
+                    <label for="@DomId("publication-description")">@Text["Field_Description"]</label>
                     <textarea id="@DomId("publication-description")"
                               rows="4"
                               @bind="_publicationDescriptionDraft"
@@ -869,16 +871,16 @@
                     <button id="@DomId("publication-cancel")"
                             type="button"
                             disabled="@_publishInProgress"
-                            @onclick="CancelPublicationDialog">Cancel</button>
+                            @onclick="CancelPublicationDialog">@Text["Action_Cancel"]</button>
                     <button id="@DomId("publication-save")"
                             type="button"
                             disabled="@(!CanAcceptPublicationDraft)"
-                            @onclick="SavePublicationDraftAsync">Save</button>
+                            @onclick="SavePublicationDraftAsync">@Text["Action_Save"]</button>
                     <button id="@DomId("publication-publish")"
                             class="primary"
                             type="button"
                             disabled="@(!CanAcceptPublicationDraft)"
-                            @onclick="PublishPublicationDraftAsync">Publish</button>
+                            @onclick="PublishPublicationDraftAsync">@Text["Toolbar_Publish"]</button>
                 </div>
             </section>
         </div>
@@ -886,6 +888,9 @@
 </main>
 
 @code {
+    [CascadingParameter(Name = "ModelerUICulture")]
+    private System.Globalization.CultureInfo? RenderCulture { get; set; }
+
     [CascadingParameter]
     internal BpmnModelerFacade? ModelerFacade { get; set; }
 
@@ -910,7 +915,7 @@
     internal const string NativeDocumentFileTooLargeCode =
         "CANVAS_NATIVE_DOCUMENT_FILE_TOO_LARGE";
     internal const string NativeDocumentFileTooLargeMessage =
-        "The selected native Document exceeds the 16 MiB browser import limit.";
+        "Error_FileTooLarge";
     private readonly CancellationTokenSource _componentLifetime = new();
     private readonly ToolboxSelectionState _toolboxSelection = new();
     private readonly FloatingIssuesPanelState _issuesPanel = new();
@@ -942,7 +947,7 @@
     private string _publishOperationStatus = "idle";
     private string? _publishOperationErrorCode;
     private string? _publishOperationErrorMessage;
-    private string _publishOperationErrorHeading = "Publish failed";
+    private string _publishOperationErrorHeading = "Publication_PublishFailed";
     private ImmutableArray<Diagnostic> _publishOperationDiagnostics = [];
     private long? _publishOperationSessionVersion;
     private CancellationTokenSource? _publishOperationCancellation;
@@ -1381,16 +1386,16 @@
 
     private string StatusMessage => _state switch
     {
-        { IsDisposed: true } or { Session.IsClosed: true } => "Canvas presentation disposed",
+        { IsDisposed: true } or { Session.IsClosed: true } => Text["Status_Disposed"],
         { Session.Status: EditingSessionStatus.Ready, LatestPresentationSucceeded: true } =>
-            "Canvas presentation ready",
+            Text["Status_Ready"],
         { Session.Status: EditingSessionStatus.Ready } =>
-            "Scene is current, but canvas rendering failed",
-        { Session.Status: EditingSessionStatus.Rebuilding } => "Building current scene",
-        { Session.Status: EditingSessionStatus.RuntimeFaulted } => "Scene presentation failed",
+            Text["Status_RenderFailed"],
+        { Session.Status: EditingSessionStatus.Rebuilding } => Text["Status_Building"],
+        { Session.Status: EditingSessionStatus.RuntimeFaulted } => Text["Status_SceneFailed"],
         { InitializationAttempted: true, IsInitialized: false } =>
-            "Browser canvas initialization failed",
-        _ => "Preparing browser canvas",
+            Text["Status_InitializationFailed"],
+        _ => Text["Status_Preparing"],
     };
 
     private string? ErrorMessage => Diagnostics
@@ -1576,7 +1581,7 @@
             {
                 CompleteNewDiagramOperation(
                     "CANVAS_NEW_DIAGRAM_UNAVAILABLE",
-                    "New diagram is unavailable while the editor is not ready.");
+                    "Error_NewUnavailable");
                 return;
             }
 
@@ -1590,7 +1595,7 @@
                 var diagnostic = result.Diagnostics.FirstOrDefault();
                 CompleteNewDiagramOperation(
                     diagnostic?.Code ?? "CANVAS_NEW_DIAGRAM_FAILED",
-                    diagnostic?.Message ?? "A new diagram could not be created.");
+                    "Error_NewFailed");
                 return;
             }
 
@@ -1627,7 +1632,7 @@
         {
             CompleteNewDiagramOperation(
                 "CANVAS_NEW_DIAGRAM_FAILED",
-                "A new diagram could not be created.");
+                "Error_NewFailed");
         }
 #pragma warning restore CA1031
         finally
@@ -1711,7 +1716,7 @@
             {
                 CompleteNativeDocumentOperation(
                     "CANVAS_NATIVE_DOCUMENT_EXPORT_UNAVAILABLE",
-                    "Native Document export is unavailable while the editor is not ready.");
+                    "Error_ExportUnavailable");
                 return;
             }
 
@@ -1726,7 +1731,7 @@
                 var diagnostic = export.Diagnostics.FirstOrDefault();
                 CompleteNativeDocumentOperation(
                     diagnostic?.Code ?? "CANVAS_NATIVE_DOCUMENT_EXPORT_FAILED",
-                    diagnostic?.Message ?? "The current Document could not be exported.");
+                    "Error_ExportFailed");
                 return;
             }
 
@@ -1754,7 +1759,7 @@
         {
             CompleteNativeDocumentOperation(
                 "CANVAS_NATIVE_DOCUMENT_DOWNLOAD_FAILED",
-                "The native Document download could not be started by the browser.");
+                "Error_DownloadFailed");
         }
 #pragma warning restore CA1031
         finally
@@ -2044,7 +2049,7 @@
                 : diagnostics;
             _publishOperationErrorCode = _publishOperationDiagnostics[0].Code;
             _publishOperationErrorMessage = _publishOperationDiagnostics[0].Message;
-            _publishOperationErrorHeading = publish ? "Publish failed" : "Publication could not be saved";
+            _publishOperationErrorHeading = publish ? "Publication_PublishFailed" : "Publication_SaveFailed";
             _publishOperationStatus = "failed";
         }
     }
@@ -2088,27 +2093,27 @@
         }
     }
 
-    private static string? PublishDiagnosticTarget(Diagnostic diagnostic)
+    private string? PublishDiagnosticTarget(Diagnostic diagnostic)
     {
         var context = diagnostic.Context;
         if (context.TryGetValue("ElementId", out var elementId))
         {
             return context.TryGetValue("ElementName", out var name) && !string.IsNullOrWhiteSpace(name)
-                ? $"Element '{name}' (ID: {elementId})"
+                ? Text["Target_NamedElement", name, elementId]
                 : context.TryGetValue("ElementType", out var type)
-                    ? $"Element type '{type}' (ID: {elementId})"
-                    : $"Element (ID: {elementId})";
+                    ? Text["Target_TypedElement", type, elementId]
+                    : Text["Target_Element", elementId];
         }
 
         if (context.TryGetValue("ConnectorId", out var connectorId))
         {
             return context.TryGetValue("SourceElementId", out var source) &&
                 context.TryGetValue("TargetElementId", out var target)
-                    ? $"Connector (ID: {connectorId}; from {source} to {target})"
-                    : $"Connector (ID: {connectorId})";
+                    ? Text["Target_ConnectedConnector", connectorId, source, target]
+                    : Text["Target_Connector", connectorId];
         }
 
-        return diagnostic.SourceIdentity is { } identity ? $"Source: {identity}" : null;
+        return diagnostic.SourceIdentity is { } identity ? Text["Target_Source", identity].Value : null;
     }
 
     private async Task ImportNativeDocumentAsync(InputFileChangeEventArgs args)
@@ -2135,7 +2140,7 @@
             {
                 CompleteNativeDocumentOperation(
                     "CANVAS_NATIVE_DOCUMENT_IMPORT_UNAVAILABLE",
-                    "Native Document import is unavailable while the editor is not ready.");
+                    "Error_ImportUnavailable");
                 return;
             }
 
@@ -2191,7 +2196,7 @@
         {
             CompleteNativeDocumentOperation(
                 "CANVAS_NATIVE_DOCUMENT_FILE_READ_FAILED",
-                "The selected native Document file could not be read by the browser.");
+                "Error_ImportReadFailed");
         }
 #pragma warning restore CA1031
         finally
@@ -2244,16 +2249,16 @@
         var message = code switch
         {
             "NATIVE_DOCUMENT_JSON_MALFORMED" =>
-                "The selected file is not valid native Document JSON.",
+                "Error_ImportMalformed",
             "NATIVE_DOCUMENT_FORMAT_INVALID" =>
-                "The selected file is not an Inceptus native Document.",
+                "Error_ImportFormat",
             "NATIVE_DOCUMENT_VERSION_UNSUPPORTED" =>
-                "The selected native Document version is not supported.",
+                "Error_ImportVersion",
             "CANVAS_NATIVE_DOCUMENT_IMPORT_UNAVAILABLE" =>
-                "Native Document import is unavailable while the editor is not ready.",
+                "Error_ImportUnavailable",
             "CANVAS_NATIVE_DOCUMENT_REPLACEMENT_FAILED" =>
-                "The native Document was valid, but its editor session could not be opened.",
-            _ => "The selected file does not contain a structurally valid native Document.",
+                "Error_ImportSession",
+            _ => "Error_ImportStructure",
         };
         return (code, message);
     }
@@ -2807,8 +2812,8 @@
                 return;
             }
 
-            draft.Feedback = result.Message ??
-                "View and model properties could not be applied.";
+            draft.Feedback = result.Message ?? "Properties_ModelFailed";
+            draft.FeedbackDiagnostic = result.Diagnostics.FirstOrDefault();
             _ = TryPublishModelViewPropertiesFormState(host, draft);
         }
         catch (OperationCanceledException) when (_componentLifetime.IsCancellationRequested)
@@ -3096,7 +3101,8 @@
             }
             else
             {
-                draft.Feedback = result.Message ?? "The property change could not be applied.";
+                draft.Feedback = result.Message ?? "Properties_Failed";
+                draft.FeedbackDiagnostic = result.Diagnostics.FirstOrDefault();
                 _ = TryPublishPropertiesFormState(host, draft);
             }
         }
@@ -3416,17 +3422,17 @@
         Format(bounds.Width),
         Format(bounds.Height));
 
-    private static string ValidationTargetLabel(ModelValidationTarget target)
+    private string ValidationTargetLabel(ModelValidationTarget target)
     {
         ArgumentNullException.ThrowIfNull(target);
         if (target.VisualStateId is { } visualStateId)
         {
-            return $"Visual {visualStateId.Value} · Semantic {target.SemanticElementId!.Value}";
+            return Text["Target_VisualSemantic", visualStateId.Value, target.SemanticElementId!.Value];
         }
 
         return target.SemanticElementId is { } semanticElementId
-            ? $"Semantic {semanticElementId.Value}"
-            : "Document";
+            ? Text["Target_Semantic", semanticElementId.Value]
+            : Text["Target_Document"];
     }
 
     private enum PropertiesVisualDraftField

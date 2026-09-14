@@ -66,6 +66,8 @@ public sealed class InceptusBpmnModelerFacadeComponentTests
         var constructionCount = 0;
         var jsRuntime = new UnexpectedJsRuntime();
         var registrations = new ServiceCollection()
+            .AddLogging()
+            .AddLocalization()
             .AddSingleton<IJSRuntime>(jsRuntime)
             .AddTransient<IBpmnModelerStartupDocumentProvider>(_ =>
             {
@@ -74,7 +76,7 @@ public sealed class InceptusBpmnModelerFacadeComponentTests
             });
         if (registerFacade)
         {
-            registrations.AddInceptusBpmnModeler();
+            registrations.AddLogging().AddInceptusBpmnModeler();
         }
 
         using var services = registrations.BuildServiceProvider();
@@ -377,7 +379,7 @@ public sealed class InceptusBpmnModelerFacadeComponentTests
     private static ServiceProvider CreateServices(IJSRuntime? jsRuntime = null) =>
         new ServiceCollection()
             .AddSingleton(jsRuntime ?? new UnexpectedJsRuntime())
-            .AddInceptusBpmnModeler()
+            .AddLogging().AddInceptusBpmnModeler()
             .BuildServiceProvider();
 
     private static DocumentSnapshot CreateSnapshot(string documentName, ulong revision)

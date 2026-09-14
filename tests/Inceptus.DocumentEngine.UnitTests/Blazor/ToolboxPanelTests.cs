@@ -17,6 +17,7 @@ public sealed class ToolboxPanelTests
     [Fact]
     public async Task NeutralCatalogRendersOrderedAccessibleButtonsFromDefinitionData()
     {
+        using var culture = new ModelerCultureScope("en");
         var markup = await RenderAsync(NeutralDemoToolbox.Catalog);
 
         var groupIndex = markup.IndexOf(">Generic<", StringComparison.Ordinal);
@@ -94,6 +95,7 @@ public sealed class ToolboxPanelTests
     [Fact]
     public async Task EmptyCatalogRendersStableEmptyState()
     {
+        using var culture = new ModelerCultureScope("en");
         var markup = await RenderAsync(ToolboxCatalog.Empty);
 
         Assert.Contains($"id=\"{ExtractDomPrefix(markup)}-toolbox\"", markup,
@@ -248,7 +250,7 @@ public sealed class ToolboxPanelTests
         ToolboxCatalog catalog,
         ToolboxItemId? selectedItemId = null)
     {
-        var services = new ServiceCollection().BuildServiceProvider();
+        var services = new ServiceCollection().AddLogging().AddInceptusBpmnModeler().BuildServiceProvider();
         await using var renderer = new HtmlRenderer(services, NullLoggerFactory.Instance);
         var parameters = ParameterView.FromDictionary(
             new Dictionary<string, object?>

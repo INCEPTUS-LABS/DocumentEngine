@@ -1,10 +1,13 @@
 @namespace Inceptus.DocumentEngine.Bpmn.Blazor.Components
 @using Inceptus.DocumentEngine.Bpmn.Blazor.Presentation
+@using System.Globalization
 
 <CascadingValue Value="_facade" IsFixed="true">
     <div class="@RootClass"
          style="@Style"
          @attributes="AdditionalAttributes">
-        <DocumentCanvas />
+        <CascadingValue Name="ModelerUICulture" Value="CultureInfo.CurrentUICulture">
+            <DocumentCanvas />
+        </CascadingValue>
     </div>
 </CascadingValue>

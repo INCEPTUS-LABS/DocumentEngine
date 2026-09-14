@@ -96,12 +96,12 @@ public sealed class PhaseN105NewDiagramArchitectureTests
         Assert.Contains("id=\"@DomId(\"new-diagram\")\"", component,
             StringComparison.Ordinal);
         Assert.Contains("type=\"button\"", component, StringComparison.Ordinal);
-        Assert.Contains("aria-label=\"New diagram\"", component, StringComparison.Ordinal);
-        Assert.Contains("title=\"New diagram\"", component, StringComparison.Ordinal);
+        Assert.Contains("aria-label=\"@Text[\"Toolbar_NewDiagram\"]\"", component, StringComparison.Ordinal);
+        Assert.Contains("title=\"@Text[\"Toolbar_NewDiagram\"]\"", component, StringComparison.Ordinal);
         Assert.Contains("role=\"dialog\"", component, StringComparison.Ordinal);
         Assert.Contains("aria-modal=\"true\"", component, StringComparison.Ordinal);
-        Assert.Contains("Create a new diagram?", component, StringComparison.Ordinal);
-        Assert.Contains("The current diagram and its change history will be cleared.", component,
+        Assert.Contains("@Text[\"Dialog_NewDocument_Title\"]", component, StringComparison.Ordinal);
+        Assert.Contains("@Text[\"Dialog_NewDocument_Description\"]", component,
             StringComparison.Ordinal);
         Assert.Contains("id=\"@DomId(\"new-diagram-cancel\")\"", component,
             StringComparison.Ordinal);

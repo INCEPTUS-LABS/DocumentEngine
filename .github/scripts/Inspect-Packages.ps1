@@ -183,6 +183,18 @@ function Read-EntryText($Zip, [string]$Name) {
 function Require([bool]$Condition, [string]$Message) {
     if (-not $Condition) { throw $Message }
 }
+function Read-StringResourceKeys([byte[]]$Bytes) {
+    $reader = [Resources.ResourceReader]::new([IO.MemoryStream]::new($Bytes))
+    try {
+        $keys = @($reader.GetEnumerator() | ForEach-Object {
+            Require ($_.Value -is [string] -and -not [string]::IsNullOrWhiteSpace($_.Value)) "Blank or non-string UI resource: $($_.Key)"
+            $_.Key
+        } | Sort-Object)
+        Require ($keys.Count -gt 0) 'Empty UI resource set.'
+        Require (($keys | Select-Object -Unique).Count -eq $keys.Count) 'Duplicate UI resource keys.'
+        return $keys
+    } finally { $reader.Dispose() }
+}
 $repository = 'https://github.com/INCEPTUS-LABS/DocumentEngine'
 $prefix = 'Inceptus.DocumentEngine.'
 $family = @('Contracts', 'Runtime', 'Bpmn', 'Organizational', 'Canvas2D', 'Bpmn.Blazor')
@@ -232,7 +244,7 @@ $records = foreach ($name in $family) {
         $groups = @($metadata.dependencies.group)
         Require ($groups.Count -eq 1 -and $groups[0].targetFramework -ceq 'net10.0') "Framework: $id"
         $dependencies = @($groups[0].dependency | Where-Object { $null -ne $_ })
-        $external = if ($name -ceq 'Canvas2D') { @('Microsoft.JSInterop') } elseif ($name -ceq 'Bpmn.Blazor') { @('Microsoft.JSInterop', 'Microsoft.AspNetCore.Components.Web') } else { @() }
+        $external = if ($name -ceq 'Canvas2D') { @('Microsoft.JSInterop') } elseif ($name -ceq 'Bpmn.Blazor') { @('Microsoft.JSInterop', 'Microsoft.AspNetCore.Components.Web', 'Microsoft.Extensions.Localization') } else { @() }
         Require ($dependencies.Count -eq ($edges[$name].Count + $external.Count)) "Dependency count: $id"
         $actualEdges = @($dependencies | Where-Object { $_.id.StartsWith($prefix) } | ForEach-Object { $_.id.Substring($prefix.Length) } | Sort-Object)
         Require (($actualEdges -join ',') -ceq (($edges[$name] | Sort-Object) -join ',')) "Family graph: $id"
@@ -277,7 +289,13 @@ $records = foreach ($name in $family) {
         }
         $entries = @($zip.Entries.FullName)
         Require (@($entries | Where-Object { $_ -match '(?i)(^|/)(bin|obj|tests|demo|\.git)/|\.csproj$|\.user$|UnitTests|IntegrationTests|Inceptus\.DocumentEngine\.Blazor\.(dll|pdb)' }).Count -eq 0) "Unexpected package content: $id"
-        Require (@($entries | Where-Object { $_ -match '\.dll$' }).Count -eq 1) "Unexpected assembly: $id"
+        $expectedAssemblies = @($dllName)
+        if ($name -ceq 'Bpmn.Blazor') {
+            $expectedAssemblies += @('pl', 'fr', 'de', 'es') | ForEach-Object { "lib/net10.0/$_/$id.resources.dll" }
+        }
+        $actualAssemblies = @($entries | Where-Object { $_ -match '\.dll$' } | Sort-Object)
+        Require (($actualAssemblies -join ',') -ceq (($expectedAssemblies | Sort-Object) -join ',')) "Unexpected assembly set: $id"
+        $uiResourceKeyCounts = [ordered]@{}
         if ($name -ceq 'Canvas2D') {
             Require ($entries -contains 'staticwebassets/inceptus.canvas2d.js') 'Canvas JavaScript missing.'
             foreach ($asset in @('index.html', 'inceptus.publish.js', 'styles.css')) {
@@ -287,6 +305,15 @@ $records = foreach ($name in $family) {
             }
         }
         if ($name -ceq 'Bpmn.Blazor') {
+            $resourceBase = "$id.Resources.ModelerStrings"
+            $neutralKeys = @(Read-StringResourceKeys ([ReleaseSymbols]::Resource($dll, "$resourceBase.resources")))
+            $uiResourceKeyCounts['en'] = $neutralKeys.Count
+            foreach ($culture in @('pl', 'fr', 'de', 'es')) {
+                $satellite = Read-EntryBytes $zip "lib/net10.0/$culture/$id.resources.dll"
+                $keys = @(Read-StringResourceKeys ([ReleaseSymbols]::Resource($satellite, "$resourceBase.$culture.resources")))
+                Require (($keys -join ',') -ceq ($neutralKeys -join ',')) "UI resource key mismatch: $culture"
+                $uiResourceKeyCounts[$culture] = $keys.Count
+            }
             Require ($entries -contains 'staticwebassets/inceptus.presentation.js') 'Presentation JavaScript missing.'
             Require (@($entries | Where-Object { $_ -match '\.bundle\.scp\.css$' }).Count -eq 1) 'Scoped CSS missing.'
             foreach ($font in @('DejaVuSans-2.37.ttf', 'DejaVuSans-LICENSE.txt')) {
@@ -298,6 +325,7 @@ $records = foreach ($name in $family) {
         [ordered]@{
             PackageId = $id; Version = $Version; Commit = $Commit
             PreparationOnly = -not [bool]$RequireSourceLink
+            UIResourceKeyCounts = $uiResourceKeyCounts
             NupkgSha256 = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()
             SnupkgSha256 = (Get-FileHash $symbolArchive -Algorithm SHA256).Hash.ToLowerInvariant()
             DllSha256 = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($dll)).ToLowerInvariant()

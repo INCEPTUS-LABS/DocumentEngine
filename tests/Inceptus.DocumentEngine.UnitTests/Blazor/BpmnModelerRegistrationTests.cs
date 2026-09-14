@@ -27,7 +27,8 @@ public sealed class BpmnModelerRegistrationTests
         services.AddInceptusBpmnModeler();
 
         Assert.Equal(initial, services.ToArray());
-        var registration = Assert.Single(services);
+        var registration = Assert.Single(services, descriptor =>
+            descriptor.ServiceType == typeof(BpmnModelerCompositionFactory));
         Assert.Equal(typeof(BpmnModelerCompositionFactory), registration.ServiceType);
         Assert.Equal(ServiceLifetime.Transient, registration.Lifetime);
         using var provider = services.BuildServiceProvider();
@@ -59,8 +60,12 @@ public sealed class BpmnModelerRegistrationTests
     {
         var services = new ServiceCollection().AddInceptusBpmnModeler();
 
-        Assert.DoesNotContain(services, static descriptor =>
-            descriptor.Lifetime == ServiceLifetime.Singleton);
+        var standardLocalization = new ServiceCollection().AddLocalization();
+        Assert.All(services.Where(descriptor => descriptor.Lifetime == ServiceLifetime.Singleton),
+            descriptor => Assert.Contains(standardLocalization, standard =>
+                standard.ServiceType == descriptor.ServiceType &&
+                standard.ImplementationType == descriptor.ImplementationType &&
+                standard.Lifetime == descriptor.Lifetime));
         Assert.DoesNotContain(services, static descriptor =>
             descriptor.ServiceType == typeof(Document) ||
             descriptor.ServiceType.Namespace?.Contains("Demo", StringComparison.Ordinal) == true ||

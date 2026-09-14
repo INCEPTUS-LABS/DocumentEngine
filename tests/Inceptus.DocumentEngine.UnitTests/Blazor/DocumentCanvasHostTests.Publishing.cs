@@ -47,6 +47,7 @@ public sealed partial class DocumentCanvasHostTests
     public async Task BlockedPublishRetainsEveryReasonOutsideTheClosedPublicationDialog(
         bool multipleReasons)
     {
+        using var culture = new ModelerCultureScope("en");
         await using var host = CreateHost(
             new RecordingRenderExecution(),
             new RecordingSurfaceObserver(new Canvas2DSurfaceSize(900d, 600d, 1d)),
@@ -67,6 +68,7 @@ public sealed partial class DocumentCanvasHostTests
         var beforeHistory = host.CaptureState().Session!.HistoryStatus;
         var activator = new PublishComponentActivator(host);
         using var services = new ServiceCollection()
+            .AddLogging().AddInceptusBpmnModeler()
             .AddSingleton<IJSRuntime>(new PublishDownloadRuntime())
             .AddSingleton<IComponentActivator>(activator)
             .BuildServiceProvider();
@@ -108,6 +110,7 @@ public sealed partial class DocumentCanvasHostTests
     [Fact]
     public async Task FailedPublishFeedbackSurvivesDialogCancelAndDismissalIsReadOnly()
     {
+        using var culture = new ModelerCultureScope("en");
         await using var host = CreateHost(new RecordingRenderExecution(),
             new RecordingSurfaceObserver(new Canvas2DSurfaceSize(900d, 600d, 1d)));
         await host.InitializeAsync("publish-dismiss-canvas", "publish-dismiss-container");
@@ -284,6 +287,7 @@ public sealed partial class DocumentCanvasHostTests
     [Fact]
     public async Task PublishDownloadFailureHasABoundedMessageAndSuccessfulRetryClearsFeedback()
     {
+        using var culture = new ModelerCultureScope("en");
         await using var host = CreateHost(new RecordingRenderExecution(),
             new RecordingSurfaceObserver(new Canvas2DSurfaceSize(900d, 600d, 1d)),
             compositionFactory: BpmnModelerTestComposition.DemoFactory);
@@ -337,6 +341,7 @@ public sealed partial class DocumentCanvasHostTests
     public async Task ReplacementClearsPublishFeedbackAndRejectsLateBrowserFailure(
         bool import, bool delayed)
     {
+        using var culture = new ModelerCultureScope("en");
         await using var host = CreateHost(new RecordingRenderExecution(),
             new RecordingSurfaceObserver(new Canvas2DSurfaceSize(900d, 600d, 1d)),
             compositionFactory: BpmnModelerTestComposition.DemoFactory,
@@ -1047,6 +1052,7 @@ public sealed partial class DocumentCanvasHostTests
     private static ServiceProvider PublishComponentServices(
         PublishComponentActivator activator, PublishDownloadRuntime browser) =>
         new ServiceCollection()
+            .AddLogging().AddInceptusBpmnModeler()
             .AddSingleton<IJSRuntime>(browser)
             .AddSingleton<IComponentActivator>(activator)
             .BuildServiceProvider();

@@ -79,6 +79,8 @@ internal sealed class DocumentCanvasModelViewPropertiesDraft
 
     internal string? Feedback { get; set; }
 
+    internal Diagnostic? FeedbackDiagnostic { get; set; }
+
     internal bool IsAvailabilityDirty =>
         Profiles.Any(static profile => profile.IsAvailabilityDirty);
 

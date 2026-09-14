@@ -109,7 +109,7 @@ public sealed class SolutionArchitectureTests
     {
         var buildProperties = XDocument.Load(Path.Combine(RepositoryRoot, "Directory.Build.props"));
 
-        Assert.Equal("0.1.3", ReadElementValue(buildProperties, "Version"));
+        Assert.Equal("0.1.4", ReadElementValue(buildProperties, "Version"));
         Assert.Equal("Robert Prokopczuk", ReadElementValue(buildProperties, "Authors"));
 
         var releaseTargets = XDocument.Load(Path.Combine(RepositoryRoot, "Directory.Build.targets"));
@@ -261,6 +261,7 @@ public sealed class SolutionArchitectureTests
             ["Microsoft.AspNetCore.Components.WebAssembly"] = "10.0.5",
             ["Microsoft.AspNetCore.Components.WebAssembly.DevServer"] = "10.0.5",
             ["Microsoft.JSInterop"] = "10.0.5",
+            ["Microsoft.Extensions.Localization"] = "10.0.5",
             ["Microsoft.NET.Test.Sdk"] = "18.0.1",
             ["xunit"] = "2.9.3",
             ["xunit.runner.visualstudio"] = "3.1.5",
@@ -283,6 +284,7 @@ public sealed class SolutionArchitectureTests
             [BpmnBlazor] =
             [
                 "Microsoft.AspNetCore.Components.Web",
+                "Microsoft.Extensions.Localization",
                 "Microsoft.JSInterop",
             ],
             [Organizational] = [],

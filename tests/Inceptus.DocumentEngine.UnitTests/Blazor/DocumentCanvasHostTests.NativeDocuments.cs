@@ -210,7 +210,7 @@ public sealed partial class DocumentCanvasHostTests
             "CANVAS_NATIVE_DOCUMENT_FILE_TOO_LARGE",
             DocumentCanvas.NativeDocumentFileTooLargeCode);
         Assert.Equal(
-            "The selected native Document exceeds the 16 MiB browser import limit.",
+            "Error_FileTooLarge",
             DocumentCanvas.NativeDocumentFileTooLargeMessage);
         Assert.Same(session, Session(host));
         var after = session.CaptureState();
@@ -285,7 +285,7 @@ public sealed partial class DocumentCanvasHostTests
             diagnostic.Code == "CANVAS_NATIVE_DOCUMENT_REPLACEMENT_FAILED");
         Assert.Equal(
             ("CANVAS_NATIVE_DOCUMENT_REPLACEMENT_FAILED",
-                "The native Document was valid, but its editor session could not be opened."),
+                "Error_ImportSession"),
             DocumentCanvas.NativeDocumentImportMessage(result));
         Assert.Same(session, Session(host));
         var after = session.CaptureState();

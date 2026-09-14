@@ -63,9 +63,9 @@ public sealed class PhaseN100ModelViewPresentationArchitectureTests
             "Components",
             "DocumentCanvas.razor.css");
 
-        Assert.Contains("View and model properties...", component, StringComparison.Ordinal);
-        Assert.Contains("Available in model", component, StringComparison.Ordinal);
-        Assert.Contains("Visible in view", component, StringComparison.Ordinal);
+        Assert.Contains("@Text[\"Context_ModelProperties\"]", component, StringComparison.Ordinal);
+        Assert.Contains("@Text[\"Properties_Available\"]", component, StringComparison.Ordinal);
+        Assert.Contains("@Text[\"Properties_Visible\"]", component, StringComparison.Ordinal);
         Assert.Contains("!profile.IsAvailable", component, StringComparison.Ordinal);
         Assert.Contains("SetModelProfileAvailabilityCommand", host, StringComparison.Ordinal);
         Assert.Contains("session.UpdateModelProfileViewStateAsync(", host,

@@ -1,5 +1,13 @@
 # Release notes
 
+## 0.1.4 development
+
+- Adds modeler UI localization for English, Polish, French, German and Spanish using standard .NET resources and `IStringLocalizer`. English is the neutral/default resource and final fallback; regional cultures use standard parent-culture fallback.
+- Uses the host's `CurrentUICulture` and Blazor re-rendering without a public culture parameter or modeler language selector. Localization is presentation state; it does not change Document identity, revision, History, selection, viewport or editing-session ownership.
+- Localizes toolbox labels, toolbar/status text, Properties labels, context actions, navigation fallbacks, New/Publication dialogs and presentation feedback. Canonical diagnostics and authored document values remain unchanged.
+- Keeps serialization, native import/export and PublishedProcess contracts English-based and culture-invariant. There is no public data-format change; the standalone exported viewer is outside this localization phase.
+- Advances all six development packages to 0.1.4, retaining Canvas2D's exact matching Runtime dependency and other existing dependency-range semantics. This phase does not publish packages or update package consumers.
+
 ## 0.1.3 candidate
 
 - Prepares the first public-source release snapshot, with the approved GitHub RepositoryUrl and commit metadata derived from the public build checkout.

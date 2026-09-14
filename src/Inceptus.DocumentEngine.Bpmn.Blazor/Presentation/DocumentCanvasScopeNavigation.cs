@@ -13,7 +13,8 @@ internal sealed record DocumentCanvasScopeNavigationContextAction(
 internal sealed record DocumentCanvasScopeBreadcrumbSegment(
     DocumentScopeId ScopeId,
     string Label,
-    bool IsActive);
+    bool IsActive,
+    string? LabelResourceKey = null);
 
 internal static class DocumentCanvasScopeBreadcrumb
 {

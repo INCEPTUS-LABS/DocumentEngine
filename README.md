@@ -1,6 +1,6 @@
 # Inceptus Document Engine
 
-A reusable BPMN modeler with immutable native documents and a standalone process presentation export. This README describes the coordinated **0.1.3 candidate** targeting **net10.0**. Candidate preparation does not mean the packages have been published to a public feed.
+A reusable BPMN modeler with immutable native documents and a standalone process presentation export. This README describes the coordinated **0.1.4 development line** targeting **net10.0**. Development preparation does not mean the packages have been published to a public feed.
 
 [Product page](https://inceptus.online/bpmn/) · [System/application](https://bpmn.inceptus.online)
 
@@ -24,7 +24,7 @@ Use the six packages as an **aligned version family**. The top-level modeler pac
 The validated hosting model is a **standalone Blazor WebAssembly application** on .NET 10. Configure a feed containing the reviewed candidate before adding the package:
 
 ```xml
-<PackageReference Include="Inceptus.DocumentEngine.Bpmn.Blazor" Version="0.1.3" />
+<PackageReference Include="Inceptus.DocumentEngine.Bpmn.Blazor" Version="0.1.4" />
 ```
 
 Register the modeler in the application's `Program.cs`. The extension namespace is `Microsoft.Extensions.DependencyInjection`:
@@ -78,6 +78,26 @@ Keep the host's generated scoped-CSS bundle linked in `wwwroot/index.html`, usin
 Razor static-web-asset integration supplies the package's JavaScript, scoped CSS and font. Do not copy modeler assets or reference engine source projects in a package consumer. Keep ordinary Blazor framework bootstrapping and the host's application base configuration. Root and non-root deployment use the same package assets; there are no modeler-specific asset URL options.
 
 `Class`, `Style` and `AdditionalAttributes` (`IReadOnlyDictionary<string, object>?`, captured unmatched attributes) apply to the component wrapper. Ensure ancestor layout allows it to receive width and height.
+
+## UI localization
+
+The modeler UI supports English (`en` / `en-GB`), Polish (`pl` / `pl-PL`), French (`fr` / `fr-FR`), German (`de` / `de-DE`) and Spanish (`es` / `es-ES`). English is the neutral resource and final fallback. Standard .NET resource resolution also supports parent fallback: `fr-CA`, `de-AT` and `es-MX` use French, German and Spanish; `en-US` and unsupported cultures such as `it-IT` use English.
+
+`CultureInfo.CurrentUICulture` is the sole culture authority. `AddInceptusBpmnModeler()` includes standard localization registration; consumers do not need internal resource types. The RCL carries its resources and satellite assemblies. There is no public `Language` or `Culture` parameter and no built-in language selector.
+
+For runtime switching, change the host UI culture in its normal Blazor rendering context and re-render. A host can cascade that culture to ensure even a parameterless modeler receives the render notification:
+
+```razor
+@using System.Globalization
+
+<CascadingValue Value="CultureInfo.CurrentUICulture">
+    <InceptusBpmnModeler />
+</CascadingValue>
+```
+
+The cascade is a render notification, not an override: set the ambient `CurrentUICulture` as well as updating the host render. The host remains responsible for its normal culture lifetime and WebAssembly globalization/ICU configuration. Changing culture does not replace the Document or editing session, write History, reset selection/viewport, or invoke `DocumentChanged`. Open dialogs and feedback resolve presentation labels again on rendering.
+
+Document names, property values, diagnostic identities and canonical diagnostic messages remain unchanged. Native import/export and PublishedProcess use their existing English-based, culture-invariant schemas; there is no public data-format change. Only UI wrappers around canonical diagnostics are localized. The standalone exported PublishedProcess viewer remains outside modeler localization scope. Host-owned labels and documentation remain the host's responsibility.
 
 ## Document ownership and notifications
 

@@ -13,6 +13,7 @@ using Inceptus.DocumentEngine.Contracts.Geometry;
 using Inceptus.DocumentEngine.Contracts.Primitives;
 using Inceptus.DocumentEngine.Contracts.Properties;
 using Inceptus.DocumentEngine.Contracts.Visuals;
+using Microsoft.Extensions.Localization;
 
 namespace Inceptus.DocumentEngine.Bpmn.Blazor.Presentation;
 
@@ -599,6 +600,8 @@ internal sealed class DocumentCanvasPropertiesDraft
 
     internal string? Feedback { get; set; }
 
+    internal Diagnostic? FeedbackDiagnostic { get; set; }
+
     internal bool IsSemanticDirty => DataFields.Any(static item => item.IsDirty);
 
     internal bool IsBoundsDirty => Authoritative.CanEditBounds &&
@@ -613,9 +616,10 @@ internal sealed class DocumentCanvasPropertiesDraft
 
     internal bool TryValidate(
         out RectD bounds,
-        out ImmutableArray<string> validationMessages)
+        out ImmutableArray<string> validationMessages,
+        IStringLocalizer<ModelerStrings>? text = null)
     {
-        var boundsValid = TryParseBounds(out bounds, out var boundsMessages);
+        var boundsValid = TryParseBounds(out bounds, out var boundsMessages, text);
         var messages = boundsMessages.ToBuilder();
         foreach (var field in DataFields.Where(static field => field.IsDirty))
         {
@@ -624,27 +628,35 @@ internal sealed class DocumentCanvasPropertiesDraft
                 string.IsNullOrWhiteSpace(field.EditorValue))
             {
                 messages.Add(
-                    $"{field.Definition.DisplayName} must contain at least one non-whitespace character.");
+                    text is null
+                        ? $"{field.Definition.DisplayName} must contain at least one non-whitespace character."
+                        : text["Validation_Required", ModelerLabels.PropertyFieldLabel(text, field.Definition)]);
             }
 
             if (field.Definition.EditorKind == ElementPropertyEditorKind.Integer &&
                 !field.TryParseInteger(out _))
             {
                 messages.Add(
-                    $"{field.Definition.DisplayName} must be an integer within the supported range.");
+                    text is null
+                        ? $"{field.Definition.DisplayName} must be an integer within the supported range."
+                        : text["Validation_Integer", ModelerLabels.PropertyFieldLabel(text, field.Definition)]);
             }
 
             if (field.Definition.EditorKind == ElementPropertyEditorKind.Boolean &&
                 !field.TryParseBoolean(out _))
             {
-                messages.Add($"{field.Definition.DisplayName} must be true or false.");
+                messages.Add(text is null
+                    ? $"{field.Definition.DisplayName} must be true or false."
+                    : text["Validation_Boolean", ModelerLabels.PropertyFieldLabel(text, field.Definition)]);
             }
         }
 
         if (HasConflictingChanges)
         {
             messages.Add(
-                "Apply one Data field or visual bounds before editing another property group.");
+                text is null
+                    ? "Apply one Data field or visual bounds before editing another property group."
+                    : text["Validation_Conflicting"]);
         }
 
         validationMessages = messages.ToImmutable();
@@ -668,7 +680,8 @@ internal sealed class DocumentCanvasPropertiesDraft
 
     internal bool TryParseBounds(
         out RectD bounds,
-        out ImmutableArray<string> validationMessages)
+        out ImmutableArray<string> validationMessages,
+        IStringLocalizer<ModelerStrings>? text = null)
     {
         bounds = default;
         if (!Authoritative.CanEditBounds)
@@ -678,20 +691,22 @@ internal sealed class DocumentCanvasPropertiesDraft
         }
 
         var messages = ImmutableArray.CreateBuilder<string>();
-        var x = ParseFinite(X, "X", messages);
-        var y = ParseFinite(Y, "Y", messages);
-        var width = ParseFinite(Width, "Width", messages);
-        var height = ParseFinite(Height, "Height", messages);
+        var x = ParseFinite(X, "X", messages, text);
+        var y = ParseFinite(Y, "Y", messages, text);
+        var width = ParseFinite(Width, "Width", messages, text);
+        var height = ParseFinite(Height, "Height", messages, text);
         if (width is < Canvas2DInteractionController.MinimumVisualExtent)
         {
-            messages.Add(FormattableString.Invariant(
-                $"Width must be at least {Canvas2DInteractionController.MinimumVisualExtent}."));
+            messages.Add(text is null
+                ? FormattableString.Invariant($"Width must be at least {Canvas2DInteractionController.MinimumVisualExtent}.")
+                : text["Validation_MinWidth", Canvas2DInteractionController.MinimumVisualExtent]);
         }
 
         if (height is < Canvas2DInteractionController.MinimumVisualExtent)
         {
-            messages.Add(FormattableString.Invariant(
-                $"Height must be at least {Canvas2DInteractionController.MinimumVisualExtent}."));
+            messages.Add(text is null
+                ? FormattableString.Invariant($"Height must be at least {Canvas2DInteractionController.MinimumVisualExtent}.")
+                : text["Validation_MinHeight", Canvas2DInteractionController.MinimumVisualExtent]);
         }
 
         if (messages.Count == 0)
@@ -702,7 +717,9 @@ internal sealed class DocumentCanvasPropertiesDraft
             }
             catch (ArgumentOutOfRangeException)
             {
-                messages.Add("The requested bounds must be finite and renderable.");
+                messages.Add(text is null
+                    ? "The requested bounds must be finite and renderable."
+                    : text["Validation_Bounds"]);
             }
         }
 
@@ -711,18 +728,21 @@ internal sealed class DocumentCanvasPropertiesDraft
     }
 
     private static double? ParseFinite(
-        string text,
+        string input,
         string label,
-        ImmutableArray<string>.Builder messages)
+        ImmutableArray<string>.Builder messages,
+        IStringLocalizer<ModelerStrings>? text)
     {
         if (!double.TryParse(
-                text,
+                input,
                 NumberStyles.Float,
                 CultureInfo.InvariantCulture,
                 out var value) ||
             !double.IsFinite(value))
         {
-            messages.Add($"{label} must be a finite number.");
+            messages.Add(text is null
+                ? $"{label} must be a finite number."
+                : text["Validation_Finite", text[$"Properties_{label}"].Value]);
             return null;
         }
 

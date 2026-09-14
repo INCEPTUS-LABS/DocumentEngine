@@ -45,14 +45,14 @@ public sealed class PhaseL5ContextPropertiesArchitectureTests
             StringComparison.Ordinal);
         Assert.Contains("readonly", component, StringComparison.Ordinal);
         Assert.True(dataIndex > formIndex && identityIndex > dataIndex && visualIndex > identityIndex);
-        Assert.Contains("<legend>Data</legend>", component, StringComparison.Ordinal);
+        Assert.Contains("<legend>@Text[\"Properties_Data\"]</legend>", component, StringComparison.Ordinal);
         var dataGroup = Between(
             component,
             "<fieldset data-property-group=\"data\">",
             "</fieldset>");
         Assert.Contains("@foreach (var field in draft.DataFields)", dataGroup,
             StringComparison.Ordinal);
-        Assert.Contains("@field.Definition.DisplayName", dataGroup, StringComparison.Ordinal);
+        Assert.Contains("@PropertyFieldLabel(field.Definition)", dataGroup, StringComparison.Ordinal);
         Assert.Contains("@switch (field.Definition.EditorKind)", dataGroup,
             StringComparison.Ordinal);
         Assert.Contains("case ElementPropertyEditorKind.SingleLineText:", dataGroup,

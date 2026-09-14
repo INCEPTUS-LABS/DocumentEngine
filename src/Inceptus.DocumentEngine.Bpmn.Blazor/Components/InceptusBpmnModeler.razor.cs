@@ -15,6 +15,11 @@ public partial class InceptusBpmnModeler : IDisposable
     private BpmnModelerFacade? _facade;
     private bool _disposed;
 
+    // A host may cascade its UI culture to notify parameterless modelers of a re-render.
+    // Resource lookup still uses CurrentUICulture; this is only a Blazor render dependency.
+    [CascadingParameter]
+    private System.Globalization.CultureInfo? HostUICulture { get; set; }
+
     [Inject]
     private IServiceProvider Services { get; set; } = null!;
 

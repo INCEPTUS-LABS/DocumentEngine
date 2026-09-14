@@ -1,3 +1,6 @@
+@using Inceptus.DocumentEngine.Bpmn.Blazor
+@using Microsoft.Extensions.Localization
+@inject IStringLocalizer<ModelerStrings> Text
 @using Inceptus.DocumentEngine.Bpmn.Blazor.Presentation
 @using Inceptus.DocumentEngine.Contracts.Primitives
 @using Inceptus.DocumentEngine.Contracts.Toolbox
@@ -10,7 +13,7 @@
        data-expanded-toolbox-group-id="@(_presentation.ExpandedToolboxGroupId?.Value ?? string.Empty)"
        data-selected-toolbox-item-id="@(SelectedItemId?.Value ?? string.Empty)">
     <header class="toolbox-header">
-        <h2 id="@DomId("toolbox-heading")">Toolbox</h2>
+        <h2 id="@DomId("toolbox-heading")">@Text["Toolbox_Title"]</h2>
         <button id="@DomId("toolbox-mode-toggle")"
                 class="toolbox-mode-toggle"
                 type="button"
@@ -23,7 +26,7 @@
 
     @if (VisibleGroups.Count == 0)
     {
-        <p class="toolbox-empty">No tools available.</p>
+        <p class="toolbox-empty">@Text["Toolbox_Empty"]</p>
     }
     else
     {
@@ -35,7 +38,7 @@
                          data-toolbox-section-id="@section.Section.SectionId.Value"
                          @key="section.Section.SectionId">
                     <h3 id="@SectionHeadingId(section.Index)"
-                        class="toolbox-section-heading">@section.Section.DisplayName</h3>
+                        class="toolbox-section-heading">@ModelerLabels.ToolboxLabel(Text, section.Section)</h3>
                     @foreach (var entry in section.Groups)
                     {
                         <section class="toolbox-group"
@@ -45,14 +48,14 @@
                             <button id="@GroupHeadingId(entry.Index)"
                                     class="toolbox-group-toggle"
                                     type="button"
-                                    title="@entry.Group.DisplayName"
-                                    aria-label="@entry.Group.DisplayName"
+                                    title="@ModelerLabels.ToolboxLabel(Text, entry.Group)"
+                                    aria-label="@ModelerLabels.ToolboxLabel(Text, entry.Group)"
                                     aria-expanded="@BooleanValue(IsExpanded(entry.Group.GroupId))"
                                     aria-controls="@GroupItemsId(entry.Index)"
                                     data-toolbox-group-icon-key="@(entry.Group.Icon?.IconKey ?? string.Empty)"
                                     @onclick="() => ToggleGroup(entry.Group.GroupId)">
                                 <span class="toolbox-group-icon" aria-hidden="true">@ResolveGlyph(entry.Group.Icon)</span>
-                                <span class="toolbox-group-label">@entry.Group.DisplayName</span>
+                                <span class="toolbox-group-label">@ModelerLabels.ToolboxLabel(Text, entry.Group)</span>
                                 <span class="toolbox-group-disclosure" aria-hidden="true">@Disclosure(entry.Group.GroupId)</span>
                             </button>
                             <div id="@GroupItemsId(entry.Index)"
@@ -64,8 +67,8 @@
                                 {
                                     <button type="button"
                                             class="@ItemClass(item.ItemId)"
-                                            title="@item.DisplayName"
-                                            aria-label="@item.DisplayName"
+                                            title="@ModelerLabels.ToolboxLabel(Text, item)"
+                                            aria-label="@ModelerLabels.ToolboxLabel(Text, item)"
                                             aria-pressed="@BooleanValue(IsSelected(item.ItemId))"
                                             data-toolbox-item-id="@item.ItemId.Value"
                                             data-toolbox-element-type-id="@item.ElementTypeId.Value"
@@ -73,7 +76,7 @@
                                             @onclick="() => SelectItemAsync(item.ItemId)"
                                             @key="item.ItemId">
                                         <span class="toolbox-item-icon" aria-hidden="true">@ResolveGlyph(item.Icon)</span>
-                                        <span class="toolbox-item-label">@item.DisplayName</span>
+                                        <span class="toolbox-item-label">@ModelerLabels.ToolboxLabel(Text, item)</span>
                                     </button>
                                 }
                             </div>
@@ -91,14 +94,14 @@
                     <button id="@GroupHeadingId(entry.Index)"
                             class="toolbox-group-toggle"
                             type="button"
-                            title="@entry.Group.DisplayName"
-                            aria-label="@entry.Group.DisplayName"
+                            title="@ModelerLabels.ToolboxLabel(Text, entry.Group)"
+                            aria-label="@ModelerLabels.ToolboxLabel(Text, entry.Group)"
                             aria-expanded="@BooleanValue(IsExpanded(entry.Group.GroupId))"
                             aria-controls="@GroupItemsId(entry.Index)"
                             data-toolbox-group-icon-key="@(entry.Group.Icon?.IconKey ?? string.Empty)"
                             @onclick="() => ToggleGroup(entry.Group.GroupId)">
                         <span class="toolbox-group-icon" aria-hidden="true">@ResolveGlyph(entry.Group.Icon)</span>
-                        <span class="toolbox-group-label">@entry.Group.DisplayName</span>
+                        <span class="toolbox-group-label">@ModelerLabels.ToolboxLabel(Text, entry.Group)</span>
                         <span class="toolbox-group-disclosure" aria-hidden="true">@Disclosure(entry.Group.GroupId)</span>
                     </button>
                     <div id="@GroupItemsId(entry.Index)"
@@ -110,8 +113,8 @@
                         {
                             <button type="button"
                                     class="@ItemClass(item.ItemId)"
-                                    title="@item.DisplayName"
-                                    aria-label="@item.DisplayName"
+                                    title="@ModelerLabels.ToolboxLabel(Text, item)"
+                                    aria-label="@ModelerLabels.ToolboxLabel(Text, item)"
                                     aria-pressed="@BooleanValue(IsSelected(item.ItemId))"
                                     data-toolbox-item-id="@item.ItemId.Value"
                                     data-toolbox-element-type-id="@item.ElementTypeId.Value"
@@ -119,7 +122,7 @@
                                     @onclick="() => SelectItemAsync(item.ItemId)"
                                     @key="item.ItemId">
                                 <span class="toolbox-item-icon" aria-hidden="true">@ResolveGlyph(item.Icon)</span>
-                                <span class="toolbox-item-label">@item.DisplayName</span>
+                                <span class="toolbox-item-label">@ModelerLabels.ToolboxLabel(Text, item)</span>
                             </button>
                         }
                     </div>
@@ -130,6 +133,9 @@
 </aside>
 
 @code {
+    [CascadingParameter(Name = "ModelerUICulture")]
+    private System.Globalization.CultureInfo? RenderCulture { get; set; }
+
     private const string UnknownIconFallbackGlyph = "□";
     private readonly string _fallbackDomIdPrefix = $"inceptus-{Guid.NewGuid():N}";
     private readonly ToolboxPresentationState _presentation = new();
@@ -180,8 +186,8 @@
     private string ViewModeValue => _presentation.ViewMode.ToString().ToLowerInvariant();
 
     private string ModeToggleLabel => _presentation.ViewMode == ToolboxViewMode.Expanded
-        ? "Collapse Toolbox"
-        : "Expand Toolbox";
+        ? Text["Toolbox_Collapse"]
+        : Text["Toolbox_Expand"];
 
     private string ModeToggleGlyph => _presentation.ViewMode == ToolboxViewMode.Expanded
         ? "«"

@@ -52,8 +52,10 @@ public sealed class DocumentCanvasComponentTests
     [Fact]
     public async Task RepeatedStaticRendersContainOneActiveCanvasAndOneReplacementBuffer()
     {
+        using var culture = new ModelerCultureScope("en");
         var jsRuntime = new RecordingJsRuntime();
         var services = new ServiceCollection()
+            .AddLogging().AddInceptusBpmnModeler()
             .AddSingleton<IJSRuntime>(jsRuntime)
             .BuildServiceProvider();
         await using var renderer = new HtmlRenderer(services, NullLoggerFactory.Instance);
@@ -256,6 +258,7 @@ public sealed class DocumentCanvasComponentTests
     public async Task TwoModelerInstancesRenderDisjointStableDomIdentitySets()
     {
         var services = new ServiceCollection()
+            .AddLogging().AddInceptusBpmnModeler()
             .AddSingleton<IJSRuntime>(new RecordingJsRuntime())
             .BuildServiceProvider();
         await using var renderer = new HtmlRenderer(services, NullLoggerFactory.Instance);
@@ -285,6 +288,7 @@ public sealed class DocumentCanvasComponentTests
         string code,
         string expectedMessageFragment)
     {
+        using var culture = new ModelerCultureScope("en");
         var result = NativeDocumentHostImportResult.Rejected(
         [
             new Diagnostic(
@@ -297,7 +301,9 @@ public sealed class DocumentCanvasComponentTests
         var (actualCode, actualMessage) = DocumentCanvas.NativeDocumentImportMessage(result);
 
         Assert.Equal(code, actualCode);
-        Assert.Contains(expectedMessageFragment, actualMessage, StringComparison.Ordinal);
+        using var services = new ServiceCollection().AddLogging().AddInceptusBpmnModeler().BuildServiceProvider();
+        var text = services.GetRequiredService<Microsoft.Extensions.Localization.IStringLocalizer<Inceptus.DocumentEngine.Bpmn.Blazor.ModelerStrings>>();
+        Assert.Contains(expectedMessageFragment, text[actualMessage].Value, StringComparison.Ordinal);
         Assert.DoesNotContain("implementation detail", actualMessage,
             StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("System.", actualMessage, StringComparison.Ordinal);

@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms</value></resheader>
+  <data name="Accessibility_DocumentPresentation" xml:space="preserve"><value>Dokumentansicht</value></data>
+  <data name="Accessibility_EditorToolbar" xml:space="preserve"><value>Editor-Symbolleiste</value></data>
+  <data name="Accessibility_ProcessScope" xml:space="preserve"><value>Prozessbereich</value></data>
+  <data name="Accessibility_DocumentFile" xml:space="preserve"><value>Dokumentdatei</value></data>
+  <data name="Toolbar_NewDiagram" xml:space="preserve"><value>Neues Diagramm</value></data>
+  <data name="Toolbar_ImportHint" xml:space="preserve"><value>Dokument im nativen Format importieren (maximal 16 MiB)</value></data>
+  <data name="Toolbar_Import" xml:space="preserve"><value>Dokument im nativen Format importieren</value></data>
+  <data name="Toolbar_Export" xml:space="preserve"><value>Dokument im nativen Format exportieren</value></data>
+  <data name="Toolbar_Publish" xml:space="preserve"><value>Veröffentlichen</value></data>
+  <data name="Accessibility_History" xml:space="preserve"><value>Bearbeitungsverlauf</value></data>
+  <data name="Toolbar_Undo" xml:space="preserve"><value>Rückgängig</value></data>
+  <data name="Toolbar_Redo" xml:space="preserve"><value>Wiederholen</value></data>
+  <data name="Accessibility_Zoom" xml:space="preserve"><value>Ansichtszoom</value></data>
+  <data name="Toolbar_ZoomOut" xml:space="preserve"><value>Verkleinern</value></data>
+  <data name="Toolbar_ZoomActualSize" xml:space="preserve"><value>Zoom auf 100 % setzen</value></data>
+  <data name="Toolbar_ZoomIn" xml:space="preserve"><value>Vergrößern</value></data>
+  <data name="Accessibility_ModelValidation" xml:space="preserve"><value>Modellvalidierung</value></data>
+  <data name="Toolbar_ValidateHint" xml:space="preserve"><value>Modell validieren</value></data>
+  <data name="Toolbar_Validate" xml:space="preserve"><value>Validieren</value></data>
+  <data name="Accessibility_RenderedDiagram" xml:space="preserve"><value>Dokumentdiagramm</value></data>
+  <data name="Accessibility_ModelActions" xml:space="preserve"><value>Modell- und Ansichtsaktionen</value></data>
+  <data name="Accessibility_ObjectActions" xml:space="preserve"><value>Diagrammobjektaktionen</value></data>
+  <data name="Context_ModelProperties" xml:space="preserve"><value>Ansichts- und Modelleigenschaften...</value></data>
+  <data name="Context_Properties" xml:space="preserve"><value>Eigenschaften...</value></data>
+  <data name="Context_AddPoint" xml:space="preserve"><value>Punkt hier hinzufügen</value></data>
+  <data name="Context_DeletePoint" xml:space="preserve"><value>Punkt löschen</value></data>
+  <data name="Context_AddSourceAnchor" xml:space="preserve"><value>Verbindungsstartpunkt hier hinzufügen</value></data>
+  <data name="Context_AddTargetAnchor" xml:space="preserve"><value>Verbindungsendpunkt hier hinzufügen</value></data>
+  <data name="Context_DeleteAnchor" xml:space="preserve"><value>Anschlusspunkt löschen</value></data>
+  <data name="Context_ResetLabel" xml:space="preserve"><value>Beschriftungsposition zurücksetzen</value></data>
+  <data name="Context_DeleteElement" xml:space="preserve"><value>Element löschen</value></data>
+  <data name="Context_DeleteConnection" xml:space="preserve"><value>Verbindung löschen</value></data>
+  <data name="Properties_ModelTitle" xml:space="preserve"><value>Ansichts- und Modelleigenschaften</value></data>
+  <data name="Properties_CloseModel" xml:space="preserve"><value>Ansichts- und Modelleigenschaften schließen</value></data>
+  <data name="Properties_Profiles" xml:space="preserve"><value>Profile</value></data>
+  <data name="Properties_Available" xml:space="preserve"><value>Im Modell verfügbar</value></data>
+  <data name="Properties_Visible" xml:space="preserve"><value>In der Ansicht sichtbar</value></data>
+  <data name="Action_Cancel" xml:space="preserve"><value>Abbrechen</value></data>
+  <data name="Action_Apply" xml:space="preserve"><value>Übernehmen</value></data>
+  <data name="Accessibility_SelectedProperties" xml:space="preserve"><value>Eigenschaften des ausgewählten Objekts</value></data>
+  <data name="Properties_Title" xml:space="preserve"><value>Eigenschaften</value></data>
+  <data name="Properties_Close" xml:space="preserve"><value>Eigenschaften schließen</value></data>
+  <data name="Properties_Data" xml:space="preserve"><value>Daten</value></data>
+  <data name="Properties_Identity" xml:space="preserve"><value>Identität</value></data>
+  <data name="Properties_SemanticId" xml:space="preserve"><value>Semantische ID</value></data>
+  <data name="Properties_VisualId" xml:space="preserve"><value>ID des visuellen Zustands</value></data>
+  <data name="Properties_Type" xml:space="preserve"><value>Typ</value></data>
+  <data name="Properties_Visual" xml:space="preserve"><value>Darstellung</value></data>
+  <data name="Properties_Placement" xml:space="preserve"><value>Platzierung</value></data>
+  <data name="Properties_X" xml:space="preserve"><value>X</value></data>
+  <data name="Properties_Y" xml:space="preserve"><value>Y</value></data>
+  <data name="Properties_Width" xml:space="preserve"><value>Breite</value></data>
+  <data name="Properties_Height" xml:space="preserve"><value>Höhe</value></data>
+  <data name="Properties_Source" xml:space="preserve"><value>Quelle</value></data>
+  <data name="Properties_Target" xml:space="preserve"><value>Ziel</value></data>
+  <data name="Properties_LabelPath" xml:space="preserve"><value>Beschriftungsposition auf dem Pfad</value></data>
+  <data name="Properties_LabelOffsetX" xml:space="preserve"><value>Beschriftungsversatz X</value></data>
+  <data name="Properties_LabelOffsetY" xml:space="preserve"><value>Beschriftungsversatz Y</value></data>
+  <data name="Accessibility_ValidationIssues" xml:space="preserve"><value>Validierungsprobleme</value></data>
+  <data name="Status_Issues" xml:space="preserve"><value>Probleme</value></data>
+  <data name="Status_CloseIssues" xml:space="preserve"><value>Probleme schließen</value></data>
+  <data name="Accessibility_IssueCounts" xml:space="preserve"><value>Anzahl der Validierungsprobleme</value></data>
+  <data name="Status_Errors" xml:space="preserve"><value>Fehler</value></data>
+  <data name="Status_Warnings" xml:space="preserve"><value>Warnungen</value></data>
+  <data name="Status_Info" xml:space="preserve"><value>Informationen</value></data>
+  <data name="Status_NotValidatedSentence" xml:space="preserve"><value>Nicht validiert.</value></data>
+  <data name="Status_NoIssues" xml:space="preserve"><value>Keine Probleme gefunden.</value></data>
+  <data name="Status_NotValidated" xml:space="preserve"><value>Nicht validiert</value></data>
+  <data name="Publication_DismissFeedback" xml:space="preserve"><value>Veröffentlichungsmeldung schließen</value></data>
+  <data name="Action_Dismiss" xml:space="preserve"><value>Schließen</value></data>
+  <data name="Dialog_NewDocument_Title" xml:space="preserve"><value>Neues Diagramm erstellen?</value></data>
+  <data name="Dialog_NewDocument_Description" xml:space="preserve"><value>Das aktuelle Diagramm und sein Änderungsverlauf werden gelöscht.</value></data>
+  <data name="Publication_Title" xml:space="preserve"><value>Veröffentlichung</value></data>
+  <data name="Field_Code" xml:space="preserve"><value>Code</value></data>
+  <data name="Field_Title" xml:space="preserve"><value>Titel</value></data>
+  <data name="Field_Description" xml:space="preserve"><value>Beschreibung</value></data>
+  <data name="Publication_CodeHelp" xml:space="preserve"><value>Nur Kleinbuchstaben, Ziffern und einzelne Bindestriche.</value></data>
+  <data name="Action_Save" xml:space="preserve"><value>Speichern</value></data>
+  <data name="Toolbox_Title" xml:space="preserve"><value>Werkzeugkasten</value></data>
+  <data name="Toolbox_Empty" xml:space="preserve"><value>Keine Werkzeuge verfügbar.</value></data>
+  <data name="Toolbox_Collapse" xml:space="preserve"><value>Werkzeugkasten einklappen</value></data>
+  <data name="Toolbox_Expand" xml:space="preserve"><value>Werkzeugkasten ausklappen</value></data>
+  <data name="Toolbox_Bpmn" xml:space="preserve"><value>BPMN</value></data>
+  <data name="Toolbox_Events" xml:space="preserve"><value>Ereignisse</value></data>
+  <data name="Toolbox_Activities" xml:space="preserve"><value>Aktivitäten</value></data>
+  <data name="Toolbox_Tasks" xml:space="preserve"><value>Aufgaben</value></data>
+  <data name="Toolbox_Gateways" xml:space="preserve"><value>Gateways</value></data>
+  <data name="Element_StartEvent" xml:space="preserve"><value>Startereignis</value></data>
+  <data name="Element_EndEvent" xml:space="preserve"><value>Endereignis</value></data>
+  <data name="Element_MessageCatchEvent" xml:space="preserve"><value>Empfangendes Nachrichtenereignis</value></data>
+  <data name="Element_MessageThrowEvent" xml:space="preserve"><value>Sendendes Nachrichtenereignis</value></data>
+  <data name="Element_TimerCatchEvent" xml:space="preserve"><value>Eintretendes Zeitereignis</value></data>
+  <data name="Element_SignalCatchEvent" xml:space="preserve"><value>Empfangendes Signalereignis</value></data>
+  <data name="Element_SignalThrowEvent" xml:space="preserve"><value>Sendendes Signalereignis</value></data>
+  <data name="Element_TimerBoundaryEvent" xml:space="preserve"><value>Angeheftetes Zeitereignis</value></data>
+  <data name="Element_MessageBoundaryEvent" xml:space="preserve"><value>Angeheftetes Nachrichtenereignis</value></data>
+  <data name="Element_SignalBoundaryEvent" xml:space="preserve"><value>Angeheftetes Signalereignis</value></data>
+  <data name="Element_Task" xml:space="preserve"><value>Aufgabe</value></data>
+  <data name="Element_UserTask" xml:space="preserve"><value>Benutzeraufgabe</value></data>
+  <data name="Element_ManualTask" xml:space="preserve"><value>Manuelle Aufgabe</value></data>
+  <data name="Element_ServiceTask" xml:space="preserve"><value>Serviceaufgabe</value></data>
+  <data name="Element_SendTask" xml:space="preserve"><value>Sendeaufgabe</value></data>
+  <data name="Element_ReceiveTask" xml:space="preserve"><value>Empfangsaufgabe</value></data>
+  <data name="Element_SubProcess" xml:space="preserve"><value>Teilprozess</value></data>
+  <data name="Element_ExclusiveGateway" xml:space="preserve"><value>Exklusives Gateway</value></data>
+  <data name="Element_ParallelGateway" xml:space="preserve"><value>Paralleles Gateway</value></data>
+  <data name="Element_InclusiveGateway" xml:space="preserve"><value>Inklusives Gateway</value></data>
+  <data name="Element_EventBasedGateway" xml:space="preserve"><value>Ereignisbasiertes Gateway</value></data>
+  <data name="Field_Name" xml:space="preserve"><value>Name</value></data>
+  <data name="Field_ElementNumber" xml:space="preserve"><value>Elementnummer</value></data>
+  <data name="Field_TimerDefinition" xml:space="preserve"><value>Zeitgeberdefinition</value></data>
+  <data name="Field_Interrupting" xml:space="preserve"><value>Unterbrechend</value></data>
+  <data name="Profile_Organizational" xml:space="preserve"><value>Organisationsprofil</value></data>
+  <data name="Profile_Stage" xml:space="preserve"><value>Phasenprofil</value></data>
+  <data name="Context_Add" xml:space="preserve"><value>Hinzufügen</value></data>
+  <data name="Context_Process" xml:space="preserve"><value>Prozess</value></data>
+  <data name="Context_Pool" xml:space="preserve"><value>Pool</value></data>
+  <data name="Context_Expand" xml:space="preserve"><value>Ausklappen</value></data>
+  <data name="Context_Collapse" xml:space="preserve"><value>Einklappen</value></data>
+  <data name="Context_MoveUp" xml:space="preserve"><value>Nach oben verschieben</value></data>
+  <data name="Context_MoveDown" xml:space="preserve"><value>Nach unten verschieben</value></data>
+  <data name="Context_OpenSubProcess" xml:space="preserve"><value>Teilprozess öffnen</value></data>
+  <data name="Navigation_MainProcess" xml:space="preserve"><value>Hauptprozess</value></data>
+  <data name="Navigation_Scope" xml:space="preserve"><value>Bereich</value></data>
+  <data name="Status_Disposed" xml:space="preserve"><value>Diagrammansicht geschlossen</value></data>
+  <data name="Status_Ready" xml:space="preserve"><value>Diagrammansicht bereit</value></data>
+  <data name="Status_RenderFailed" xml:space="preserve"><value>Die Szene ist aktuell, aber die Diagrammdarstellung ist fehlgeschlagen</value></data>
+  <data name="Status_Building" xml:space="preserve"><value>Aktuelle Szene wird aufgebaut</value></data>
+  <data name="Status_SceneFailed" xml:space="preserve"><value>Szenendarstellung fehlgeschlagen</value></data>
+  <data name="Status_InitializationFailed" xml:space="preserve"><value>Initialisierung der Zeichenfläche im Browser fehlgeschlagen</value></data>
+  <data name="Status_Preparing" xml:space="preserve"><value>Zeichenfläche im Browser wird vorbereitet</value></data>
+  <data name="Error_FileTooLarge" xml:space="preserve"><value>Das ausgewählte Dokument überschreitet die Importgrenze des Browsers von 16 MiB.</value></data>
+  <data name="Error_NewUnavailable" xml:space="preserve"><value>Ein neues Diagramm kann erst erstellt werden, wenn der Editor bereit ist.</value></data>
+  <data name="Error_NewFailed" xml:space="preserve"><value>Ein neues Diagramm konnte nicht erstellt werden.</value></data>
+  <data name="Error_ExportUnavailable" xml:space="preserve"><value>Der Dokumentexport ist erst verfügbar, wenn der Editor bereit ist.</value></data>
+  <data name="Error_ExportFailed" xml:space="preserve"><value>Das aktuelle Dokument konnte nicht exportiert werden.</value></data>
+  <data name="Error_DownloadFailed" xml:space="preserve"><value>Der Browser konnte den Dokumentdownload nicht starten.</value></data>
+  <data name="Publication_PublishFailed" xml:space="preserve"><value>Veröffentlichung fehlgeschlagen</value></data>
+  <data name="Publication_SaveFailed" xml:space="preserve"><value>Veröffentlichung konnte nicht gespeichert werden</value></data>
+  <data name="Target_NamedElement" xml:space="preserve"><value>Element „{0}“ (ID: {1})</value></data>
+  <data name="Target_TypedElement" xml:space="preserve"><value>Elementtyp „{0}“ (ID: {1})</value></data>
+  <data name="Target_Element" xml:space="preserve"><value>Element (ID: {0})</value></data>
+  <data name="Target_ConnectedConnector" xml:space="preserve"><value>Verbindung (ID: {0}; von {1} nach {2})</value></data>
+  <data name="Target_Connector" xml:space="preserve"><value>Verbindung (ID: {0})</value></data>
+  <data name="Target_Source" xml:space="preserve"><value>Quelle: {0}</value></data>
+  <data name="Target_VisualSemantic" xml:space="preserve"><value>Visuell {0} · Semantisch {1}</value></data>
+  <data name="Target_Semantic" xml:space="preserve"><value>Semantisch {0}</value></data>
+  <data name="Target_Document" xml:space="preserve"><value>Dokument</value></data>
+  <data name="Error_ImportUnavailable" xml:space="preserve"><value>Der Dokumentimport ist erst verfügbar, wenn der Editor bereit ist.</value></data>
+  <data name="Error_ImportReadFailed" xml:space="preserve"><value>Der Browser konnte die ausgewählte Dokumentdatei nicht lesen.</value></data>
+  <data name="Error_ImportMalformed" xml:space="preserve"><value>Die ausgewählte Datei ist kein gültiges Dokument-JSON im nativen Format.</value></data>
+  <data name="Error_ImportFormat" xml:space="preserve"><value>Die ausgewählte Datei ist kein Dokument im nativen Inceptus-Format.</value></data>
+  <data name="Error_ImportVersion" xml:space="preserve"><value>Die Version des ausgewählten Dokuments wird nicht unterstützt.</value></data>
+  <data name="Error_ImportSession" xml:space="preserve"><value>Das Dokument war gültig, aber seine Editorsitzung konnte nicht geöffnet werden.</value></data>
+  <data name="Error_ImportStructure" xml:space="preserve"><value>Die ausgewählte Datei enthält kein strukturell gültiges Dokument im nativen Format.</value></data>
+  <data name="Properties_ModelFailed" xml:space="preserve"><value>Ansichts- und Modelleigenschaften konnten nicht übernommen werden.</value></data>
+  <data name="Properties_ModelStale" xml:space="preserve"><value>Das Modell oder die aktive Ansicht wurde seit dem Öffnen des Formulars geändert. Brechen Sie ab und öffnen Sie die Ansichts- und Modelleigenschaften erneut.</value></data>
+  <data name="Properties_Failed" xml:space="preserve"><value>Die Eigenschaftsänderung konnte nicht übernommen werden.</value></data>
+  <data name="Properties_Stale" xml:space="preserve"><value>Das ausgewählte Objekt wurde seit dem Öffnen des Formulars geändert. Brechen Sie ab und öffnen Sie die Eigenschaften erneut.</value></data>
+  <data name="Validation_Required" xml:space="preserve"><value>Das Feld „{0}“ muss mindestens ein Zeichen enthalten, das kein Leerzeichen ist.</value></data>
+  <data name="Validation_Integer" xml:space="preserve"><value>Das Feld „{0}“ muss eine ganze Zahl im unterstützten Bereich enthalten.</value></data>
+  <data name="Validation_Boolean" xml:space="preserve"><value>Das Feld „{0}“ muss true oder false enthalten.</value></data>
+  <data name="Validation_Conflicting" xml:space="preserve"><value>Übernehmen Sie ein Datenfeld oder die Abmessungen, bevor Sie eine andere Eigenschaftsgruppe bearbeiten.</value></data>
+  <data name="Validation_MinWidth" xml:space="preserve"><value>Die Breite muss mindestens {0} betragen.</value></data>
+  <data name="Validation_MinHeight" xml:space="preserve"><value>Die Höhe muss mindestens {0} betragen.</value></data>
+  <data name="Validation_Bounds" xml:space="preserve"><value>Die angegebenen Abmessungen müssen endlich und darstellbar sein.</value></data>
+  <data name="Validation_Finite" xml:space="preserve"><value>Das Feld „{0}“ muss eine endliche Zahl enthalten.</value></data>
+  <data name="Placement_Automatic" xml:space="preserve"><value>Automatisch</value></data>
+  <data name="Placement_Pinned" xml:space="preserve"><value>Fixiert</value></data>
+  <data name="Placement_Manual" xml:space="preserve"><value>Manuell</value></data>
+</root>

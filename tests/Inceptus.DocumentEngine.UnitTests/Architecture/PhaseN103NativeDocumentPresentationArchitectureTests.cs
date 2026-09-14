@@ -135,9 +135,9 @@ public sealed class PhaseN103NativeDocumentPresentationArchitectureTests
         Assert.Contains("class=\"native-document-action-icon\" aria-hidden=\"true\"",
             component,
             StringComparison.Ordinal);
-        Assert.Contains("aria-label=\"Import native Document\"", component,
+        Assert.Contains("aria-label=\"@Text[\"Toolbar_Import\"]\"", component,
             StringComparison.Ordinal);
-        Assert.Contains("aria-label=\"Export native Document\"", component,
+        Assert.Contains("aria-label=\"@Text[\"Toolbar_Export\"]\"", component,
             StringComparison.Ordinal);
         Assert.Contains("height: 100%", styles, StringComparison.Ordinal);
         Assert.Contains("height: 100%", rootStyles, StringComparison.Ordinal);

@@ -5265,11 +5265,12 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
         var segments = ImmutableArray.CreateBuilder<DocumentCanvasScopeBreadcrumbSegment>();
         foreach (var scope in scopes)
         {
-            var label = ResolveScopeBreadcrumbLabel(document, scope);
+            var label = ResolveScopeBreadcrumbLabel(document, scope, out var labelResourceKey);
             segments.Add(new DocumentCanvasScopeBreadcrumbSegment(
                 scope.Id,
                 label,
-                scope.Id == state.ActiveScopeId));
+                scope.Id == state.ActiveScopeId,
+                labelResourceKey));
         }
 
         return segments.ToImmutable();
@@ -5277,10 +5278,13 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
 
     private string ResolveScopeBreadcrumbLabel(
         DocumentSnapshot document,
-        DocumentScopeSnapshot scope)
+        DocumentScopeSnapshot scope,
+        out string? labelResourceKey)
     {
+        labelResourceKey = "Navigation_Scope";
         if (scope.Id == document.SemanticModel.RootScopeId)
         {
+            labelResourceKey = "Navigation_MainProcess";
             return DocumentCanvasScopeBreadcrumb.RootLabel;
         }
 
@@ -5297,6 +5301,10 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
         try
         {
             var label = registration.Contribution.ResolveBreadcrumbLabel(document, owner);
+            if (!string.IsNullOrWhiteSpace(label))
+            {
+                labelResourceKey = ModelerLabels.ScopeFallbackKey(owner);
+            }
             return string.IsNullOrWhiteSpace(label)
                 ? DocumentCanvasScopeBreadcrumb.FallbackNestedLabel
                 : label.Trim();

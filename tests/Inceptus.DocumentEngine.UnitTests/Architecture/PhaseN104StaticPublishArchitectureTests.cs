@@ -12,8 +12,8 @@ public sealed class PhaseN104StaticPublishArchitectureTests
 
         Assert.Contains("id=\"@DomId(\"publish\")\"", component,
             StringComparison.Ordinal);
-        Assert.Contains("aria-label=\"Publish\"", component, StringComparison.Ordinal);
-        Assert.Contains("title=\"Publish\"", component, StringComparison.Ordinal);
+        Assert.Contains("aria-label=\"@Text[\"Toolbar_Publish\"]\"", component, StringComparison.Ordinal);
+        Assert.Contains("title=\"@Text[\"Toolbar_Publish\"]\"", component, StringComparison.Ordinal);
         Assert.Contains("published-process.zip", component, StringComparison.Ordinal);
         Assert.Contains("application/zip", component, StringComparison.Ordinal);
         Assert.Contains("BrowserFileDownload.DownloadAsync(", component, StringComparison.Ordinal);

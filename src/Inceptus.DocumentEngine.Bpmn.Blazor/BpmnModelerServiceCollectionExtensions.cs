@@ -19,6 +19,7 @@ public static class BpmnModelerServiceCollectionExtensions
     public static IServiceCollection AddInceptusBpmnModeler(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
+        services.AddLocalization();
         services.TryAddTransient(static provider => new BpmnModelerCompositionFactory(
             () => provider.GetServices<IBpmnModelerStartupDocumentProvider>()));
         return services;
