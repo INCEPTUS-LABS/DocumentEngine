@@ -18,6 +18,8 @@ using Inceptus.DocumentEngine.Contracts.Semantics;
 using Inceptus.DocumentEngine.Contracts.Text;
 using Inceptus.DocumentEngine.Contracts.Visuals;
 
+using static Inceptus.DocumentEngine.IntegrationTests.EditingSessionTestSynchronization;
+
 namespace Inceptus.DocumentEngine.IntegrationTests;
 
 public sealed class PhaseLResizeGestureIntegrationTests
@@ -126,7 +128,7 @@ public sealed class PhaseLResizeGestureIntegrationTests
             unchangedMove.SessionState.CurrentScene!,
             finalPoint,
             button: 0));
-        await session.WaitForIdleAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+        await WaitForCommittedEventAndSessionIdleAsync(context.Document, session);
         var committed = session.CaptureState();
         var committedDocument = context.Document.CaptureSnapshot();
 
@@ -159,7 +161,7 @@ public sealed class PhaseLResizeGestureIntegrationTests
         }
 
         var undo = await session.UndoAsync();
-        await session.WaitForIdleAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+        await WaitForCommittedEventAndSessionIdleAsync(context.Document, session);
         var undone = session.CaptureState();
         Assert.True(undo.IsCommitted);
         AssertBoundsEqual(
@@ -171,7 +173,7 @@ public sealed class PhaseLResizeGestureIntegrationTests
         Assert.Equal(new HistoryStatus(1, false, true), undone.HistoryStatus);
 
         var redo = await session.RedoAsync();
-        await session.WaitForIdleAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+        await WaitForCommittedEventAndSessionIdleAsync(context.Document, session);
         var redone = session.CaptureState();
         Assert.True(redo.IsCommitted);
         AssertBoundsEqual(
@@ -264,7 +266,7 @@ public sealed class PhaseLResizeGestureIntegrationTests
             moved.SessionState.CurrentScene!,
             finalPoint,
             button: 0));
-        await session.WaitForIdleAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+        await WaitForCommittedEventAndSessionIdleAsync(context.Document, session);
         var committed = session.CaptureState();
         var committedDocument = context.Document.CaptureSnapshot();
         var committedRoute = FindConnector(
@@ -285,7 +287,7 @@ public sealed class PhaseLResizeGestureIntegrationTests
         Assert.Equal(initialRenderCount + 3, context.Execution.RenderCount);
 
         var undo = await session.UndoAsync();
-        await session.WaitForIdleAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+        await WaitForCommittedEventAndSessionIdleAsync(context.Document, session);
         Assert.True(undo.IsCommitted);
         AssertBoundsEqual(
             originalBounds,
@@ -295,7 +297,7 @@ public sealed class PhaseLResizeGestureIntegrationTests
             "demo:beta-gamma").Geometry.Points);
 
         var redo = await session.RedoAsync();
-        await session.WaitForIdleAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+        await WaitForCommittedEventAndSessionIdleAsync(context.Document, session);
         Assert.True(redo.IsCommitted);
         AssertBoundsEqual(
             expectedBounds,
@@ -407,7 +409,7 @@ public sealed class PhaseLResizeGestureIntegrationTests
             secondMove.SessionState.CurrentScene!,
             finalPoint,
             button: 0));
-        await session.WaitForIdleAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+        await WaitForCommittedEventAndSessionIdleAsync(context.Document, session);
         var committed = session.CaptureState();
         var committedDocument = context.Document.CaptureSnapshot();
 
@@ -429,7 +431,7 @@ public sealed class PhaseLResizeGestureIntegrationTests
         Assert.Equal(initialRenderCount + 4, context.Execution.RenderCount);
 
         var undo = await session.UndoAsync();
-        await session.WaitForIdleAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+        await WaitForCommittedEventAndSessionIdleAsync(context.Document, session);
         var undone = session.CaptureState();
         var undoneDocument = context.Document.CaptureSnapshot();
 
@@ -443,7 +445,7 @@ public sealed class PhaseLResizeGestureIntegrationTests
         AssertSemanticMeaningUnchanged(initialElements, initialRelationships, undoneDocument);
 
         var redo = await session.RedoAsync();
-        await session.WaitForIdleAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+        await WaitForCommittedEventAndSessionIdleAsync(context.Document, session);
         var redone = session.CaptureState();
         var redoneDocument = context.Document.CaptureSnapshot();
 
@@ -546,7 +548,7 @@ public sealed class PhaseLResizeGestureIntegrationTests
             beta.Position + new VectorD(12d, 8d),
             VisualPlacementMode.Pinned));
         Assert.True(external.IsCommitted);
-        await session.WaitForIdleAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+        await WaitForCommittedEventAndSessionIdleAsync(context.Document, session);
 
         var stale = await interaction.PointerReleasedAsync(Pointer(
             203,
@@ -567,7 +569,55 @@ public sealed class PhaseLResizeGestureIntegrationTests
         Assert.Equal(initialRoutingCount + 1, context.Counters.RoutingInvocationCount);
     }
 
-    private static async ValueTask<ResizeIntegrationContext> AttachAsync()
+    [Fact]
+    public async Task CommittedResizeCanReachSessionIdleBeforeExternalEventDelivery()
+    {
+        var deliveryGate = new GatedSubscriber();
+        var context = await AttachAsync(deliveryGate);
+        await using var session = context.Session;
+        await using var interaction = new Canvas2DInteractionController(session);
+        var initial = session.CaptureState();
+        var visual = FindVisual(context.Document.CaptureSnapshot(), "demo:alpha");
+        var start = Center(FindResizeHandle(
+            initial.CurrentScene!, visual.Id, Canvas2DResizeDirection.SouthWest).Bounds);
+        var finish = start + new VectorD(20d, 15d);
+
+        try
+        {
+            var pressed = await interaction.PointerPressedAsync(Pointer(
+                814, initial.CurrentScene!, start, button: 0, buttons: 1));
+            var moved = await interaction.PointerMovedAsync(Pointer(
+                814, pressed.SessionState.CurrentScene!, finish, buttons: 1));
+            var released = await interaction.PointerReleasedAsync(Pointer(
+                814, moved.SessionState.CurrentScene!, finish, button: 0));
+            await deliveryGate.Entered.WaitAsync(TimeSpan.FromSeconds(5));
+            await session.WaitForIdleAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+
+            Assert.Equal(Canvas2DInteractionStatus.Committed, released.Status);
+            Assert.True(released.PersistentOperation!.IsCommitted);
+            Assert.Equal(new DocumentRevision(1), context.Document.Revision);
+            Assert.Equal(new HistoryStatus(1, true, false), session.CaptureState().HistoryStatus);
+            AssertBoundsEqual(new RectD(80d, 70d, 130d, 85d), FindVisualContent(
+                session.CaptureState().CurrentScene!, visual.Id).Bounds);
+            Assert.Empty(context.Events.Events);
+
+            var settled = WaitForCommittedEventAndSessionIdleAsync(context.Document, session);
+            Assert.False(settled.IsCompleted);
+            deliveryGate.Release();
+            await settled;
+
+            Assert.Equal([new DocumentRevision(1)], EventRevisions(context.Events));
+            Assert.Equal(new DocumentRevision(1), session.CaptureState().DocumentRevision);
+            Assert.Equal(new HistoryStatus(1, true, false), session.CaptureState().HistoryStatus);
+        }
+        finally
+        {
+            deliveryGate.Release();
+        }
+    }
+
+    private static async ValueTask<ResizeIntegrationContext> AttachAsync(
+        IDocumentChangedSubscriber? beforeRecording = null)
     {
         var composition = NeutralDemoPipeline.CreateComposition();
         var events = new RecordingSubscriber();
@@ -590,7 +640,7 @@ public sealed class PhaseLResizeGestureIntegrationTests
                 new CommandValidatorId("test:phase-l:resize-count"),
                 resizeProbe)),
             source.HistoryPolicies,
-            [events]);
+            beforeRecording is null ? [events] : [beforeRecording, events]);
         var execution = new RecordingRenderExecution();
         var renderer = new Canvas2DRenderer(execution, RendererConfiguration());
         Assert.True((await renderer.InitializeAsync(
@@ -815,6 +865,22 @@ public sealed class PhaseLResizeGestureIntegrationTests
         RecordingRenderExecution Execution,
         RecordingSubscriber Events,
         CountingCommandValidator ResizeProbe);
+
+    private sealed class GatedSubscriber : IDocumentChangedSubscriber
+    {
+        private readonly TaskCompletionSource _entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        internal Task Entered => _entered.Task;
+
+        internal void Release() => _release.TrySetResult();
+
+        public async ValueTask OnDocumentChangedAsync(DocumentChangedEvent change)
+        {
+            _entered.TrySetResult();
+            await _release.Task;
+        }
+    }
 
     private sealed class RecordingSubscriber : IDocumentChangedSubscriber
     {

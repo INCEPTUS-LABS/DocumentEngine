@@ -14,6 +14,8 @@ using Inceptus.DocumentEngine.Contracts.History;
 using Inceptus.DocumentEngine.Contracts.Primitives;
 using Inceptus.DocumentEngine.Contracts.Text;
 
+using static Inceptus.DocumentEngine.IntegrationTests.EditingSessionTestSynchronization;
+
 namespace Inceptus.DocumentEngine.IntegrationTests;
 
 public sealed class PhaseL2NodeLabelIntegrationTests
@@ -160,7 +162,7 @@ public sealed class PhaseL2NodeLabelIntegrationTests
             moved.SessionState.CurrentScene!,
             finish,
             button: 0));
-        await session.WaitForIdleAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+        await WaitForCommittedEventAndSessionIdleAsync(composition.Document, session);
         var committed = session.CaptureState();
         Assert.Equal(Canvas2DInteractionStatus.Committed, released.Status);
         Assert.Equal(ResizeVisualStateCommand.KnownTypeId, released.PersistentOperation!.CommandTypeId);
@@ -178,7 +180,7 @@ public sealed class PhaseL2NodeLabelIntegrationTests
             FindLabel(committed.CurrentScene!, "demo:gamma"));
 
         var undo = await session.UndoAsync();
-        await session.WaitForIdleAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+        await WaitForCommittedEventAndSessionIdleAsync(composition.Document, session);
         var undone = session.CaptureState();
         Assert.True(undo.IsCommitted);
         Assert.Equal(new HistoryStatus(1, false, true), undone.HistoryStatus);
@@ -187,7 +189,7 @@ public sealed class PhaseL2NodeLabelIntegrationTests
             FindLabel(undone.CurrentScene!, "demo:gamma"));
 
         var redo = await session.RedoAsync();
-        await session.WaitForIdleAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+        await WaitForCommittedEventAndSessionIdleAsync(composition.Document, session);
         var redone = session.CaptureState();
         Assert.True(redo.IsCommitted);
         Assert.Equal(new HistoryStatus(1, true, false), redone.HistoryStatus);
@@ -238,7 +240,7 @@ public sealed class PhaseL2NodeLabelIntegrationTests
             movePreview.SessionState.CurrentScene!,
             moveFinish,
             button: 0));
-        await session.WaitForIdleAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+        await WaitForCommittedEventAndSessionIdleAsync(composition.Document, session);
         var movedReady = session.CaptureState();
         Assert.Equal(Canvas2DInteractionStatus.Committed, moveReleased.Status);
         Assert.Equal(MoveVisualStateCommand.KnownTypeId, moveReleased.PersistentOperation!.CommandTypeId);

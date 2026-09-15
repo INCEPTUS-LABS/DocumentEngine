@@ -1,5 +1,13 @@
 # Release notes
 
+## 0.1.5 development
+
+- Defaults the source Blazor host UI to neutral English while keeping data culture invariant; reusable modeler languages remain host-selected.
+- Simplifies element Properties to Data and Parameters, with readonly Type. Technical identities and visual geometry remain in the model and are no longer shown in this form.
+- Hides ordinary Properties for BPMN Events and elements without Data fields. Long-form fields such as Description use a wider, responsive dialog and a taller editor, while short fields stay compact.
+- Closes Properties after successful Apply and retains failed drafts for review. Existing commands, History, document events and data formats remain authoritative.
+- Starts the coordinated six-package 0.1.5 development line, including the P1.14 deterministic integration-event synchronization correction. Existing dependency rules and the public v0.1.4 release remain unchanged.
+
 ## 0.1.4 development
 
 - Adds modeler UI localization for English, Polish, French, German and Spanish using standard .NET resources and `IStringLocalizer`. English is the neutral/default resource and final fallback; regional cultures use standard parent-culture fallback.

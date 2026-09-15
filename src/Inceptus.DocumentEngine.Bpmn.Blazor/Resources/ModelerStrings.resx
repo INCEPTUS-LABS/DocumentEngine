@@ -47,21 +47,12 @@
   <data name="Properties_Title" xml:space="preserve"><value>Properties</value></data>
   <data name="Properties_Close" xml:space="preserve"><value>Close properties</value></data>
   <data name="Properties_Data" xml:space="preserve"><value>Data</value></data>
-  <data name="Properties_Identity" xml:space="preserve"><value>Identity</value></data>
-  <data name="Properties_SemanticId" xml:space="preserve"><value>Semantic ID</value></data>
-  <data name="Properties_VisualId" xml:space="preserve"><value>Visual State ID</value></data>
   <data name="Properties_Type" xml:space="preserve"><value>Type</value></data>
-  <data name="Properties_Visual" xml:space="preserve"><value>Visual</value></data>
-  <data name="Properties_Placement" xml:space="preserve"><value>Placement</value></data>
+  <data name="Properties_Parameters" xml:space="preserve"><value>Parameters</value></data>
   <data name="Properties_X" xml:space="preserve"><value>X</value></data>
   <data name="Properties_Y" xml:space="preserve"><value>Y</value></data>
   <data name="Properties_Width" xml:space="preserve"><value>Width</value></data>
   <data name="Properties_Height" xml:space="preserve"><value>Height</value></data>
-  <data name="Properties_Source" xml:space="preserve"><value>Source</value></data>
-  <data name="Properties_Target" xml:space="preserve"><value>Target</value></data>
-  <data name="Properties_LabelPath" xml:space="preserve"><value>Label path position</value></data>
-  <data name="Properties_LabelOffsetX" xml:space="preserve"><value>Label offset X</value></data>
-  <data name="Properties_LabelOffsetY" xml:space="preserve"><value>Label offset Y</value></data>
   <data name="Accessibility_ValidationIssues" xml:space="preserve"><value>Validation issues</value></data>
   <data name="Status_Issues" xml:space="preserve"><value>Issues</value></data>
   <data name="Status_CloseIssues" xml:space="preserve"><value>Close Issues</value></data>
@@ -171,7 +162,4 @@
   <data name="Validation_MinHeight" xml:space="preserve"><value>Height must be at least {0}.</value></data>
   <data name="Validation_Bounds" xml:space="preserve"><value>The requested bounds must be finite and renderable.</value></data>
   <data name="Validation_Finite" xml:space="preserve"><value>{0} must be a finite number.</value></data>
-  <data name="Placement_Automatic" xml:space="preserve"><value>Automatic</value></data>
-  <data name="Placement_Pinned" xml:space="preserve"><value>Pinned</value></data>
-  <data name="Placement_Manual" xml:space="preserve"><value>Manual</value></data>
 </root>

@@ -109,7 +109,7 @@ public sealed class SolutionArchitectureTests
     {
         var buildProperties = XDocument.Load(Path.Combine(RepositoryRoot, "Directory.Build.props"));
 
-        Assert.Equal("0.1.4", ReadElementValue(buildProperties, "Version"));
+        Assert.Equal("0.1.5", ReadElementValue(buildProperties, "Version"));
         Assert.Equal("Robert Prokopczuk", ReadElementValue(buildProperties, "Authors"));
 
         var releaseTargets = XDocument.Load(Path.Combine(RepositoryRoot, "Directory.Build.targets"));

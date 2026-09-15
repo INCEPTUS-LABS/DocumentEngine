@@ -1,8 +1,15 @@
+using System.Globalization;
 using Inceptus.DocumentEngine.Blazor.Demo;
 using Inceptus.DocumentEngine.Blazor;
 using Inceptus.DocumentEngine.Bpmn.Blazor;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
+
+var uiCulture = CultureInfo.GetCultureInfo("en");
+CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
+CultureInfo.DefaultThreadCurrentUICulture = uiCulture;
+CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
+CultureInfo.CurrentUICulture = uiCulture;
 
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");

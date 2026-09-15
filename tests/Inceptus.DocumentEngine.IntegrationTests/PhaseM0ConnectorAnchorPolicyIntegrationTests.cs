@@ -16,6 +16,8 @@ using Inceptus.DocumentEngine.Contracts.Text;
 using Inceptus.DocumentEngine.Contracts.Visuals;
 using Inceptus.DocumentEngine.Runtime.Documents;
 
+using static Inceptus.DocumentEngine.IntegrationTests.EditingSessionTestSynchronization;
+
 namespace Inceptus.DocumentEngine.IntegrationTests;
 
 public sealed class PhaseM0ConnectorAnchorPolicyIntegrationTests
@@ -215,13 +217,13 @@ public sealed class PhaseM0ConnectorAnchorPolicyIntegrationTests
             anchor => anchor.Id == expectedOrder[1]);
 
         Assert.True((await harness.Session.UndoAsync()).IsCommitted);
-        await harness.Session.WaitForIdleAsync();
+        await WaitForCommittedEventAndSessionIdleAsync(harness.Document, harness.Session);
         Assert.Contains(
             Visual(CaptureDocument(harness.Session), AlphaId).ConnectorAnchors,
             anchor => anchor.Id == expectedOrder[1]);
 
         Assert.True((await harness.Session.RedoAsync()).IsCommitted);
-        await harness.Session.WaitForIdleAsync();
+        await WaitForCommittedEventAndSessionIdleAsync(harness.Document, harness.Session);
         Assert.DoesNotContain(
             Visual(CaptureDocument(harness.Session), AlphaId).ConnectorAnchors,
             anchor => anchor.Id == expectedOrder[1]);
@@ -387,7 +389,7 @@ public sealed class PhaseM0ConnectorAnchorPolicyIntegrationTests
             command);
         if (result.IsCommitted)
         {
-            await harness.Session.WaitForIdleAsync();
+            await WaitForCommittedEventAndSessionIdleAsync(harness.Document, harness.Session);
         }
 
         return result;
@@ -585,17 +587,21 @@ public sealed class PhaseM0ConnectorAnchorPolicyIntegrationTests
     {
         private Harness(
             NeutralDemoComposition composition,
+            Document document,
             EditingSession session,
             Canvas2DInteractionController interaction,
             RecordingSubscriber events)
         {
             Composition = composition;
+            Document = document;
             Session = session;
             Interaction = interaction;
             Events = events;
         }
 
         internal NeutralDemoComposition Composition { get; }
+
+        internal Document Document { get; }
 
         internal EditingSession Session { get; }
 
@@ -641,6 +647,7 @@ public sealed class PhaseM0ConnectorAnchorPolicyIntegrationTests
             Assert.Equal(EditingSessionAttachStatus.Ready, attachment.Status);
             return new Harness(
                 composition,
+                document,
                 session,
                 new Canvas2DInteractionController(session),
                 events);

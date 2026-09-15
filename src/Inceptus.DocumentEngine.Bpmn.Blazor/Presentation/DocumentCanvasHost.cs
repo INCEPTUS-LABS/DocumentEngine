@@ -1144,6 +1144,19 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
         }
     }
 
+    internal bool CanOpenContextProperties()
+    {
+        lock (_sync)
+        {
+            return !_disposed && _initialized &&
+                _contextMenu is { Kind: DocumentCanvasContextMenuKind.Element } context &&
+                _session is { } session && _propertiesSchemaCatalog is { } catalog &&
+                TryCaptureSelectedProperties(session, context.TargetVisualStateId,
+                    context.TargetSemanticElementId, requireReady: true, catalog, out _,
+                    context.TargetSceneObjectId, context.TargetPresentation?.Id);
+        }
+    }
+
     internal bool TryCaptureSelectedProperties(
         VisualStateId targetVisualStateId,
         out DocumentCanvasPropertySnapshot? snapshot)
@@ -1433,6 +1446,9 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
             }
 
             await session.WaitForIdleAsync(linked.Token).ConfigureAwait(false);
+            // The exact Scene item was checked before the command. A committed Name
+            // edit can replace its rendered label lines, so refresh using the same
+            // authoritative element and spatial presentation rather than the old line.
             if (!TryCaptureSelectedProperties(
                     session,
                     current.VisualStateId,
@@ -1440,8 +1456,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                     requireReady: false,
                     propertiesSchemaCatalog,
                     out var refreshed,
-                    current.TargetSceneObjectId,
-                    current.SpatialRegion?.Id) ||
+                    expectedPresentationId: current.SpatialRegion?.Id) ||
                 refreshed is null)
             {
                 return CreateApplyFailure(
@@ -4304,6 +4319,20 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                 }
             }
 
+            // Selection can retarget an existing form without another Open call.
+            // Only a captured, explicitly ineligible target closes it here;
+            // transient capture failures retain the existing stale-form behavior.
+            if (_propertiesFormOpen && !_propertiesApplyInFlight &&
+                eventArgs.State.Status == EditingSessionStatus.Ready &&
+                _session is { } propertiesSession && _propertiesSchemaCatalog is { } propertiesCatalog &&
+                !TryCaptureSelectedProperties(propertiesSession, _propertiesTargetVisualStateId,
+                    _propertiesTargetSemanticElementId, requireReady: false, propertiesCatalog,
+                    out var propertiesTarget, expectedPresentationId: _propertiesTargetPresentationId) &&
+                propertiesTarget is { IsPropertiesAvailable: false })
+            {
+                _ = UpdatePropertiesFormState(isOpen: false, targetVisualStateId: null, isDirty: false);
+            }
+
             if (_modelViewPropertiesFormOpen &&
                 (eventArgs.State.IsClosed ||
                  eventArgs.State.Status == EditingSessionStatus.RuntimeFaulted ||
@@ -4471,7 +4500,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                         targetItem.Id,
                         targetItem.SpatialRegion,
                         confirmed.Generation,
-                        confirmed.CurrentScene);
+                        confirmed.CurrentScene) && snapshot is { IsPropertiesAvailable: true };
                 }
 
                 var presentationItem = confirmed.CurrentScene?.Items.FirstOrDefault(item =>
@@ -4487,7 +4516,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                         presentationItem.Bounds,
                         propertiesSchemaCatalog,
                         out snapshot) ||
-                    snapshot is null)
+                    snapshot is not { IsPropertiesAvailable: true })
                 {
                     return false;
                 }

@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Globalization;
+using Inceptus.DocumentEngine.Bpmn.Semantics;
 using Inceptus.DocumentEngine.Canvas2D.EditingSession;
 using Inceptus.DocumentEngine.Canvas2D.Interaction;
 using Inceptus.DocumentEngine.Canvas2D.Rendering;
@@ -279,6 +280,13 @@ internal sealed record DocumentCanvasPropertySnapshot(
     EditingSessionGeneration? SessionGeneration = null,
     Canvas2DScene? SourceScene = null)
 {
+    // Ordinary element UI eligibility is presentation policy; schemas and their
+    // internal values remain available to commands, serialization and diagnostics.
+    internal bool IsPropertiesAvailable => !DataFields.IsEmpty && !BpmnSemanticTypes.IsEvent(TypeId);
+
+    internal bool HasLongFormData => DataFields.Any(static item =>
+        item.Definition.EditorKind == ElementPropertyEditorKind.MultilineText);
+
     internal bool CanEditBounds => VisualStateId is not null &&
         !IsConnector && !IsBoundaryAttached;
 

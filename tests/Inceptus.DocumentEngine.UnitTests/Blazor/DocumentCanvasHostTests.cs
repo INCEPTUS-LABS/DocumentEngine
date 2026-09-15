@@ -1525,13 +1525,13 @@ public sealed partial class DocumentCanvasHostTests
         Assert.Equal(expectedBounds, body.Bounds);
         Assert.Equal(new PointD(850d, 570d), Center(body.Bounds));
 
-        var properties = Assert.IsType<DocumentCanvasPropertySnapshot>(
-            await host.OpenPropertiesAsync(createdVisual.Id));
+        Assert.Null(await host.OpenPropertiesAsync(createdVisual.Id));
+        Assert.False(host.TryCaptureSelectedProperties(createdVisual.Id, out var properties));
+        Assert.NotNull(properties);
         Assert.Equal(expectedBounds, properties.Bounds);
-        Assert.True(host.UpdatePropertiesFormState(false, null, isDirty: false));
-        var reopened = Assert.IsType<DocumentCanvasPropertySnapshot>(
-            await host.OpenPropertiesAsync(createdVisual.Id));
-        Assert.Equal(expectedBounds, reopened.Bounds);
+        Assert.Null(await host.OpenPropertiesAsync(createdVisual.Id));
+        Assert.False(host.CaptureState().PropertiesFormOpen);
+        Assert.Equal(expectedBounds, body.Bounds);
 
         var panned = await session.UpdateViewportAsync(
             new ViewportSnapshot(1d, new VectorD(50d, 30d)));
@@ -2146,13 +2146,13 @@ public sealed partial class DocumentCanvasHostTests
         Assert.Contains(noRouteEdge.Id, undoneFallbackAdd.RoutingResult!.NoRouteEdgeIds);
         Assert.Contains(undoneFallbackAdd.CurrentScene!.Items, item => item.Id == fallbackId);
 
-        var fallbackProperties = Assert.IsType<DocumentCanvasPropertySnapshot>(
-            await host.OpenPropertiesAsync(BpmnDemoPipeline.SecondSequenceFlowVisualId));
+        Assert.Null(await host.OpenPropertiesAsync(BpmnDemoPipeline.SecondSequenceFlowVisualId));
+        Assert.False(host.TryCaptureSelectedProperties(BpmnDemoPipeline.SecondSequenceFlowVisualId,
+            out var fallbackProperties));
+        Assert.NotNull(fallbackProperties);
         Assert.True(fallbackProperties.IsConnector);
-        Assert.True(host.UpdatePropertiesFormState(
-            isOpen: false,
-            targetVisualStateId: null,
-            isDirty: false));
+        Assert.Empty(fallbackProperties.DataFields);
+        Assert.False(host.CaptureState().PropertiesFormOpen);
 
         var interactionScene = session.CaptureState().CurrentScene!;
         var interactiveNode = Assert.Single(interactionScene.Items, item =>
@@ -3334,7 +3334,7 @@ public sealed partial class DocumentCanvasHostTests
     }
 
     [Fact]
-    public async Task TimerDefinitionPropertiesApplyUpdatesInitiallyEmptyValueThroughEditingSession()
+    public async Task TimerDefinitionSchemaAndCommandsRemainIntactWhileEventPropertiesAreUnavailable()
     {
         var execution = new RecordingRenderExecution();
         var observer = new RecordingSurfaceObserver(new Canvas2DSurfaceSize(720d, 480d, 1d));
@@ -3358,18 +3358,21 @@ public sealed partial class DocumentCanvasHostTests
         await PointerObserver(host).ClickDocumentPointAsync(scene, Center(timerBody.Bounds));
         Assert.Equal(target, Assert.Single(host.CaptureState().Session!.EditorState.Selection));
 
-        var authoritative = Assert.IsType<DocumentCanvasPropertySnapshot>(
-            await host.OpenPropertiesAsync(target));
+        Assert.Null(await host.OpenPropertiesAsync(target));
+        Assert.False(host.CaptureState().PropertiesFormOpen);
+        Assert.True(DocumentCanvasPropertySnapshot.TryCreate(beforeDocument, target,
+            new ElementPropertiesSchemaCatalog(BpmnPluginRegistration.N100.PropertiesSchemas), out var authoritative));
         Assert.Equal(string.Empty, DataEditorValue(authoritative, TimerDefinitionFieldId));
-        var draft = new DocumentCanvasPropertiesDraft(authoritative);
-        SetDataValue(draft, TimerDefinitionFieldId, "PT15M");
-        Assert.True(host.UpdatePropertiesFormState(true, target, isDirty: draft.IsDirty));
+        Assert.True(DataField(authoritative, TimerDefinitionFieldId).CanEdit);
         var before = host.CaptureState().Session!;
 
-        var committed = await host.ApplyPropertiesAsync(draft);
+        var committed = await Session(host).ExecuteAsync(new UpdateSemanticElementPropertyCommand(
+            beforeDocument.DocumentId, beforeDocument.Revision, BpmnDemoPipeline.TimerCatchEventId,
+            BpmnSemanticProperties.TimerDefinition, PropertyValue.FromText("PT15M")));
+        await Session(host).WaitForIdleAsync();
 
-        Assert.Equal(DocumentCanvasPropertiesApplyStatus.Committed, committed.Status);
-        Assert.Equal("PT15M", DataEditorValue(committed.Authoritative, TimerDefinitionFieldId));
+        Assert.True(committed.IsCommitted);
+        Assert.False(host.CaptureState().PropertiesFormOpen);
         var after = host.CaptureState().Session!;
         Assert.Equal(before.DocumentRevision.Increment(), after.DocumentRevision);
         Assert.Equal(before.HistoryStatus.EntryCount + 1, after.HistoryStatus.EntryCount);

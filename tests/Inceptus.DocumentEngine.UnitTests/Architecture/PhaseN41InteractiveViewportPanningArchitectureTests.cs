@@ -127,7 +127,7 @@ public sealed class PhaseN41InteractiveViewportPanningArchitectureTests
         Assert.Contains("<ToolboxPanel", razor, StringComparison.Ordinal);
         Assert.Contains("<canvas", razor, StringComparison.Ordinal);
         Assert.Contains("class=\"object-context-menu\"", razor, StringComparison.Ordinal);
-        Assert.Contains("class=\"properties-form\"", razor, StringComparison.Ordinal);
+        Assert.Contains("class=\"properties-form ", razor, StringComparison.Ordinal);
     }
 
     [Fact]

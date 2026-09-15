@@ -47,21 +47,12 @@
   <data name="Properties_Title" xml:space="preserve"><value>Eigenschaften</value></data>
   <data name="Properties_Close" xml:space="preserve"><value>Eigenschaften schließen</value></data>
   <data name="Properties_Data" xml:space="preserve"><value>Daten</value></data>
-  <data name="Properties_Identity" xml:space="preserve"><value>Identität</value></data>
-  <data name="Properties_SemanticId" xml:space="preserve"><value>Semantische ID</value></data>
-  <data name="Properties_VisualId" xml:space="preserve"><value>ID des visuellen Zustands</value></data>
   <data name="Properties_Type" xml:space="preserve"><value>Typ</value></data>
-  <data name="Properties_Visual" xml:space="preserve"><value>Darstellung</value></data>
-  <data name="Properties_Placement" xml:space="preserve"><value>Platzierung</value></data>
+  <data name="Properties_Parameters" xml:space="preserve"><value>Parameter</value></data>
   <data name="Properties_X" xml:space="preserve"><value>X</value></data>
   <data name="Properties_Y" xml:space="preserve"><value>Y</value></data>
   <data name="Properties_Width" xml:space="preserve"><value>Breite</value></data>
   <data name="Properties_Height" xml:space="preserve"><value>Höhe</value></data>
-  <data name="Properties_Source" xml:space="preserve"><value>Quelle</value></data>
-  <data name="Properties_Target" xml:space="preserve"><value>Ziel</value></data>
-  <data name="Properties_LabelPath" xml:space="preserve"><value>Beschriftungsposition auf dem Pfad</value></data>
-  <data name="Properties_LabelOffsetX" xml:space="preserve"><value>Beschriftungsversatz X</value></data>
-  <data name="Properties_LabelOffsetY" xml:space="preserve"><value>Beschriftungsversatz Y</value></data>
   <data name="Accessibility_ValidationIssues" xml:space="preserve"><value>Validierungsprobleme</value></data>
   <data name="Status_Issues" xml:space="preserve"><value>Probleme</value></data>
   <data name="Status_CloseIssues" xml:space="preserve"><value>Probleme schließen</value></data>
@@ -171,7 +162,4 @@
   <data name="Validation_MinHeight" xml:space="preserve"><value>Die Höhe muss mindestens {0} betragen.</value></data>
   <data name="Validation_Bounds" xml:space="preserve"><value>Die angegebenen Abmessungen müssen endlich und darstellbar sein.</value></data>
   <data name="Validation_Finite" xml:space="preserve"><value>Das Feld „{0}“ muss eine endliche Zahl enthalten.</value></data>
-  <data name="Placement_Automatic" xml:space="preserve"><value>Automatisch</value></data>
-  <data name="Placement_Pinned" xml:space="preserve"><value>Fixiert</value></data>
-  <data name="Placement_Manual" xml:space="preserve"><value>Manuell</value></data>
 </root>

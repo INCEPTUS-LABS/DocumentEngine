@@ -18,6 +18,8 @@ using Inceptus.DocumentEngine.Contracts.Text;
 using Inceptus.DocumentEngine.Contracts.Visuals;
 using Inceptus.DocumentEngine.Runtime.Documents;
 
+using static Inceptus.DocumentEngine.IntegrationTests.EditingSessionTestSynchronization;
+
 namespace Inceptus.DocumentEngine.IntegrationTests;
 
 public sealed class PhaseL3MultiSelectionIntegrationTests
@@ -177,7 +179,7 @@ public sealed class PhaseL3MultiSelectionIntegrationTests
         AssertSemanticMeaningUnchanged(initialDocument, committedDocument);
 
         var undo = await session.UndoAsync();
-        await session.WaitForIdleAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+        await WaitForCommittedEventAndSessionIdleAsync(harness.Document, session);
         var undone = session.CaptureState();
         Assert.True(undo.IsCommitted);
         Assert.Equal(new HistoryStatus(1, false, true), undone.HistoryStatus);
@@ -189,7 +191,7 @@ public sealed class PhaseL3MultiSelectionIntegrationTests
         }
 
         var redo = await session.RedoAsync();
-        await session.WaitForIdleAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+        await WaitForCommittedEventAndSessionIdleAsync(harness.Document, session);
         var redone = session.CaptureState();
         Assert.True(redo.IsCommitted);
         Assert.Equal(new HistoryStatus(1, true, false), redone.HistoryStatus);
@@ -298,7 +300,7 @@ public sealed class PhaseL3MultiSelectionIntegrationTests
         AssertConnectorAnchorsMatchNodes(committed.CurrentScene!, betaId, gammaId, connectorId);
 
         Assert.True((await session.UndoAsync()).IsCommitted);
-        await session.WaitForIdleAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+        await WaitForCommittedEventAndSessionIdleAsync(harness.Document, session);
         AssertPointEqual(
             Visual(initialDocument, betaId).Position,
             Visual(harness.Document.CaptureSnapshot(), betaId).Position);
@@ -307,7 +309,7 @@ public sealed class PhaseL3MultiSelectionIntegrationTests
             Visual(harness.Document.CaptureSnapshot(), gammaId).Position);
 
         Assert.True((await session.RedoAsync()).IsCommitted);
-        await session.WaitForIdleAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+        await WaitForCommittedEventAndSessionIdleAsync(harness.Document, session);
         AssertPointEqual(Visual(initialDocument, betaId).Position + delta,
             Visual(harness.Document.CaptureSnapshot(), betaId).Position);
         AssertPointEqual(Visual(initialDocument, gammaId).Position + delta,

@@ -11,7 +11,24 @@ namespace Inceptus.DocumentEngine.UnitTests.Architecture;
 public sealed class PhaseL5ContextPropertiesArchitectureTests
 {
     [Fact]
-    public void PropertiesUiIsAViewportFixedDataIdentityVisualFormOverlay()
+    public void PropertiesLongFormLayoutIsWideResponsiveAndKeepsShortFieldsCompact()
+    {
+        var styles = ReadProductionFile("Inceptus.DocumentEngine.Bpmn.Blazor",
+            "Components", "DocumentCanvas.razor.css");
+        var wide = Between(styles, ".properties-form-wide {", "}");
+        Assert.Contains("width: min(69rem, calc(100vw - 2rem))", wide, StringComparison.Ordinal);
+        var compact = Between(styles, ".properties-form .properties-field-compact {", "}");
+        Assert.Contains("width: min(19rem, 100%)", compact, StringComparison.Ordinal);
+        Assert.Contains("min-width: 0", compact, StringComparison.Ordinal);
+        var longForm = Between(styles, ".properties-form .properties-field-long-form {", "}");
+        Assert.Contains("width: 100%", longForm, StringComparison.Ordinal);
+        var editor = Between(styles, ".properties-form .properties-long-form-editor {", "}");
+        Assert.Contains("min-height: 11rem", editor, StringComparison.Ordinal);
+        Assert.Contains("max-height: none", editor, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PropertiesUiIsAViewportFixedDataParametersFormOverlay()
     {
         var component = ReadProductionFile(
             "Inceptus.DocumentEngine.Bpmn.Blazor",
@@ -26,12 +43,7 @@ public sealed class PhaseL5ContextPropertiesArchitectureTests
             "id=\"@DomId(\"properties-form\")\"",
             StringComparison.Ordinal);
         var dataIndex = component.IndexOf("data-property-group=\"data\"", StringComparison.Ordinal);
-        var identityIndex = component.IndexOf(
-            "data-property-group=\"identity\"",
-            StringComparison.Ordinal);
-        var visualIndex = component.IndexOf(
-            "data-property-group=\"visual\"",
-            StringComparison.Ordinal);
+        var parametersIndex = component.IndexOf("data-property-group=\"parameters\"", StringComparison.Ordinal);
 
         Assert.True(canvasIndex >= 0 && formIndex > canvasIndex);
         Assert.Contains("<form id=\"@DomId(\"properties-form\")\"", component,
@@ -44,7 +56,9 @@ public sealed class PhaseL5ContextPropertiesArchitectureTests
         Assert.Contains("<button id=\"@DomId(\"properties-close\")\"", component,
             StringComparison.Ordinal);
         Assert.Contains("readonly", component, StringComparison.Ordinal);
-        Assert.True(dataIndex > formIndex && identityIndex > dataIndex && visualIndex > identityIndex);
+        Assert.True(dataIndex > formIndex && parametersIndex > dataIndex);
+        Assert.DoesNotContain("data-property-group=\"identity\"", component, StringComparison.Ordinal);
+        Assert.DoesNotContain("data-property-group=\"visual\"", component, StringComparison.Ordinal);
         Assert.Contains("<legend>@Text[\"Properties_Data\"]</legend>", component, StringComparison.Ordinal);
         var dataGroup = Between(
             component,
@@ -84,8 +98,6 @@ public sealed class PhaseL5ContextPropertiesArchitectureTests
 
         foreach (var identityControlId in new[]
                  {
-                     "properties-semantic-id",
-                     "properties-visual-id",
                      "properties-type",
                  })
         {
@@ -151,10 +163,8 @@ public sealed class PhaseL5ContextPropertiesArchitectureTests
             "private static bool TryCaptureSelectedProperties(",
             "private static DocumentCanvasPropertiesApplyResult CreateApplyFailure(");
 
-        Assert.Contains("ContextMenu?.TargetVisualStateId", availability,
-            StringComparison.Ordinal);
-        Assert.Contains("EditorState.Selection.Contains(targetVisualStateId)", availability,
-            StringComparison.Ordinal);
+        Assert.Contains("_host?.CanOpenContextProperties()", availability, StringComparison.Ordinal);
+        Assert.Contains("IsPropertiesAvailable: true", capture, StringComparison.Ordinal);
         Assert.Contains("IsCurrentPropertiesTarget(_state, draft.Authoritative)",
             reconciliation, StringComparison.Ordinal);
         Assert.Contains("new DocumentCanvasPropertiesDraft(replacement)", reconciliation,
@@ -295,11 +305,11 @@ public sealed class PhaseL5ContextPropertiesArchitectureTests
             StringComparison.Ordinal);
         Assert.Contains("data-property-field-id=\"@field.FieldId.Value\"", component,
             StringComparison.Ordinal);
-        Assert.Contains("id=\"@DomId(\"properties-placement\")\"", component,
+        Assert.DoesNotContain("id=\"@DomId(\"properties-placement\")\"", component,
             StringComparison.Ordinal);
-        Assert.Contains("id=\"@DomId(\"properties-source\")\"", component,
+        Assert.DoesNotContain("id=\"@DomId(\"properties-source\")\"", component,
             StringComparison.Ordinal);
-        Assert.Contains("id=\"@DomId(\"properties-target\")\"", component,
+        Assert.DoesNotContain("id=\"@DomId(\"properties-target\")\"", component,
             StringComparison.Ordinal);
         Assert.Contains("value=\"@field.EditorValue\"", component, StringComparison.Ordinal);
         Assert.Contains("readonly=\"@(!field.CanEdit)\"", component,
@@ -572,7 +582,10 @@ public sealed class PhaseL5ContextPropertiesArchitectureTests
                 "EditingSession",
                 "EditingSession.Document.cs");
 
-        Assert.DoesNotContain("BpmnSemanticTypes", phaseSources, StringComparison.Ordinal);
+        // P1.15 explicitly excludes Events in the BPMN presentation package.
+        Assert.Contains("!BpmnSemanticTypes.IsEvent(TypeId)", phaseSources, StringComparison.Ordinal);
+        Assert.DoesNotContain("BpmnSemanticTypes", ReadProductionDirectory(
+            "Inceptus.DocumentEngine.Canvas2D", "EditingSession"), StringComparison.Ordinal);
         Assert.DoesNotContain("BpmnPluginRegistration", phaseSources, StringComparison.Ordinal);
         Assert.DoesNotContain("CreateBpmn", phaseSources, StringComparison.Ordinal);
         Assert.DoesNotContain("JsonSerializer", phaseSources, StringComparison.OrdinalIgnoreCase);

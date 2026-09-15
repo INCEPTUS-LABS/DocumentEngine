@@ -16,6 +16,8 @@ using Inceptus.DocumentEngine.Contracts.Primitives;
 using Inceptus.DocumentEngine.Contracts.Text;
 using Inceptus.DocumentEngine.Contracts.Visuals;
 
+using static Inceptus.DocumentEngine.IntegrationTests.EditingSessionTestSynchronization;
+
 namespace Inceptus.DocumentEngine.IntegrationTests;
 
 public sealed class PhaseLRouteGestureIntegrationTests
@@ -96,7 +98,7 @@ public sealed class PhaseLRouteGestureIntegrationTests
             secondMove.SessionState.CurrentScene!,
             finalPoint,
             button: 0));
-        await session.WaitForIdleAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+        await WaitForCommittedEventAndSessionIdleAsync(context.Document, session);
         var committed = session.CaptureState();
         var committedDocument = context.Document.CaptureSnapshot();
 
@@ -119,7 +121,7 @@ public sealed class PhaseLRouteGestureIntegrationTests
         Assert.Equal(initialRenderCount + 4, context.Execution.RenderCount);
 
         var undo = await session.UndoAsync();
-        await session.WaitForIdleAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+        await WaitForCommittedEventAndSessionIdleAsync(context.Document, session);
         var undone = session.CaptureState();
         var undoneDocument = context.Document.CaptureSnapshot();
 
@@ -132,7 +134,7 @@ public sealed class PhaseLRouteGestureIntegrationTests
         AssertRelationshipUnchanged(initialRelationship, undoneDocument);
 
         var redo = await session.RedoAsync();
-        await session.WaitForIdleAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+        await WaitForCommittedEventAndSessionIdleAsync(context.Document, session);
         var redone = session.CaptureState();
         var redoneDocument = context.Document.CaptureSnapshot();
 
@@ -226,7 +228,7 @@ public sealed class PhaseLRouteGestureIntegrationTests
             alpha.Position + new VectorD(11d, 9d),
             VisualPlacementMode.Pinned));
         Assert.True(external.IsCommitted);
-        await session.WaitForIdleAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+        await WaitForCommittedEventAndSessionIdleAsync(context.Document, session);
 
         var stale = await interaction.PointerReleasedAsync(Pointer(
             403,
@@ -264,7 +266,7 @@ public sealed class PhaseLRouteGestureIntegrationTests
             movedPosition,
             VisualPlacementMode.Pinned));
         Assert.True(move.IsCommitted);
-        await session.WaitForIdleAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+        await WaitForCommittedEventAndSessionIdleAsync(context.Document, session);
         var moved = session.CaptureState();
         var movedDocument = context.Document.CaptureSnapshot();
 
@@ -287,7 +289,7 @@ public sealed class PhaseLRouteGestureIntegrationTests
             resizedBounds,
             VisualPlacementMode.Pinned));
         Assert.True(resize.IsCommitted);
-        await session.WaitForIdleAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+        await WaitForCommittedEventAndSessionIdleAsync(context.Document, session);
         var resized = session.CaptureState();
         var resizedDocument = context.Document.CaptureSnapshot();
 
@@ -333,7 +335,7 @@ public sealed class PhaseLRouteGestureIntegrationTests
             editedBend,
             button: 0));
         Assert.Equal(Canvas2DInteractionStatus.Committed, released.Status);
-        await session.WaitForIdleAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+        await WaitForCommittedEventAndSessionIdleAsync(context.Document, session);
         var edited = session.CaptureState();
         var editedDocument = context.Document.CaptureSnapshot();
         var expectedPersistentRoute = new[]

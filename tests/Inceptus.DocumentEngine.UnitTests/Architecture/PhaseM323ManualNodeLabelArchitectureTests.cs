@@ -98,7 +98,10 @@ public sealed class PhaseM323ManualNodeLabelArchitectureTests
                 "*.cs",
                 ApprovedN104Changes.IsPublishingApplicationCompositionPath));
 
-        Assert.DoesNotContain("BpmnSemanticTypes", genericSource, StringComparison.Ordinal);
+        // P1.15 permits only the explicit Event exclusion in BPMN element Properties.
+        Assert.Equal(1, genericSource.Split("!BpmnSemanticTypes.IsEvent(TypeId)", StringSplitOptions.None).Length - 1);
+        Assert.DoesNotContain("BpmnSemanticTypes", genericSource.Replace(
+            "!BpmnSemanticTypes.IsEvent(TypeId)", string.Empty, StringComparison.Ordinal), StringComparison.Ordinal);
         Assert.DoesNotContain("BpmnPluginRegistration", genericSource,
             StringComparison.Ordinal);
         Assert.DoesNotContain("CreateBpmn", genericSource, StringComparison.Ordinal);

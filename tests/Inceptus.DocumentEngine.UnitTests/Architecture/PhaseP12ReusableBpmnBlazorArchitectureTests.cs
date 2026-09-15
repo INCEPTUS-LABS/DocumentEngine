@@ -11,6 +11,34 @@ public sealed class PhaseP12ReusableBpmnBlazorArchitectureTests
     private static readonly string RepositoryRoot = LocateRepositoryRoot();
 
     [Fact]
+    public void SourceHostStartsWithInvariantDataCultureAndNeutralEnglishUICulture()
+    {
+        var hostRoot = Path.Combine(RepositoryRoot, "src", "Inceptus.DocumentEngine.Blazor");
+        var program = File.ReadAllText(Path.Combine(hostRoot, "Program.cs"));
+        var builderIndex = program.IndexOf("WebAssemblyHostBuilder.CreateDefault(args)", StringComparison.Ordinal);
+        Assert.True(builderIndex >= 0);
+        string[] cultureStatements =
+        [
+            "var uiCulture = CultureInfo.GetCultureInfo(\"en\");",
+            "CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;",
+            "CultureInfo.DefaultThreadCurrentUICulture = uiCulture;",
+            "CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;",
+            "CultureInfo.CurrentUICulture = uiCulture;",
+        ];
+        var previousIndex = -1;
+        foreach (var statement in cultureStatements)
+        {
+            var index = program.IndexOf(statement, StringComparison.Ordinal);
+            Assert.True(index > previousIndex && index < builderIndex,
+                $"Source-host culture must be established before host creation: {statement}");
+            previousIndex = index;
+        }
+
+        Assert.Contains("<html lang=\"en\">", File.ReadAllText(Path.Combine(hostRoot, "wwwroot", "index.html")),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void EmbeddingToolbarAndStatusRespondToWorkspaceWidthNotBrowserWidth()
     {
         var styles = File.ReadAllText(Path.Combine(RepositoryRoot, "src",

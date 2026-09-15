@@ -317,11 +317,13 @@
                                     role="menuitem"
                                     @onclick="ExecuteScopeNavigationContextActionAsync">@ScopeActionLabel(scopeNavigationAction)</button>
                         }
-                        <button id="@DomId("properties-action")"
-                                type="button"
-                                role="menuitem"
-                                disabled="@(!PropertiesAvailable)"
-                                @onclick="OpenPropertiesAsync">@Text["Context_Properties"]</button>
+                        @if (PropertiesAvailable)
+                        {
+                            <button id="@DomId("properties-action")"
+                                    type="button"
+                                    role="menuitem"
+                                    @onclick="OpenPropertiesAsync">@Text["Context_Properties"]</button>
+                        }
                         @if (contextMenu.ConnectorRouteAction?.Kind is
                             Canvas2DConnectorRouteContextActionKind.AddPoint)
                         {
@@ -460,13 +462,13 @@
                 </form>
             }
 
-            @if (_propertiesDraft is { } draft)
+            @if (_propertiesDraft is { Authoritative.IsPropertiesAvailable: true } draft)
             {
                 <div class="properties-backdrop"
                      aria-hidden="true"
                      @oncontextmenu:preventDefault></div>
                 <form id="@DomId("properties-form")"
-                      class="properties-form"
+                      class="properties-form @(draft.Authoritative.HasLongFormData ? "properties-form-wide" : "properties-form-compact")"
                       aria-label="@Text["Accessibility_SelectedProperties"]"
                       @onsubmit="ApplyPropertiesAsync"
                       @onsubmit:preventDefault>
@@ -485,7 +487,7 @@
                         <legend>@Text["Properties_Data"]</legend>
                         @foreach (var field in draft.DataFields)
                         {
-                            <label>
+                            <label class="@(field.Definition.EditorKind == ElementPropertyEditorKind.MultilineText ? "properties-field-long-form" : "properties-field-compact")">
                                 @PropertyFieldLabel(field.Definition)
                                 @switch (field.Definition.EditorKind)
                                 {
@@ -512,7 +514,8 @@
                                     case ElementPropertyEditorKind.MultilineText:
                                         <textarea id="@PropertiesFieldControlId(field.FieldId)"
                                                   data-property-field-id="@field.FieldId.Value"
-                                                  rows="5"
+                                                  class="properties-long-form-editor"
+                                                  rows="10"
                                                   value="@field.EditorValue"
                                                   readonly="@(!field.CanEdit)"
                                                   disabled="@_propertiesApplying"
@@ -534,98 +537,14 @@
                         }
                     </fieldset>
 
-                    <fieldset data-property-group="identity">
-                        <legend>@Text["Properties_Identity"]</legend>
-                        <label>@Text["Properties_SemanticId"]
-                            <input id="@DomId("properties-semantic-id")"
-                                   value="@draft.Authoritative.SemanticId.Value"
-                                   readonly />
-                        </label>
-                        @if (draft.Authoritative.VisualStateId is { } propertyVisualStateId)
-                        {
-                            <label>@Text["Properties_VisualId"]
-                                <input id="@DomId("properties-visual-id")"
-                                       value="@propertyVisualStateId.Value"
-                                       readonly />
-                            </label>
-                        }
-                        <label>@Text["Properties_Type"]
+                    <fieldset data-property-group="parameters">
+                        <legend>@Text["Properties_Parameters"]</legend>
+                        <label class="properties-field-compact">@Text["Properties_Type"]
                             <input id="@DomId("properties-type")"
                                    value="@draft.Authoritative.TypeId.Value"
                                    readonly />
                         </label>
                     </fieldset>
-
-                    <fieldset data-property-group="visual">
-                        <legend>@Text["Properties_Visual"]</legend>
-                        <label>@Text["Properties_Placement"]
-                            <input id="@DomId("properties-placement")"
-                                   value="@Text[$"Placement_{draft.Authoritative.PlacementMode}"]"
-                                   readonly />
-                        </label>
-                        @if (draft.Authoritative.CanEditBounds)
-                        {
-                            <div class="properties-grid">
-                                <label>@Text["Properties_X"]
-                                    <input id="@DomId("properties-x")"
-                                           inputmode="decimal"
-                                           value="@draft.X"
-                                           disabled="@(_propertiesApplying || draft.IsSemanticDirty)"
-                                           @oninput="eventArgs => UpdateVisualDraftValue(PropertiesVisualDraftField.X, eventArgs.Value)" />
-                                </label>
-                                <label>@Text["Properties_Y"]
-                                    <input id="@DomId("properties-y")"
-                                           inputmode="decimal"
-                                           value="@draft.Y"
-                                           disabled="@(_propertiesApplying || draft.IsSemanticDirty)"
-                                           @oninput="eventArgs => UpdateVisualDraftValue(PropertiesVisualDraftField.Y, eventArgs.Value)" />
-                                </label>
-                                <label>@Text["Properties_Width"]
-                                    <input id="@DomId("properties-width")"
-                                           inputmode="decimal"
-                                           value="@draft.Width"
-                                           disabled="@(_propertiesApplying || draft.IsSemanticDirty)"
-                                           @oninput="eventArgs => UpdateVisualDraftValue(PropertiesVisualDraftField.Width, eventArgs.Value)" />
-                                </label>
-                                <label>@Text["Properties_Height"]
-                                    <input id="@DomId("properties-height")"
-                                           inputmode="decimal"
-                                           value="@draft.Height"
-                                           disabled="@(_propertiesApplying || draft.IsSemanticDirty)"
-                                           @oninput="eventArgs => UpdateVisualDraftValue(PropertiesVisualDraftField.Height, eventArgs.Value)" />
-                                </label>
-                            </div>
-                        }
-                        else if (draft.Authoritative.IsConnector)
-                        {
-                            <label>@Text["Properties_Source"]
-                                <input id="@DomId("properties-source")"
-                                       value="@draft.Authoritative.SourceId?.Value"
-                                       readonly />
-                            </label>
-                            <label>@Text["Properties_Target"]
-                                <input id="@DomId("properties-target")"
-                                       value="@draft.Authoritative.TargetId?.Value"
-                                       readonly />
-                            </label>
-                            <label>@Text["Properties_LabelPath"]
-                                <input id="@DomId("properties-label-path-position")"
-                                       value="@Format(draft.Authoritative.LabelPlacement!.PathPosition)"
-                                       readonly />
-                            </label>
-                            <label>@Text["Properties_LabelOffsetX"]
-                                <input id="@DomId("properties-label-offset-x")"
-                                       value="@Format(draft.Authoritative.LabelPlacement!.Offset.X)"
-                                       readonly />
-                            </label>
-                            <label>@Text["Properties_LabelOffsetY"]
-                                <input id="@DomId("properties-label-offset-y")"
-                                       value="@Format(draft.Authoritative.LabelPlacement!.Offset.Y)"
-                                       readonly />
-                            </label>
-                        }
-                    </fieldset>
-
                     @if (!string.IsNullOrWhiteSpace(draft.Feedback))
                     {
                         <p class="properties-feedback" role="alert">@PropertyFeedback(draft)</p>
@@ -1139,18 +1058,7 @@
     private string ViewportPanY => Format(
         _state?.Session?.EditorState.Viewport.Pan.Y ?? 0d);
 
-    private bool PropertiesAvailable =>
-        _state?.Session is
-        {
-            IsClosed: false,
-            Status: EditingSessionStatus.Ready,
-            EditorState.ActiveGesture: null,
-        } session &&
-        ((_state.ContextMenu?.TargetVisualStateId is { } targetVisualStateId &&
-          session.EditorState.Selection.Contains(targetVisualStateId)) ||
-         (_state.ContextMenu?.TargetSemanticElementId is { } targetSemanticElementId &&
-          session.EditorState.Selection.IsEmpty &&
-          session.EditorState.SemanticSceneSelection == targetSemanticElementId));
+    private bool PropertiesAvailable => _host?.CanOpenContextProperties() == true;
 
     private string PropertiesAvailableValue => PropertiesAvailable ? "true" : "false";
 
@@ -3094,10 +3002,9 @@
             }
 
             _propertiesApplyStatus = result.Status.ToString().ToLowerInvariant();
-            if (result.Succeeded && result.Authoritative is { } authoritative)
+            if (result.Succeeded)
             {
-                _propertiesDraft = new DocumentCanvasPropertiesDraft(authoritative);
-                _ = TryPublishPropertiesFormState(host, _propertiesDraft);
+                CancelProperties();
             }
             else
             {

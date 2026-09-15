@@ -153,6 +153,25 @@
     align-items: center;
 }
 
+.properties-form-wide {
+    width: min(69rem, calc(100vw - 2rem));
+}
+
+.properties-form .properties-field-compact {
+    width: min(19rem, 100%);
+    min-width: 0;
+}
+
+.properties-form .properties-field-long-form {
+    width: 100%;
+    min-width: 0;
+}
+
+.properties-form .properties-long-form-editor {
+    min-height: 11rem;
+    max-height: none;
+}
+
 .properties-form-header {
     justify-content: space-between;
     margin-bottom: 0.75rem;
@@ -199,6 +218,7 @@
 
 .properties-form fieldset {
     display: grid;
+    min-width: 0;
     gap: 0.55rem;
     margin: 0 0 0.85rem;
     padding: 0.75rem;
@@ -225,6 +245,7 @@
 
 .properties-form input,
 .properties-form textarea {
+    box-sizing: border-box;
     min-width: 0;
     width: 100%;
     padding: 0.42rem 0.5rem;

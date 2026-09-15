@@ -16,6 +16,8 @@ using Inceptus.DocumentEngine.Contracts.Semantics;
 using Inceptus.DocumentEngine.Contracts.Text;
 using Inceptus.DocumentEngine.Contracts.Visuals;
 
+using static Inceptus.DocumentEngine.IntegrationTests.EditingSessionTestSynchronization;
+
 namespace Inceptus.DocumentEngine.IntegrationTests;
 
 public sealed class PhaseLMoveGestureIntegrationTests
@@ -126,7 +128,7 @@ public sealed class PhaseLMoveGestureIntegrationTests
             secondMove.SessionState.CurrentScene,
             finalDocumentPoint,
             button: 0));
-        await session.WaitForIdleAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+        await WaitForCommittedEventAndSessionIdleAsync(document, session);
         var committed = session.CaptureState();
         var committedDocument = document.CaptureSnapshot();
         var expectedPosition = initialVisual!.Position + new VectorD(46d, 31d);
@@ -150,7 +152,7 @@ public sealed class PhaseLMoveGestureIntegrationTests
         Assert.Equal([new DocumentRevision(1)], EventRevisions(events));
 
         var undo = await session.UndoAsync();
-        await session.WaitForIdleAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+        await WaitForCommittedEventAndSessionIdleAsync(document, session);
         var undone = session.CaptureState();
         var undoneDocument = document.CaptureSnapshot();
 
@@ -165,7 +167,7 @@ public sealed class PhaseLMoveGestureIntegrationTests
         AssertSemanticMeaningUnchanged(initialSemanticElements, initialRelationships, undoneDocument);
 
         var redo = await session.RedoAsync();
-        await session.WaitForIdleAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+        await WaitForCommittedEventAndSessionIdleAsync(document, session);
         var redone = session.CaptureState();
         var redoneDocument = document.CaptureSnapshot();
 

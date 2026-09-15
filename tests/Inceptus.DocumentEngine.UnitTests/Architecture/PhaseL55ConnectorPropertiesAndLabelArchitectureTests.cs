@@ -169,7 +169,7 @@ public sealed class PhaseL55ConnectorPropertiesAndLabelArchitectureTests
     }
 
     [Fact]
-    public void ConnectorPropertiesShowOnlyApprovedDataAndReadOnlyPlacement()
+    public void ConnectorPropertiesShowApprovedDataAndKeepPlacementInternal()
     {
         var component = ReadProductionFile(
             "Inceptus.DocumentEngine.Bpmn.Blazor",
@@ -178,10 +178,6 @@ public sealed class PhaseL55ConnectorPropertiesAndLabelArchitectureTests
         var data = Between(
             component,
             "<fieldset data-property-group=\"data\">",
-            "</fieldset>");
-        var visual = Between(
-            component,
-            "<fieldset data-property-group=\"visual\">",
             "</fieldset>");
         var schemas = ReadProductionFile(
             "Inceptus.DocumentEngine.Blazor",
@@ -204,12 +200,6 @@ public sealed class PhaseL55ConnectorPropertiesAndLabelArchitectureTests
         Assert.Equal(2, CountOccurrences(
             connectorSchema,
             "SemanticPropertyMutationKind.Property"));
-        Assert.Contains("DomId(\"properties-label-path-position\")", visual,
-            StringComparison.Ordinal);
-        Assert.Contains("DomId(\"properties-label-offset-x\")", visual,
-            StringComparison.Ordinal);
-        Assert.Contains("DomId(\"properties-label-offset-y\")", visual,
-            StringComparison.Ordinal);
         foreach (var id in new[]
                  {
                      "properties-label-path-position",
@@ -217,10 +207,7 @@ public sealed class PhaseL55ConnectorPropertiesAndLabelArchitectureTests
                      "properties-label-offset-y",
                  })
         {
-            Assert.Contains(
-                "readonly",
-                Between(component, $"id=\"@DomId(\"{id}\")\"", "/>"),
-                StringComparison.Ordinal);
+            Assert.DoesNotContain($"id=\"@DomId(\"{id}\")\"", component, StringComparison.Ordinal);
         }
     }
 

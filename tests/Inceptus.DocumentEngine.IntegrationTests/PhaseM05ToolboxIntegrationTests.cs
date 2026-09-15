@@ -12,6 +12,8 @@ using Inceptus.DocumentEngine.Contracts.Primitives;
 using Inceptus.DocumentEngine.Contracts.Text;
 using Inceptus.DocumentEngine.Contracts.Toolbox;
 
+using static Inceptus.DocumentEngine.IntegrationTests.EditingSessionTestSynchronization;
+
 namespace Inceptus.DocumentEngine.IntegrationTests;
 
 public sealed class PhaseM05ToolboxIntegrationTests
@@ -81,7 +83,7 @@ public sealed class PhaseM05ToolboxIntegrationTests
                 selectedVisualStateId,
                 movedPosition));
         Assert.True(move.IsCommitted);
-        await fixture.Session.WaitForIdleAsync();
+        await WaitForCommittedEventAndSessionIdleAsync(fixture.Composition.Document, fixture.Session);
         var moved = fixture.Session.CaptureState();
         var movedDocument = fixture.Composition.Document.CaptureSnapshot();
         var movedCounters = fixture.CaptureCounters();
@@ -105,7 +107,7 @@ public sealed class PhaseM05ToolboxIntegrationTests
 
         var undo = await fixture.Session.UndoAsync();
         Assert.True(undo.IsCommitted);
-        await fixture.Session.WaitForIdleAsync();
+        await WaitForCommittedEventAndSessionIdleAsync(fixture.Composition.Document, fixture.Session);
         Assert.True(fixture.Composition.Document.VisualModel.TryGetVisualState(
             selectedVisualStateId,
             out var undoneVisual));
@@ -115,7 +117,7 @@ public sealed class PhaseM05ToolboxIntegrationTests
 
         var redo = await fixture.Session.RedoAsync();
         Assert.True(redo.IsCommitted);
-        await fixture.Session.WaitForIdleAsync();
+        await WaitForCommittedEventAndSessionIdleAsync(fixture.Composition.Document, fixture.Session);
         Assert.True(fixture.Composition.Document.VisualModel.TryGetVisualState(
             selectedVisualStateId,
             out var redoneVisual));

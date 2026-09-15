@@ -177,7 +177,10 @@ public sealed class PhaseM0ConnectorAnchorPolicyArchitectureTests
         var framework = string.Concat(
             frameworkFiles.Concat(genericBlazorFiles).Select(File.ReadAllText));
 
-        Assert.DoesNotContain("BpmnSemanticTypes", framework, StringComparison.Ordinal);
+        // P1.15 permits only the explicit Event exclusion in BPMN element Properties.
+        Assert.Equal(1, framework.Split("!BpmnSemanticTypes.IsEvent(TypeId)", StringSplitOptions.None).Length - 1);
+        Assert.DoesNotContain("BpmnSemanticTypes", framework.Replace(
+            "!BpmnSemanticTypes.IsEvent(TypeId)", string.Empty, StringComparison.Ordinal), StringComparison.Ordinal);
         Assert.DoesNotContain("BpmnPluginRegistration", framework, StringComparison.Ordinal);
         Assert.DoesNotContain("CreateBpmn", framework, StringComparison.Ordinal);
         Assert.DoesNotContain(

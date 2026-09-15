@@ -26,13 +26,13 @@ namespace Inceptus.DocumentEngine.UnitTests.Blazor;
 public sealed partial class DocumentCanvasHostTests
 {
     [Theory]
-    [InlineData("en-GB", "Data", "Name", "Undo")]
-    [InlineData("pl-PL", "Dane", "Nazwa", "Cofnij")]
-    [InlineData("fr-FR", "Données", "Nom", "Annuler")]
-    [InlineData("de-DE", "Daten", "Name", "Rückgängig")]
-    [InlineData("es-ES", "Datos", "Nombre", "Deshacer")]
+    [InlineData("en-GB", "Data", "Name", "Undo", "Parameters")]
+    [InlineData("pl-PL", "Dane", "Nazwa", "Cofnij", "Parametry")]
+    [InlineData("fr-FR", "Données", "Nom", "Annuler", "Paramètres")]
+    [InlineData("de-DE", "Daten", "Name", "Rückgängig", "Parameter")]
+    [InlineData("es-ES", "Datos", "Nombre", "Deshacer", "Parámetros")]
     public async Task LocalizationHostRerenderPreservesSessionDocumentHistoryAndOpenProperties(
-        string culture, string dataLabel, string nameLabel, string undo)
+        string culture, string dataLabel, string nameLabel, string undo, string parameters)
     {
         using var cultureScope = new ModelerCultureScope("en-GB");
         var events = new ConcurrentQueue<object>();
@@ -77,7 +77,8 @@ public sealed partial class DocumentCanvasHostTests
         Assert.Contains("data-property-field-id=\"name\"", localized, StringComparison.Ordinal);
         Assert.Contains("data-property-field-id=\"code\"", localized, StringComparison.Ordinal);
         Assert.Contains("readonly", localized, StringComparison.Ordinal);
-        Assert.Contains("value=\"invalid\"", localized, StringComparison.Ordinal);
+        Assert.DoesNotContain("value=\"invalid\"", localized, StringComparison.Ordinal);
+        Assert.Matches($"<legend[^>]*>{parameters}</legend>", localized);
         using (new ModelerCultureScope(culture))
         {
             var text = services.GetRequiredService<IStringLocalizer<ModelerStrings>>();

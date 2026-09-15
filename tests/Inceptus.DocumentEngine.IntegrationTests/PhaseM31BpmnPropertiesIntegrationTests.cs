@@ -23,7 +23,7 @@ public sealed class PhaseM31BpmnPropertiesIntegrationTests
         "Review the incoming customer order.\nCheck completeness before approval.";
 
     [Fact]
-    public async Task TaskBodyAndLabelResolveTheExactM31SchemaWhileEventsKeepDataEmpty()
+    public async Task TaskBodyAndLabelResolveTheExactM31SchemaWhileEventsKeepInternalDataAndHaveNoProperties()
     {
         await using var harness = await HostHarness.CreateAsync();
         var initialDocument = harness.Composition.Document.CaptureSnapshot();
@@ -58,16 +58,23 @@ public sealed class PhaseM31BpmnPropertiesIntegrationTests
         Assert.Equal(bodyProperties.VisualStateId, labelProperties.VisualStateId);
         CloseProperties(harness.Host);
 
-        var start = await harness.OpenNodePropertiesAsync(BpmnDemoPipeline.StartEventVisualId);
-        Assert.Equal(BpmnDemoPipeline.StartEventId, start.SemanticId);
-        Assert.Equal(BpmnSemanticTypes.StartEvent, start.TypeId);
-        Assert.Empty(start.DataFields);
-        CloseProperties(harness.Host);
-
-        var end = await harness.OpenNodePropertiesAsync(BpmnDemoPipeline.EndEventVisualId);
-        Assert.Equal(BpmnDemoPipeline.EndEventId, end.SemanticId);
-        Assert.Equal(BpmnSemanticTypes.EndEvent, end.TypeId);
-        Assert.Empty(end.DataFields);
+        foreach (var (visualId, semanticId, typeId) in new[]
+                 {
+                     (BpmnDemoPipeline.StartEventVisualId, BpmnDemoPipeline.StartEventId, BpmnSemanticTypes.StartEvent),
+                     (BpmnDemoPipeline.EndEventVisualId, BpmnDemoPipeline.EndEventId, BpmnSemanticTypes.EndEvent),
+                 })
+        {
+            await harness.Pointer.ContextMenuDocumentPointAsync(harness.Scene,
+                Center(NodeBody(harness.Scene, visualId).Bounds));
+            Assert.False(harness.Host.CanOpenContextProperties());
+            Assert.Null(await harness.Host.OpenPropertiesAsync(visualId));
+            Assert.False(harness.Host.CaptureState().PropertiesFormOpen);
+            Assert.True(DocumentCanvasPropertySnapshot.TryCreate(initialDocument, visualId,
+                harness.Composition.PropertiesSchemaCatalog, out var internalSnapshot));
+            Assert.Equal(semanticId, internalSnapshot!.SemanticId);
+            Assert.Equal(typeId, internalSnapshot.TypeId);
+            Assert.Empty(internalSnapshot.DataFields);
+        }
 
         var finalState = harness.State;
         Assert.Same(initialDocument, harness.Composition.Document.CaptureSnapshot());

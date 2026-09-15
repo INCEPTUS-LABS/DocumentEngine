@@ -8,7 +8,7 @@ namespace Inceptus.DocumentEngine.UnitTests.Architecture;
 public sealed class PhaseM31GenericPropertiesArchitectureTests
 {
     [Fact]
-    public void BlazorPropertiesPresentationIsNotationNeutralAndSchemaDriven()
+    public void BlazorPropertiesPresentationIsSchemaDrivenWithExplicitBpmnEventExclusion()
     {
         var component = ReadProductionFile(
             "Inceptus.DocumentEngine.Bpmn.Blazor",
@@ -23,7 +23,9 @@ public sealed class PhaseM31GenericPropertiesArchitectureTests
             "<fieldset data-property-group=\"data\">",
             "</fieldset>");
 
-        Assert.DoesNotContain("BpmnSemanticTypes", component + presentation,
+        const string eventExclusion = "!BpmnSemanticTypes.IsEvent(TypeId)";
+        Assert.Equal(1, CountOccurrences(presentation, eventExclusion));
+        Assert.DoesNotContain("BpmnSemanticTypes", component + presentation.Replace(eventExclusion, string.Empty, StringComparison.Ordinal),
             StringComparison.Ordinal);
         Assert.DoesNotContain("BpmnPluginRegistration", component + presentation,
             StringComparison.Ordinal);
