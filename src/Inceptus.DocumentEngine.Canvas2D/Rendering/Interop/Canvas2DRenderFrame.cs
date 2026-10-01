@@ -1,6 +1,7 @@
 using Inceptus.DocumentEngine.Contracts.Canvas2D;
 using Inceptus.DocumentEngine.Contracts.Geometry;
 using Inceptus.DocumentEngine.Contracts.Text;
+using Inceptus.DocumentEngine.Canvas2D.Scene;
 
 namespace Inceptus.DocumentEngine.Canvas2D.Rendering.Interop;
 
@@ -11,15 +12,98 @@ internal sealed class Canvas2DRenderFrame
 {
     internal Canvas2DRenderFrame(
         Matrix2D viewportTransform,
-        IEnumerable<Canvas2DRenderItem> items)
+        Canvas2DRenderItem[] items,
+        long contentVersion,
+        long presentationVersion,
+        Canvas2DViewportLine[]? viewportLines = null,
+        Canvas2DBoundedRenderItem[]? presentationItems = null)
     {
         ViewportTransform = Canvas2DMatrixData.From(viewportTransform);
-        Items = items.ToArray();
+        Items = items;
+        ContentVersion = contentVersion;
+        PresentationVersion = presentationVersion;
+        ViewportLines = viewportLines ?? [];
+        PresentationItems = presentationItems ?? [];
     }
 
     public Canvas2DMatrixData ViewportTransform { get; }
 
     public Canvas2DRenderItem[] Items { get; }
+
+    public long ContentVersion { get; }
+
+    public long PresentationVersion { get; }
+
+    public Canvas2DViewportLine[] ViewportLines { get; }
+
+    public Canvas2DBoundedRenderItem[] PresentationItems { get; }
+}
+
+/// <summary>
+/// Private authoritative presentation of already acknowledged browser content.
+/// Null PresentationItems retains the acknowledged bounded primitives; an empty array clears them.
+/// </summary>
+internal sealed record Canvas2DViewportFrame(
+    Canvas2DMatrixData ViewportTransform,
+    long ContentVersion,
+    long PresentationVersion,
+    Canvas2DViewportLine[]? ViewportLines = null,
+    Canvas2DBoundedRenderItem[]? PresentationItems = null);
+
+// Already composed generic primitives, inserted in the canonical managed order.
+internal sealed record Canvas2DBoundedRenderItem(int BeforeContentIndex, Canvas2DRenderItem Item)
+{
+    internal static Canvas2DBoundedRenderItem[] From(Canvas2DBoundedPresentation? presentation)
+    {
+        if (presentation is null || presentation.Items.IsEmpty)
+        {
+            return [];
+        }
+        var result = new Canvas2DBoundedRenderItem[presentation.Items.Length];
+        for (var index = 0; index < result.Length; index++)
+        {
+            result[index] = new(presentation.BeforeContentIndices[index],
+                new Canvas2DRenderItem(presentation.Items[index]));
+        }
+        return result;
+    }
+}
+
+// Bounded generic line commands supplied by managed presentation. No model or hit metadata.
+internal sealed record Canvas2DViewportLine(
+    int BeforeContentIndex,
+    Canvas2DPointData Start,
+    Canvas2DPointData End,
+    string Stroke,
+    double StrokeWidth,
+    double[] DashPattern,
+    double Opacity)
+{
+    internal static Canvas2DViewportLine[] From(Canvas2DBoundaryGuidePresentation presentation)
+    {
+        if (presentation.Items.IsEmpty)
+        {
+            return [];
+        }
+
+        var lines = new Canvas2DViewportLine[presentation.Items.Length];
+        for (var index = 0; index < lines.Length; index++)
+        {
+            var item = presentation.Items[index];
+            lines[index] = new Canvas2DViewportLine(
+                item.Origin.StableSourceKey == "document-boundary:x-axis"
+                    ? presentation.HorizontalContentIndex
+                    : presentation.VerticalContentIndex,
+                Canvas2DPointData.From(item.Geometry.Points[0]),
+                Canvas2DPointData.From(item.Geometry.Points[1]),
+                item.Style.Stroke!,
+                item.Style.StrokeWidth,
+                item.Style.DashPattern.ToArray(),
+                item.Style.Opacity);
+        }
+
+        return lines;
+    }
 }
 
 internal sealed class Canvas2DRenderItem

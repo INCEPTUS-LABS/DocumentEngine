@@ -18,7 +18,7 @@ using Inceptus.DocumentEngine.Runtime.Documents;
 
 namespace Inceptus.DocumentEngine.UnitTests.Canvas2D;
 
-public sealed class EditingSessionScopeNavigationTests
+public sealed partial class EditingSessionScopeNavigationTests
 {
     private static readonly DocumentScopeId ScopeAId = new("test:session:scope-a");
     private static readonly DocumentScopeId ScopeBId = new("test:session:scope-b");
@@ -143,7 +143,7 @@ public sealed class EditingSessionScopeNavigationTests
     {
         var inputs = Canvas2DSceneTestData.Create();
         var surface = new Canvas2DSurfaceSize(800d, 600d, 1d);
-        var rootTransform = new ViewportSnapshot(1.1d, new VectorD(35d, -25d));
+        var rootTransform = new ViewportSnapshot(1.1d, new VectorD(0d, -25d));
         var rootViewport = new ViewportSnapshot(
             rootTransform.Zoom,
             rootTransform.Pan,
@@ -190,7 +190,7 @@ public sealed class EditingSessionScopeNavigationTests
                 editorState)));
         Assert.True((await session.NavigateToScopeAsync(ScopeAId)).Succeeded);
         AssertViewport(childViewport, session.CaptureState().EditorState.Viewport);
-        Assert.Equal(new VectorD(-42d, 17d), childViewport.Pan);
+        Assert.Equal(new VectorD(-42d, 0d), childViewport.Pan);
         Assert.Equal(0.6d, childViewport.Zoom);
         Assert.Equal(new(3, true, false), session.CaptureState().HistoryStatus);
         Assert.Equal(2, pipeline.FullRunCount);

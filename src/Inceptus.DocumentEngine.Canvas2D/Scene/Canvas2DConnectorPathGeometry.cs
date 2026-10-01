@@ -9,6 +9,37 @@ internal static class Canvas2DConnectorPathGeometry
 {
     private const double DistanceTieTolerance = 1e-12;
 
+    internal static (PointD Point, VectorD Tangent) ResolveSourceFrame(
+        IReadOnlyList<PointD> path,
+        double distanceFromSource)
+    {
+        ValidatePath(path);
+        var lengths = SegmentLengths(path, out var totalLength);
+        var remaining = Math.Min(distanceFromSource, totalLength / 2d);
+        for (var index = 0; index < lengths.Length; index++)
+        {
+            var length = lengths[index];
+            if (length == 0d)
+            {
+                continue;
+            }
+
+            if (remaining <= length)
+            {
+                var segment = path[index + 1] - path[index];
+                return (
+                    Interpolate(path[index], path[index + 1], remaining / length),
+                    new VectorD(segment.X / length, segment.Y / length));
+            }
+
+            remaining -= length;
+        }
+
+        // A collapsed path has no tangent. Keep the same deterministic horizontal
+        // reference frame as a source pointing to the right.
+        return (path[0], new VectorD(1d, 0d));
+    }
+
     internal static PointD ResolvePoint(
         IReadOnlyList<PointD> path,
         double pathPosition)

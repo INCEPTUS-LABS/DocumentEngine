@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using Inceptus.DocumentEngine.Contracts.Documents;
 using Inceptus.DocumentEngine.Contracts.Primitives;
 using Inceptus.DocumentEngine.Contracts.Profiles;
+using Inceptus.DocumentEngine.Contracts.Projection;
 using Inceptus.DocumentEngine.Contracts.Semantics;
 using Inceptus.DocumentEngine.Organizational.Profiles;
 
@@ -12,6 +13,33 @@ namespace Inceptus.DocumentEngine.Organizational.Semantics;
 /// </summary>
 public static class OrganizationalSemantics
 {
+    /// <summary>
+    /// Shared spatial ownership authority for presentation and routing preparation.
+    /// Attached nodes inherit their owner's assignment; null is the distinct Unassigned region.
+    /// </summary>
+    internal static SemanticElementId? ResolveSpatialPoolId(
+        DocumentSnapshot document,
+        DocumentScopeId activeScopeId,
+        ProjectedNode node,
+        HashSet<SemanticElementId> poolIds,
+        IOrganizationalElementEligibilityPolicy eligibilityPolicy)
+    {
+        var semanticElementId = node.PlacementHint?.BoundaryAttachment?.AttachedToElementId ??
+            node.Source.SemanticElementId;
+        if (!document.SemanticModel.TryGetElement(semanticElementId, out var element) ||
+            element is null ||
+            document.SemanticModel.GetScope(element.Id).Id != activeScopeId ||
+            (!IsDirectlyAssignable(element, eligibilityPolicy) &&
+             node.PlacementHint?.BoundaryAttachment is null) ||
+            !TryGetAssignedPoolId(document.SemanticModel, semanticElementId, out var poolId) ||
+            poolId is null || !poolIds.Contains(poolId))
+        {
+            return null;
+        }
+
+        return poolId;
+    }
+
     public static bool IsPool(SemanticElementSnapshot element)
     {
         ArgumentNullException.ThrowIfNull(element);

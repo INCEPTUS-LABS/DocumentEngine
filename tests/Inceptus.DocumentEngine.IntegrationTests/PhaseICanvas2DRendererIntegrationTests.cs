@@ -142,6 +142,12 @@ public sealed class PhaseICanvas2DRendererIntegrationTests
             return ValueTask.FromResult(new Canvas2DInteropOperationResult { Succeeded = true });
         }
 
+        public ValueTask<Canvas2DInteropOperationResult> RenderViewportAsync(Canvas2DViewportFrame frame)
+        {
+            RenderCount++;
+            return ValueTask.FromResult(new Canvas2DInteropOperationResult { Succeeded = true });
+        }
+
         public ValueTask<Canvas2DTextMeasurementInteropResult> MeasureTextAsync(
             Canvas2DTextMeasurementRequestData request) =>
             ValueTask.FromResult(new Canvas2DTextMeasurementInteropResult

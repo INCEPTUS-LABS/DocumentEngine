@@ -105,7 +105,7 @@ public sealed class PhaseN100OptionalProfilesAndCollaborationArchitectureTests
     }
 
     [Fact]
-    public void N100AddsOnlyProfilesOrganizationalCommandsAndBackgroundActionToN91()
+    public void N100AddsProfilesOrganizationalCommandsBackgroundActionAndOptionalSequenceFlowNameToN91()
     {
         var prior = BpmnPluginRegistration.N91;
         var current = BpmnPluginRegistration.N100;
@@ -117,10 +117,14 @@ public sealed class PhaseN100OptionalProfilesAndCollaborationArchitectureTests
         Assert.Equal(prior.ToolboxContributions, current.ToolboxContributions);
         Assert.Equal(prior.ToolboxPlacementRegistrations,
             current.ToolboxPlacementRegistrations);
-        Assert.Equal(prior.PropertiesSchemas, current.PropertiesSchemas);
+        Assert.Equal(prior.PropertiesSchemas, current.PropertiesSchemas.Where(
+            schema => schema.SemanticTypeId != BpmnSemanticTypes.SequenceFlow));
+        var flowSchema = Assert.Single(current.PropertiesSchemas,
+            schema => schema.SemanticTypeId == BpmnSemanticTypes.SequenceFlow);
+        Assert.Equal(BpmnSemanticProperties.Name, Assert.Single(flowSchema.Fields).SemanticPropertyKey);
         Assert.Equal(prior.ModelValidationRules, current.ModelValidationRules);
-        Assert.Equal(prior.CommandHandlers.Length + 6, current.CommandHandlers.Length);
-        Assert.Equal(prior.HistoryPolicies.Length + 6, current.HistoryPolicies.Length);
+        Assert.Equal(prior.CommandHandlers.Length + 7, current.CommandHandlers.Length);
+        Assert.Equal(prior.HistoryPolicies.Length + 7, current.HistoryPolicies.Length);
         Assert.Equal(BpmnModelProfiles.Definitions, current.ModelProfileDefinitions);
         Assert.Single(current.BackgroundActions);
         Assert.DoesNotContain(

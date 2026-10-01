@@ -461,6 +461,10 @@ public sealed class PhaseM1BpmnIntegrationTests
             Canvas2DRenderFrame frame) =>
             ValueTask.FromResult(Success());
 
+        public ValueTask<Canvas2DInteropOperationResult> RenderViewportAsync(
+            Canvas2DViewportFrame frame) =>
+            ValueTask.FromResult(Success());
+
         public ValueTask<Canvas2DTextMeasurementInteropResult> MeasureTextAsync(
             Canvas2DTextMeasurementRequestData request) =>
             ValueTask.FromResult(new Canvas2DTextMeasurementInteropResult

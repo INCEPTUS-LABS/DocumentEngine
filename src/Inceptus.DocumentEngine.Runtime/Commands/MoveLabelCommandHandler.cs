@@ -53,8 +53,10 @@ internal sealed class MoveLabelCommandHandler : ICommandHandler
         }
 
         var targetPlacement = move.TargetPlacement;
-        if (ConnectorLabelPlacement.Resolve(existing.Properties) ==
-            (targetPlacement ?? ConnectorLabelPlacement.Default))
+        var hasManualPlacement = ConnectorLabelPlacement.TryRead(
+            existing.Properties, out var existingPlacement);
+        if (hasManualPlacement == (targetPlacement is not null) &&
+            existingPlacement == targetPlacement)
         {
             return ValueTask.FromResult(CommandHandlerResult.Failure(
             [

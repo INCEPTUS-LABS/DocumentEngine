@@ -469,6 +469,9 @@ public sealed partial class Canvas2DSceneBuilder
         var automaticLabelTranslations = persistentItems
             .Where(item =>
                 item.Layer == Canvas2DSceneLayer.Label &&
+                // Spatial moves use one displayed delta across region boundaries. The
+                // destination's canonical boundary is validated when the move commits.
+                item.SpatialRegion is null &&
                 item.Origin.VisualStateId is { } visualStateId &&
                 visualStateIds.Contains(visualStateId) &&
                 item.Origin.ProjectedObjectId is not null &&
@@ -477,9 +480,7 @@ public sealed partial class Canvas2DSceneBuilder
             .ToDictionary(
                 static group => group.Key,
                 group => DocumentGeometryBoundary.ClampTranslation(
-                    group.Select(static item => item.SpatialRegion is { } region
-                        ? region.MapSceneToLocal(item.Bounds)
-                        : item.Bounds),
+                    group.Select(static item => item.Bounds),
                     translation));
         var translated = 0;
         var translatedVisualStates = new HashSet<VisualStateId>();
@@ -1311,13 +1312,19 @@ public sealed partial class Canvas2DSceneBuilder
             foreach (var measuredLabel in measuredConnectorLabels.Values.Where(label =>
                          label.Label.OwnerId == connectorId))
             {
-                var previewAnchor = Canvas2DConnectorPathGeometry.ResolvePoint(
-                    points,
-                    measuredLabel.Placement.PathPosition) + measuredLabel.Placement.Offset;
-                var translation = previewAnchor - measuredLabel.Anchor;
                 var labelItems = persistentItems.Where(item =>
                     item.Layer == Canvas2DSceneLayer.Label &&
                     item.Origin.ProjectedObjectId == measuredLabel.Label.Id).ToArray();
+                if (labelItems.Length == 0)
+                {
+                    continue;
+                }
+
+                var bounds = Canvas2DConnectorLabelResolver.PresentedBounds(labelItems);
+                var previewAnchor = Canvas2DConnectorLabelResolver.Resolve(
+                    measuredLabel.Label, points, measuredLabel.Placement, bounds.Size);
+                var translation = previewAnchor - new PointD(
+                    bounds.X + (bounds.Width / 2d), bounds.Y + (bounds.Height / 2d));
                 for (var index = 0; index < labelItems.Length; index++)
                 {
                     items.Add(CreateTranslatedLabelPreview(

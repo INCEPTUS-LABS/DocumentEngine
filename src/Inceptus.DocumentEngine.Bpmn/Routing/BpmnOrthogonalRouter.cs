@@ -24,7 +24,7 @@ internal enum BpmnRoutingOutcome
 /// <summary>
 /// Deterministic sparse rectilinear visibility search in logical Document coordinates.
 /// </summary>
-internal static class BpmnOrthogonalRouter
+internal static partial class BpmnOrthogonalRouter
 {
     private enum SegmentDirection
     {
@@ -36,15 +36,16 @@ internal static class BpmnOrthogonalRouter
     internal static BpmnRoutingOutcome TryRoute(
         BpmnRoutingEndpoint source,
         BpmnRoutingEndpoint target,
-        IReadOnlyList<BpmnRoutingObstacle> actualObstacles,
+        OperationContext operation,
         IReadOnlyList<PointD> mandatoryWaypoints,
         bool allowPolicyRelaxation,
         CancellationToken cancellationToken,
         out ImmutableArray<PointD> path,
         out string failureReason)
     {
-        ArgumentNullException.ThrowIfNull(actualObstacles);
+        ArgumentNullException.ThrowIfNull(operation);
         ArgumentNullException.ThrowIfNull(mandatoryWaypoints);
+        var actualObstacles = operation.ActualObstacles;
         path = [];
         failureReason = "No legal orthogonal route satisfies the endpoint constraints.";
 
@@ -81,12 +82,12 @@ internal static class BpmnOrthogonalRouter
             {
                 var leadDistance = leadDistanceAttempts[leadDistanceIndex];
                 cancellationToken.ThrowIfCancellationRequested();
-                var obstacles = CreateAttemptObstacles(
-                    actualObstacles,
+                var obstacles = operation.GetAttempt(
                     source.OwnerNodeId,
                     target.OwnerNodeId,
                     clearance,
-                    leadDistance);
+                    leadDistance,
+                    cancellationToken);
                 var outcome = TryRouteAttempt(
                     source,
                     target,
@@ -125,7 +126,7 @@ internal static class BpmnOrthogonalRouter
     private static BpmnRoutingOutcome TryRouteAttempt(
         BpmnRoutingEndpoint source,
         BpmnRoutingEndpoint target,
-        IReadOnlyList<BpmnRoutingObstacle> obstacles,
+        ObstacleContext obstacleContext,
         IReadOnlyList<PointD> mandatoryWaypoints,
         double leadDistance,
         CancellationToken cancellationToken,
@@ -134,6 +135,7 @@ internal static class BpmnOrthogonalRouter
     {
         path = [];
         failureReason = string.Empty;
+        var obstacles = obstacleContext.Obstacles;
 
         if (!TryCreateLead(source.Point, source.Side, leadDistance, out var sourceLead) ||
             !TryCreateLead(target.Point, target.Side, leadDistance, out var targetLead))
@@ -191,7 +193,7 @@ internal static class BpmnOrthogonalRouter
                         controls[index].Point,
                         controls[index + 1].Point,
                         candidate.Direction,
-                        obstacles,
+                        obstacleContext,
                         cancellationToken,
                         out var legResults))
                 {
@@ -314,11 +316,13 @@ internal static class BpmnOrthogonalRouter
         ProjectedObjectId sourceOwnerNodeId,
         ProjectedObjectId targetOwnerNodeId,
         double clearance,
-        double leadDistance)
+        double leadDistance,
+        CancellationToken cancellationToken)
     {
         var obstacles = new BpmnRoutingObstacle[actualObstacles.Count];
         for (var index = 0; index < obstacles.Length; index++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var obstacle = actualObstacles[index];
             var attemptClearance =
                 obstacle.NodeId == sourceOwnerNodeId || obstacle.NodeId == targetOwnerNodeId
@@ -406,7 +410,7 @@ internal static class BpmnOrthogonalRouter
         PointD start,
         PointD end,
         SegmentDirection incomingDirection,
-        IReadOnlyList<BpmnRoutingObstacle> obstacles,
+        ObstacleContext obstacleContext,
         CancellationToken cancellationToken,
         out ImmutableArray<LegRoutingResult> results)
     {
@@ -418,42 +422,14 @@ internal static class BpmnOrthogonalRouter
         }
 
         cancellationToken.ThrowIfCancellationRequested();
+        var obstacles = obstacleContext.Obstacles;
         if (IsStrictlyInsideAny(start, obstacles) || IsStrictlyInsideAny(end, obstacles))
         {
             return false;
         }
 
-        var xCoordinates = new SortedSet<double> { 0d, start.X, end.X };
-        var yCoordinates = new SortedSet<double> { 0d, start.Y, end.Y };
-        foreach (var obstacle in obstacles)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (obstacle.Bounds.Left >= 0d)
-            {
-                xCoordinates.Add(obstacle.Bounds.Left);
-            }
-
-            if (obstacle.Bounds.Right >= 0d)
-            {
-                xCoordinates.Add(obstacle.Bounds.Right);
-            }
-
-            if (obstacle.Bounds.Top >= 0d)
-            {
-                yCoordinates.Add(obstacle.Bounds.Top);
-            }
-
-            if (obstacle.Bounds.Bottom >= 0d)
-            {
-                yCoordinates.Add(obstacle.Bounds.Bottom);
-            }
-        }
-
-        var candidateGraph = BuildCandidateGraph(
-            [.. xCoordinates],
-            [.. yCoordinates],
-            obstacles,
-            cancellationToken);
+        var searchGraph = obstacleContext.GetGraph(start, end, cancellationToken);
+        var candidateGraph = searchGraph.Candidates;
         var points = candidateGraph.Points;
         var pointIndexes = candidateGraph.PointIndexes;
         if (!pointIndexes.TryGetValue(start, out var startIndex) ||
@@ -462,7 +438,7 @@ internal static class BpmnOrthogonalRouter
             return false;
         }
 
-        var neighbors = BuildNeighbors(candidateGraph, cancellationToken);
+        var neighbors = searchGraph.Neighbors;
         var stateCount = points.Length * 3;
         var costs = Enumerable.Repeat(RouteCost.Infinite, stateCount).ToArray();
         var predecessors = Enumerable.Repeat(-1, stateCount).ToArray();
@@ -473,6 +449,7 @@ internal static class BpmnOrthogonalRouter
             new(startState, points[startIndex], incomingDirection, costs[startState]),
         };
 
+        var settledTargetDirections = 0;
         while (pending.Count != 0)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -486,6 +463,16 @@ internal static class BpmnOrthogonalRouter
             var currentPointIndex = PointIndex(current.StateIndex);
             if (currentPointIndex == endIndex)
             {
+                // Both orientations are consumed by waypoint composition. A settled target
+                // cannot improve: every extension has nondecreasing (total, bends, length)
+                // cost, and equal costs never replace predecessors. Keep the original queue
+                // and neighbor order until BOTH terminal states have been removed.
+                settledTargetDirections++;
+                if (settledTargetDirections == 2)
+                {
+                    break;
+                }
+
                 continue;
             }
 
@@ -552,7 +539,7 @@ internal static class BpmnOrthogonalRouter
     private static CandidateGraph BuildCandidateGraph(
         double[] xCoordinates,
         double[] yCoordinates,
-        IReadOnlyList<BpmnRoutingObstacle> obstacles,
+        ObstacleContext obstacleContext,
         CancellationToken cancellationToken)
     {
         var points = new List<PointD>(xCoordinates.Length * yCoordinates.Length);
@@ -567,10 +554,9 @@ internal static class BpmnOrthogonalRouter
         {
             cancellationToken.ThrowIfCancellationRequested();
             var y = yCoordinates[yIndex];
-            rowBlocks[yIndex] = BuildBlockedIntervals(
+            rowBlocks[yIndex] = obstacleContext.GetBlockedIntervals(
                 y,
                 alongHorizontalLine: true,
-                obstacles,
                 cancellationToken);
             var row = new List<int>(xCoordinates.Length);
             var intervalIndex = 0;
@@ -606,10 +592,9 @@ internal static class BpmnOrthogonalRouter
         for (var xIndex = 0; xIndex < xCoordinates.Length; xIndex++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            columnBlocks[xIndex] = BuildBlockedIntervals(
+            columnBlocks[xIndex] = obstacleContext.GetBlockedIntervals(
                 xCoordinates[xIndex],
                 alongHorizontalLine: false,
-                obstacles,
                 cancellationToken);
         }
 
@@ -928,9 +913,9 @@ internal static class BpmnOrthogonalRouter
         return comparison != 0 ? comparison : left.Direction.CompareTo(right.Direction);
     }
 
-    private readonly record struct BlockedInterval(double Start, double End);
+    internal readonly record struct BlockedInterval(double Start, double End);
 
-    private sealed record CandidateGraph(
+    internal sealed record CandidateGraph(
         PointD[] Points,
         Dictionary<PointD, int> PointIndexes,
         int[][] Rows,

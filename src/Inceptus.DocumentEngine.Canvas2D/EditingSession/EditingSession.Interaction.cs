@@ -179,7 +179,8 @@ public sealed partial class EditingSession
                         snapshot,
                         artifacts,
                         cancellationToken,
-                        _generation);
+                        _generation,
+                        transientSource: _currentScene);
                     runTask = started.Task;
                 }
             }
@@ -281,6 +282,8 @@ public sealed partial class EditingSession
                         [CancelledDiagnostic(_documentId.Value)]);
                 }
 
+                updatedEditorState = NormalizeEditorStateViewport(
+                    updatedEditorState, expectedEditorState.Viewport);
                 if (!EditorState.TryUpdate(expectedEditorState, updatedEditorState))
                 {
                     return OperationResult(
@@ -301,7 +304,8 @@ public sealed partial class EditingSession
                     artifacts,
                     cancellationToken,
                     expectedGeneration,
-                    EditingSessionStatus.Ready);
+                    EditingSessionStatus.Ready,
+                    transientSource: expectedScene);
                 runTask = started.Task ?? throw new InvalidOperationException(
                     "A validated interaction scene rebuild could not be started atomically.");
             }
@@ -352,6 +356,7 @@ public sealed partial class EditingSession
                 }
 
                 var cleared = CopyEditorStateWithoutGesture(currentEditorState);
+                var transientSource = _currentScene;
                 if (!EditorState.TryUpdate(currentEditorState, cleared))
                 {
                     return OperationResult(
@@ -375,7 +380,8 @@ public sealed partial class EditingSession
                         artifacts,
                         CancellationToken.None,
                         _generation,
-                        EditingSessionStatus.Ready);
+                        EditingSessionStatus.Ready,
+                        transientSource: transientSource);
                     runTask = started.Task;
                 }
             }

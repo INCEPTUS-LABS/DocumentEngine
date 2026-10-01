@@ -34,6 +34,7 @@ public sealed partial class EditingSession
             observedArtifacts = null;
         }
 
+        var editorState = _editorState?.CaptureSnapshot() ?? _finalEditorState;
         return new EditingSessionState(
             _documentId,
             snapshot?.Revision ?? _lastDocumentRevision,
@@ -45,7 +46,7 @@ public sealed partial class EditingSession
             observedStatus == EditingSessionStatus.Ready ? observedArtifacts?.ProjectedGraph : null,
             observedStatus == EditingSessionStatus.Ready ? observedArtifacts?.LayoutResult : null,
             observedStatus == EditingSessionStatus.Ready ? observedArtifacts?.RoutingResult : null,
-            _editorState?.CaptureSnapshot() ?? _finalEditorState,
+            editorState,
             _history?.CaptureStatus() ?? _finalHistoryStatus,
             _runtimeDiagnostics,
             _presentationDiagnostics,
@@ -54,7 +55,15 @@ public sealed partial class EditingSession
             snapshot?.SemanticModel.ModelProfiles ?? _lastModelProfileState,
             _activeModelProfileViewState,
             _activeModelProfileElementViewState,
-            _presentedGeneration == _generation);
+            _presentedGeneration == _generation,
+            isPanPresentationPending: !_closing && !_closed &&
+                observedStatus == _status &&
+                observedStatus is EditingSessionStatus.Rebuilding or EditingSessionStatus.Ready &&
+                _runtimeDiagnostics.IsEmpty && _presentationDiagnostics.IsEmpty &&
+                _pendingPanPresentation is { } pending && pending.Generation == _generation &&
+                pending.Revision == snapshot?.Revision &&
+                pending.SurfaceGeneration == _surfaceGeneration && _surfaceOperations == 0 &&
+                ReferenceEquals(pending.EditorState, editorState));
     }
 
     private bool IsUnavailable(out EditingSessionState state)

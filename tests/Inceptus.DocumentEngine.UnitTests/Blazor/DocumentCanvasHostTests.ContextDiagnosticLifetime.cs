@@ -47,7 +47,7 @@ public sealed partial class DocumentCanvasHostTests
         Assert.Same(original, host.CaptureDocumentSnapshot().Snapshot);
         Assert.Equal(before.HistoryStatus, session.CaptureState().HistoryStatus);
 
-        // The browser's in-flow alert reduces the canvas height and starts a derived rebuild.
+        // An independent surface resize must also preserve the rejected-action diagnostic.
         await surface.RaiseAsync(new Canvas2DSurfaceSize(1000d, 665.6d, 1d));
         await session.WaitForIdleAsync();
         await notifications.Pending.WaitAsync(TimeSpan.FromSeconds(10));
@@ -226,7 +226,8 @@ public sealed partial class DocumentCanvasHostTests
                     new RejectingContextAnchorValidator())),
                 original.HistoryPolicies, original.DocumentChangedSubscribers,
                 original.ConnectorAnchorPolicyProvider, original.ModelProfileCatalog,
-                original.InitialModelProfileViewState);
+                original.InitialModelProfileViewState,
+                original.RoutingInputPreparer);
             return new DocumentCanvasComposition(composition.Document, configuration,
                 composition.PropertiesSchemaCatalog, composition.Counters,
                 composition.ToolboxPlacementCatalog, composition.AnchorConnectionCreationCatalog,

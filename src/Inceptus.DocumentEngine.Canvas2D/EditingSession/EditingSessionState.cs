@@ -81,7 +81,8 @@ public sealed class EditingSessionState
         ModelProfileStateSnapshot? modelProfileState = null,
         ModelProfileViewStateSnapshot? modelProfileViewState = null,
         ModelProfileElementViewStateSnapshot? modelProfileElementViewState = null,
-        bool isCurrentScenePresented = false)
+        bool isCurrentScenePresented = false,
+        bool isPanPresentationPending = false)
     {
         ArgumentNullException.ThrowIfNull(documentId);
         ArgumentNullException.ThrowIfNull(activeScopeId);
@@ -157,6 +158,7 @@ public sealed class EditingSessionState
         IsClosed = isClosed;
         IsCurrentScenePresented = !isClosed && status == EditingSessionStatus.Ready &&
             isCurrentScenePresented;
+        IsPanPresentationPending = isPanPresentationPending;
     }
 
     public DocumentId DocumentId { get; }
@@ -202,6 +204,14 @@ public sealed class EditingSessionState
     /// Ready alone means that the scene is installed, not that it has been presented.
     /// </summary>
     public bool IsCurrentScenePresented { get; }
+
+    /// <summary>
+    /// Identifies an intermediate publication of the proven current Pan presentation.
+    /// This observation never changes readiness, currency or interaction eligibility.
+    /// Consumers must still reconcile state and render completion or failure normally.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool IsPanPresentationPending { get; }
 
     public bool IsGraphicalInteractionEnabled =>
         !IsClosed && Status == EditingSessionStatus.Ready && CurrentScene is not null;

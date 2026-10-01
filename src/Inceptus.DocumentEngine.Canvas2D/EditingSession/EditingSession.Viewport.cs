@@ -1,6 +1,7 @@
 using Inceptus.DocumentEngine.Contracts.EditorState;
 using Inceptus.DocumentEngine.Contracts.Geometry;
 using Inceptus.DocumentEngine.Canvas2D.Scene;
+using Inceptus.DocumentEngine.Canvas2D.Rendering;
 
 namespace Inceptus.DocumentEngine.Canvas2D.EditingSession;
 
@@ -23,11 +24,13 @@ public sealed partial class EditingSession
                     current.Zoom,
                     current.Pan + canvasTranslation,
                     current.VisibleDocumentRegion),
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken,
+            isPanOperation: true).ConfigureAwait(false);
 
     private async ValueTask<EditingSessionOperationResult> UpdateViewportCoreAsync(
         Func<ViewportSnapshot, ViewportSnapshot> requestedViewportFactory,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool isPanOperation = false)
     {
         if (cancellationToken.IsCancellationRequested ||
             !await TryEnterCommandAsync(cancellationToken).ConfigureAwait(false))
@@ -74,7 +77,10 @@ public sealed partial class EditingSession
                 var viewport = PreserveVisibleDocumentRegion(
                     currentEditorState.Viewport,
                     requestedViewport);
-                if (currentEditorState.Viewport.Equals(viewport))
+                if (currentEditorState.Viewport.Equals(viewport) ||
+                    (isPanOperation && currentEditorState.Viewport.VisibleDocumentRegion is not null &&
+                     currentEditorState.Viewport.Zoom == viewport.Zoom &&
+                     currentEditorState.Viewport.Pan == viewport.Pan))
                 {
                     return OperationResult(EditingSessionOperationStatus.Succeeded);
                 }
@@ -130,7 +136,8 @@ public sealed partial class EditingSession
                     artifacts,
                     cancellationToken,
                     state.Generation,
-                    EditingSessionStatus.Ready);
+                    EditingSessionStatus.Ready,
+                    panSource: isPanOperation ? state.CurrentScene : null);
                 runTask = started.Task ?? throw new InvalidOperationException(
                     "A validated viewport scene rebuild could not be started atomically.");
             }
@@ -146,20 +153,33 @@ public sealed partial class EditingSession
 
     private static ViewportSnapshot PreserveVisibleDocumentRegion(
         ViewportSnapshot current,
-        ViewportSnapshot requested)
+        ViewportSnapshot requested,
+        Canvas2DSurfaceSize? surfaceSize = null)
     {
-        if (current.VisibleDocumentRegion is null)
+        if (surfaceSize is null)
         {
-            return requested;
+            var observation = current.VisibleDocumentRegion is not null ? current : requested;
+            if (observation.VisibleDocumentRegion is null)
+            {
+                // No logical CSS surface has been observed by the session yet.
+                return requested;
+            }
+
+            surfaceSize = Canvas2DSceneBuilder.CalculateCanvasCssSurface(observation);
         }
 
-        var cssSurface = Canvas2DSceneBuilder.CalculateCanvasCssSurface(current);
-        var visibleRegion = Canvas2DSceneBuilder.CalculateVisibleDocumentRegion(
-            requested,
-            cssSurface);
-        return requested.VisibleDocumentRegion == visibleRegion
+        return Canvas2DViewportNormalizer.Normalize(requested, surfaceSize.Value);
+    }
+
+    private static EditorStateSnapshot NormalizeEditorStateViewport(
+        EditorStateSnapshot requested,
+        ViewportSnapshot currentViewport,
+        Canvas2DSurfaceSize? surfaceSize = null)
+    {
+        var viewport = PreserveVisibleDocumentRegion(currentViewport, requested.Viewport, surfaceSize);
+        return requested.Viewport.Equals(viewport)
             ? requested
-            : new ViewportSnapshot(requested.Zoom, requested.Pan, visibleRegion);
+            : CopyEditorStateWithViewport(requested, viewport);
     }
 
     private static EditorStateSnapshot CopyEditorStateWithViewport(

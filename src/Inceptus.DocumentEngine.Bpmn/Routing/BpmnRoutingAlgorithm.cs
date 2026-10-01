@@ -41,12 +41,7 @@ public sealed class BpmnRoutingAlgorithm : IRoutingAlgorithm
 
         var geometries = layout.Nodes.ToDictionary(static node => node.ProjectedObjectId);
         var ports = graph.Ports.ToDictionary(static port => port.Id);
-        var obstacles = layout.Nodes
-            .OrderBy(static node => node.ProjectedObjectId.Value, StringComparer.Ordinal)
-            .Select(static node => new BpmnRoutingObstacle(
-                node.ProjectedObjectId,
-                node.Bounds))
-            .ToArray();
+        var operation = new BpmnRoutingOperation(layout, context.PreparedInput);
         var routes = new List<RoutedConnectorGeometry>(graph.Edges.Length);
         var noRouteEdgeIds = new List<ProjectedObjectId>();
         var diagnostics = new List<Diagnostic>();
@@ -90,10 +85,11 @@ public sealed class BpmnRoutingAlgorithm : IRoutingAlgorithm
                 targetAnchor.Point,
                 targetAnchor.Side);
             var mandatoryWaypoints = PersistentWaypoints(edge, cancellationToken);
+            var obstacleContext = operation.GetDomain(edge.Id);
             var outcome = BpmnOrthogonalRouter.TryRoute(
                 sourceEndpoint,
                 targetEndpoint,
-                obstacles,
+                obstacleContext,
                 mandatoryWaypoints,
                 allowPolicyRelaxation: true,
                 cancellationToken,
@@ -108,7 +104,7 @@ public sealed class BpmnRoutingAlgorithm : IRoutingAlgorithm
                 outcome = BpmnOrthogonalRouter.TryRoute(
                     sourceEndpoint,
                     targetEndpoint,
-                    obstacles,
+                    obstacleContext,
                     [],
                     allowPolicyRelaxation: true,
                     cancellationToken,

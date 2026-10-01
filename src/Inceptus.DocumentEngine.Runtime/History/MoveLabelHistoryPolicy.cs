@@ -42,9 +42,7 @@ internal sealed class MoveLabelHistoryPolicy : ICommandHistoryPolicy
             out var newPlacement);
         if (newIsExplicit != (move.TargetPlacement is not null) ||
             newPlacement != move.TargetPlacement ||
-            oldIsExplicit == newIsExplicit && oldPlacement == newPlacement ||
-            ConnectorLabelPlacement.Resolve(oldState.Properties) ==
-                ConnectorLabelPlacement.Resolve(newState.Properties))
+            oldIsExplicit == newIsExplicit && oldPlacement == newPlacement)
         {
             return Invalid(command);
         }

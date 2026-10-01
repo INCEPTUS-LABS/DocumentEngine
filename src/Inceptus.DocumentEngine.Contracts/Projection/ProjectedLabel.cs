@@ -18,7 +18,8 @@ public sealed class ProjectedLabel : IProjectedObject, IEquatable<ProjectedLabel
         IEnumerable<KeyValuePair<string, PropertyValue>>? algorithmMetadata = null,
         NodeLabelPlacement? nodePlacement = null,
         NodeLabelInteractionPolicy nodeInteractionPolicy =
-            NodeLabelInteractionPolicy.Fixed)
+            NodeLabelInteractionPolicy.Fixed,
+        ConnectorLabelPlacementIntent? connectorPlacement = null)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(ownerId);
@@ -37,6 +38,7 @@ public sealed class ProjectedLabel : IProjectedObject, IEquatable<ProjectedLabel
         Text = text;
         NodePlacement = nodePlacement;
         NodeInteractionPolicy = nodeInteractionPolicy;
+        ConnectorPlacement = connectorPlacement;
         _propertySet = new ProjectedObjectPropertySet(
             semanticProperties,
             projectedProperties,
@@ -67,6 +69,12 @@ public sealed class ProjectedLabel : IProjectedObject, IEquatable<ProjectedLabel
     /// </summary>
     public NodeLabelInteractionPolicy NodeInteractionPolicy { get; }
 
+    /// <summary>
+    /// Gets optional automatic connector placement intent. Null retains midpoint
+    /// placement; an explicit owning Visual State placement overrides this intent.
+    /// </summary>
+    public ConnectorLabelPlacementIntent? ConnectorPlacement { get; }
+
     public PropertyMap SemanticProperties => _propertySet.SemanticProperties;
 
     public PropertyMap ProjectedProperties => _propertySet.ProjectedProperties;
@@ -86,6 +94,7 @@ public sealed class ProjectedLabel : IProjectedObject, IEquatable<ProjectedLabel
         string.Equals(Text, other.Text, StringComparison.Ordinal) &&
         Equals(NodePlacement, other.NodePlacement) &&
         NodeInteractionPolicy == other.NodeInteractionPolicy &&
+        Equals(ConnectorPlacement, other.ConnectorPlacement) &&
         _propertySet.Equals(other._propertySet);
 
     public override bool Equals(object? obj) => Equals(obj as ProjectedLabel);
@@ -97,5 +106,6 @@ public sealed class ProjectedLabel : IProjectedObject, IEquatable<ProjectedLabel
         StringComparer.Ordinal.GetHashCode(Text),
         NodePlacement,
         NodeInteractionPolicy,
+        ConnectorPlacement,
         _propertySet);
 }

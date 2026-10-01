@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Inceptus.DocumentEngine.Canvas2D.Interaction;
 using Inceptus.DocumentEngine.Canvas2D.Rendering;
 using Inceptus.DocumentEngine.Contracts.Canvas2D;
@@ -448,6 +449,7 @@ public sealed partial class Canvas2DSceneBuilder
             measuredNodeLabels,
             measuredConnectorLabels);
 
+        ApplyTransientInteractionCapabilities(graph, items);
         var pipelineItems = items.ToDictionary(static item => item.Id);
         var canonicalItemVisualOverrides =
             new Dictionary<SceneObjectId, CanonicalItemVisualOverrideRegistration>();
@@ -527,6 +529,8 @@ public sealed partial class Canvas2DSceneBuilder
         SuppressNodeLabelHitTestingDuringAnchorConnection(editorState, items);
 
         var editorOverlayStartIndex = items.Count;
+        var moveBaseItems = items.ToArray();
+        var overlayInputs = CreateEditorOverlayInputs(graph, visualModel);
         ComposeEditorOverlays(
             editorState,
             graph,
@@ -534,8 +538,11 @@ public sealed partial class Canvas2DSceneBuilder
             items,
             diagnostics,
             measuredNodeLabels,
-            measuredConnectorLabels);
+            measuredConnectorLabels,
+            overlayInputs);
         AssociateEditorOverlaysWithSpatialPresentation(items, editorOverlayStartIndex);
+        var moveOverlayItems = items.Skip(editorOverlayStartIndex)
+            .Where(static item => !IsDocumentBoundaryGuide(item)).ToArray();
         ValidateAndOrderSceneItems(
             graph,
             routing,
@@ -549,6 +556,12 @@ public sealed partial class Canvas2DSceneBuilder
             return Canvas2DSceneBuildResult.Failure(diagnostics);
         }
 
+        var guides = items.Where(IsDocumentBoundaryGuide).ToImmutableArray();
+        items.RemoveAll(IsDocumentBoundaryGuide);
+        var boundaryGuides = new Canvas2DBoundaryGuidePresentation(
+            guides,
+            FindBoundaryGuideContentIndex(items, "document-boundary:x-axis"),
+            FindBoundaryGuideContentIndex(items, "document-boundary:y-axis"));
         var viewportTransform = CreateViewportTransform(editorState);
         var scene = new Canvas2DScene(
             graph.DocumentId,
@@ -565,7 +578,11 @@ public sealed partial class Canvas2DSceneBuilder
             new PropertyMap(contributorMetadata),
             items,
             diagnostics,
-            spatialPresentation?.Plan);
+            spatialPresentation?.Plan,
+            CreatePanReuseSource(graph, layout, routing, visualModel, editorState, presentation),
+            boundaryGuides,
+            CreateBoundedPresentation(graph, layout, routing, visualModel, editorState,
+                presentation, moveBaseItems, moveOverlayItems, overlayInputs, diagnostics));
 
         return Canvas2DSceneBuildResult.Success(scene);
     }

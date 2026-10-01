@@ -80,7 +80,8 @@ internal static class BpmnModelerComposition
                 OrganizationalRegistration.HistoryPolicies),
             connectorAnchorPolicyProvider: ConnectorAnchorPolicyProvider,
             modelProfileCatalog: new ModelProfileCatalog(
-                BpmnRegistration.ModelProfileDefinitions));
+                BpmnRegistration.ModelProfileDefinitions),
+            routingInputPreparer: OrganizationalRegistration.RoutingInputPreparer);
 
         return new DocumentCanvasComposition(
             document,

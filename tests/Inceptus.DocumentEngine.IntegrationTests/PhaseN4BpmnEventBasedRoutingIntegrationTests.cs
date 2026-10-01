@@ -48,7 +48,7 @@ public sealed class PhaseN4BpmnEventBasedRoutingIntegrationTests
             new ViewportSnapshot(1d, default, new RectD(0d, 0d, 900d, 600d)),
             initialScene.Viewport);
         Assert.Equal(Matrix2D.Identity, initialScene.ViewportTransform);
-        Assert.Equal(2, initialScene.Items.Count(sceneItem =>
+        Assert.Equal(2, initialScene.BoundaryGuides.Items.Count(sceneItem =>
             sceneItem.Origin.StableSourceKey?.StartsWith(
                 "document-boundary:",
                 StringComparison.Ordinal) == true &&

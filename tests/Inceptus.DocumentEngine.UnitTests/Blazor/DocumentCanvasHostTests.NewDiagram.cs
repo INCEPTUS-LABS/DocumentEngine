@@ -104,7 +104,9 @@ public sealed partial class DocumentCanvasHostTests
         Assert.NotEmpty(oldSnapshot.Metadata.SystemManagedProperties);
         Assert.NotEmpty(oldSnapshot.Metadata.ExtensionProperties);
         Assert.NotEqual(oldSnapshot.SemanticModel.RootScopeId, oldState.ActiveScopeId);
-        Assert.Equal(oldViewport, oldState.EditorState.Viewport);
+        Assert.Equal(oldViewport.Zoom, oldState.EditorState.Viewport.Zoom);
+        Assert.Equal(new VectorD(0d, -47d), oldState.EditorState.Viewport.Pan);
+        Assert.Equal(0d, oldState.EditorState.Viewport.VisibleDocumentRegion!.Value.Left);
         Assert.False(oldState.ModelProfileViewState.IsPreferredVisible(
             BpmnModelProfiles.OrganizationalId));
         Assert.True(oldState.ModelProfileElementViewState.IsCollapsed(

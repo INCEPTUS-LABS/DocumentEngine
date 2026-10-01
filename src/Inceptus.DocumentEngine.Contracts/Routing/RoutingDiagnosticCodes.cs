@@ -8,6 +8,7 @@ public static class RoutingDiagnosticCodes
     public const string DuplicateAlgorithmRegistration = "ROUTING_ALGORITHM_REGISTRATION_DUPLICATE";
     public const string MissingAlgorithm = "ROUTING_ALGORITHM_NOT_FOUND";
     public const string InvalidInput = "ROUTING_INPUT_INVALID";
+    public const string InputPreparationFailure = "ROUTING_INPUT_PREPARATION_FAILED";
     public const string IncompatibleLayoutResult = "ROUTING_LAYOUT_INCOMPATIBLE";
     public const string AlgorithmFailure = "ROUTING_ALGORITHM_FAILED";
     public const string InvalidAlgorithmResult = "ROUTING_ALGORITHM_RESULT_INVALID";

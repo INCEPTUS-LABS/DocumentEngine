@@ -690,6 +690,9 @@ public sealed class PhaseM0ConnectorAnchorPolicyIntegrationTests
         public ValueTask<Canvas2DInteropOperationResult> RenderAsync(Canvas2DRenderFrame frame) =>
             ValueTask.FromResult(Success());
 
+        public ValueTask<Canvas2DInteropOperationResult> RenderViewportAsync(Canvas2DViewportFrame frame) =>
+            ValueTask.FromResult(Success());
+
         public ValueTask<Canvas2DTextMeasurementInteropResult> MeasureTextAsync(
             Canvas2DTextMeasurementRequestData request) =>
             ValueTask.FromResult(new Canvas2DTextMeasurementInteropResult

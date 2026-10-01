@@ -34,7 +34,11 @@ public sealed class OrganizationalPoolSceneContributor :
 
     private static readonly Canvas2DSceneContributorDescriptor Descriptor = new(
         new Canvas2DSceneContributorId("inceptus:organizational/scene/pools"),
-        "1");
+        "1",
+        Canvas2DScenePanDependency.Invariant,
+        Canvas2DSceneMoveGestureDependency.Invariant,
+        Canvas2DSceneTransientDependency.Invariant,
+        Canvas2DSceneTransientDependency.Invariant);
 
     private readonly IOrganizationalElementEligibilityPolicy _eligibilityPolicy;
 
@@ -280,27 +284,9 @@ public sealed class OrganizationalPoolSceneContributor :
         Contracts.Documents.DocumentSnapshot document,
         DocumentScopeId activeScopeId,
         ProjectedNode node,
-        HashSet<SemanticElementId> poolIds)
-    {
-        var semanticElementId = node.PlacementHint?.BoundaryAttachment?.AttachedToElementId ??
-            node.Source.SemanticElementId;
-        if (!document.SemanticModel.TryGetElement(semanticElementId, out var element) ||
-            element is null ||
-            document.SemanticModel.GetScope(element.Id).Id != activeScopeId ||
-            (!OrganizationalSemantics.IsDirectlyAssignable(element, _eligibilityPolicy) &&
-             node.PlacementHint?.BoundaryAttachment is null) ||
-            !OrganizationalSemantics.TryGetAssignedPoolId(
-                document.SemanticModel,
-                semanticElementId,
-                out var poolId) ||
-            poolId is null ||
-            !poolIds.Contains(poolId))
-        {
-            return null;
-        }
-
-        return poolId;
-    }
+        HashSet<SemanticElementId> poolIds) =>
+        OrganizationalSemantics.ResolveSpatialPoolId(
+            document, activeScopeId, node, poolIds, _eligibilityPolicy);
 
     private static Dictionary<VisualStateId, RectD> ResolveCanonicalBoundsByVisual(
         IEnumerable<ProjectedNode> nodes,

@@ -1,4 +1,5 @@
 using Inceptus.DocumentEngine.Bpmn.Semantics;
+using Inceptus.DocumentEngine.Contracts.Canvas2D;
 using Inceptus.DocumentEngine.Contracts.Primitives;
 using Inceptus.DocumentEngine.Contracts.Properties;
 using Inceptus.DocumentEngine.Contracts.Projection;
@@ -276,6 +277,9 @@ internal sealed class BpmnNodeProjectionRule : IProjectionRule
                 new(
                     BpmnProjectionIdentities.ProjectedSemanticTypeProperty,
                     PropertyValue.FromText(element.Element.TypeId.Value)),
+                .. BpmnActivitySemanticTypes.IsActivity(element.Element.TypeId)
+                    ? new[] { Canvas2DTransientInteractionMetadata.BoundedSelectionEnabled }
+                    : [],
             ],
             geometryInteractionPolicy: _geometryInteractionPolicy);
         return ProjectionRuleResult.Success(new ProjectionRuleContribution(
@@ -340,6 +344,9 @@ internal sealed class BpmnNodeProjectionRule : IProjectionRule
                 node.Id,
                 name.TextValue,
                 semanticProperties: input.Element.Properties,
+                projectedProperties: BpmnActivitySemanticTypes.IsActivity(input.Element.TypeId)
+                    ? [Canvas2DTransientInteractionMetadata.HoverExcluded]
+                    : [],
                 nodePlacement: _nameLabelPlacement,
                 nodeInteractionPolicy: _nameLabelInteractionPolicy),
         ];
@@ -362,6 +369,9 @@ internal sealed class BpmnNodeProjectionRule : IProjectionRule
 
 internal sealed class BpmnSequenceFlowProjectionRule : IProjectionRule
 {
+    // BPMN branch-label presentation policy; the generic resolver owns only geometry.
+    private static readonly ConnectorLabelPlacementIntent NearSource = new(32d, 8d);
+
     public ProjectionRuleResult Project(
         ProjectionRuleInput input,
         CancellationToken cancellationToken)
@@ -408,7 +418,19 @@ internal sealed class BpmnSequenceFlowProjectionRule : IProjectionRule
                     BpmnProjectionIdentities.ProjectedSemanticTypeProperty,
                     PropertyValue.FromText(relationship.Relationship.TypeId.Value)),
             ]);
-        return ProjectionRuleResult.Success(new ProjectionRuleContribution(edges: [edge]));
+        var labels = new List<ProjectedLabel>();
+        if (relationship.Relationship.Properties.TryGetValue(BpmnSemanticProperties.Name, out var name) &&
+            name.Kind == PropertyValueKind.Text && !string.IsNullOrWhiteSpace(name.TextValue))
+        {
+            labels.Add(new ProjectedLabel(
+                new ProjectionSourceTrace(input.DocumentId, BpmnProjectionIdentities.SequenceFlowRuleId,
+                    input.SourceKind, input.SemanticId, input.SemanticTypeId, "name", visual?.Id),
+                edge.Id, name.TextValue,
+                semanticProperties: relationship.Relationship.Properties,
+                connectorPlacement: NearSource));
+        }
+
+        return ProjectionRuleResult.Success(new ProjectionRuleContribution(edges: [edge], labels: labels));
     }
 
     private static ProjectedObjectId NodeId(

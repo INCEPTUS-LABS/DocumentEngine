@@ -22,6 +22,9 @@ public sealed class Canvas2DRenderer : ITextMetricsService, IAsyncDisposable
     private bool _isInitialized;
     private bool _isDisposed;
     private Diagnostic? _disposalDiagnostic;
+    private Canvas2DScene? _cachedScene;
+    private long _contentVersion;
+    private long _presentationVersion;
 
     public Canvas2DRenderer(
         IJSRuntime jsRuntime,
@@ -100,6 +103,7 @@ public sealed class Canvas2DRenderer : ITextMetricsService, IAsyncDisposable
                     nameof(surfaceSize));
             }
 
+            _cachedScene = null;
             var result = await InvokeInteropAsync(
                 () => _execution.InitializeAsync(
                     canvasElementId,
@@ -152,6 +156,7 @@ public sealed class Canvas2DRenderer : ITextMetricsService, IAsyncDisposable
                     nameof(surfaceSize));
             }
 
+            _cachedScene = null;
             return await InvokeInteropAsync(
                 () => _execution.ResizeAsync(surfaceSize),
                 Canvas2DRendererDiagnosticCodes.ResizeFailed,
@@ -192,6 +197,28 @@ public sealed class Canvas2DRenderer : ITextMetricsService, IAsyncDisposable
                 return lifecycleFailure;
             }
 
+            var presentationVersion = checked(++_presentationVersion);
+            if (CanReuseContent(scene))
+            {
+                var viewport = new Canvas2DViewportFrame(
+                    Canvas2DMatrixData.From(scene.ViewportTransform),
+                    _contentVersion, presentationVersion,
+                    Canvas2DViewportLine.From(scene.BoundaryGuides),
+                    scene.BoundedPresentation is { } move && _cachedScene?.BoundedPresentation is { } cachedMove &&
+                    ReferenceEquals(move.Source, cachedMove.Source) && move.Items == cachedMove.Items &&
+                    move.BeforeContentIndices == cachedMove.BeforeContentIndices
+                        ? null : Canvas2DBoundedRenderItem.From(scene.BoundedPresentation));
+                var viewportResult = await InvokeInteropAsync(
+                    () => _execution.RenderViewportAsync(viewport),
+                    Canvas2DRendererDiagnosticCodes.RenderingFailed,
+                    "Canvas2D cached-content rendering failed.");
+                _cachedScene = viewportResult.Succeeded ? scene : null;
+                return viewportResult;
+            }
+
+            // Only a successfully acknowledged complete upload can authorize reuse.
+            // Invalidate before validation/conversion too: failure must require a fresh upload.
+            _cachedScene = null;
             var imageFailure = ValidateImageResources(scene);
             if (imageFailure is not null)
             {
@@ -207,14 +234,18 @@ public sealed class Canvas2DRenderer : ITextMetricsService, IAsyncDisposable
             Canvas2DRenderFrame frame;
             try
             {
-                var items = new Canvas2DRenderItem[scene.Items.Length];
-                for (var index = 0; index < scene.Items.Length; index++)
+                var content = scene.RenderContent;
+                var items = new Canvas2DRenderItem[content.Length];
+                for (var index = 0; index < content.Length; index++)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    items[index] = new Canvas2DRenderItem(scene.Items[index]);
+                    items[index] = new Canvas2DRenderItem(content[index]);
                 }
 
-                frame = new Canvas2DRenderFrame(scene.ViewportTransform, items);
+                frame = new Canvas2DRenderFrame(scene.ViewportTransform, items,
+                    checked(++_contentVersion), presentationVersion,
+                    Canvas2DViewportLine.From(scene.BoundaryGuides),
+                    Canvas2DBoundedRenderItem.From(scene.BoundedPresentation));
                 cancellationToken.ThrowIfCancellationRequested();
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -232,12 +263,14 @@ public sealed class Canvas2DRenderer : ITextMetricsService, IAsyncDisposable
             }
 #pragma warning restore CA1031
 
-            // Cancellation intentionally stops here. Once dispatched, one complete-frame browser
+            // Cancellation intentionally stops here. Once dispatched, one complete browser
             // operation is allowed to finish so no transactional rollback semantics are implied.
-            return await InvokeInteropAsync(
+            var result = await InvokeInteropAsync(
                 () => _execution.RenderAsync(frame),
                 Canvas2DRendererDiagnosticCodes.RenderingFailed,
                 "Canvas2D complete-frame rendering failed.");
+            _cachedScene = result.Succeeded ? scene : null;
+            return result;
         }
         finally
         {
@@ -506,6 +539,7 @@ public sealed class Canvas2DRenderer : ITextMetricsService, IAsyncDisposable
             Volatile.Write(ref _isDisposed, true);
             Volatile.Write(ref _isInitialized, false);
             _textMeasurementCache.Clear();
+            _cachedScene = null;
 #pragma warning disable CA1031 // Disposal is best effort after the public object is permanently disposed.
             try
             {
@@ -529,6 +563,48 @@ public sealed class Canvas2DRenderer : ITextMetricsService, IAsyncDisposable
         {
             _lifecycleGate.Release();
         }
+    }
+
+    // Session surface/currency gates serialize this observation with its renderer operations.
+    internal bool HasAcknowledgedContent(Canvas2DScene scene) => CanReuseContent(scene);
+
+    private bool CanReuseContent(Canvas2DScene scene)
+    {
+        var cached = _cachedScene;
+        if (cached is null || cached.RenderContent != scene.RenderContent ||
+            cached.DocumentId != scene.DocumentId || cached.SourceRevision != scene.SourceRevision ||
+            !ReferenceEquals(cached.Configuration, scene.Configuration) ||
+            cached.Viewport.Zoom != scene.Viewport.Zoom)
+        {
+            return false;
+        }
+
+        // The readonly renderer configuration/resources and physical canvas are fixed for
+        // this initialized instance. Resize and failures clear the acknowledgment above.
+        // Exact array identity proves order and every immutable drawing input, without hashes.
+        // A different wrapper additionally requires compatible Pan provenance so shared empty
+        // arrays cannot authorize reuse across document/session/scope/profile replacements.
+        if (ReferenceEquals(cached, scene))
+        {
+            return true;
+        }
+
+        // Only the builder's explicit bounded provenance can separate transient presentation
+        // from the exact immutable base array. A full rebuild creates a new source.
+        if (cached.BoundedPresentation is { } cachedMove && scene.BoundedPresentation is { } currentMove &&
+            ReferenceEquals(cachedMove.Source, currentMove.Source))
+        {
+            return true;
+        }
+
+        var previous = cached.PanReuseSource;
+        var current = scene.PanReuseSource;
+        return previous is not null && current is not null &&
+            ReferenceEquals(previous.Builder, current.Builder) &&
+            ReferenceEquals(previous.Document, current.Document) &&
+            previous.ScopeId == current.ScopeId &&
+            ReferenceEquals(previous.ProfileViewState, current.ProfileViewState) &&
+            ReferenceEquals(previous.ProfileElementViewState, current.ProfileElementViewState);
     }
 
     private async ValueTask<bool> TryEnterAsync(CancellationToken cancellationToken)

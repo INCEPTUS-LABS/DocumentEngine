@@ -1,6 +1,6 @@
 # Inceptus Document Engine
 
-A reusable BPMN modeler with immutable native documents and a standalone process presentation export. This README describes the coordinated **0.1.4 development line** targeting **net10.0**. Development preparation does not mean the packages have been published to a public feed.
+A reusable BPMN modeler with immutable native documents and a standalone process presentation export. This README describes the coordinated **0.1.6 release candidate** targeting **net10.0**. Local preparation does not mean the packages have been published to a public feed.
 
 [Product page](https://inceptus.online/bpmn/) · [System/application](https://bpmn.inceptus.online)
 
@@ -24,7 +24,7 @@ Use the six packages as an **aligned version family**. The top-level modeler pac
 The validated hosting model is a **standalone Blazor WebAssembly application** on .NET 10. Configure a feed containing the reviewed candidate before adding the package:
 
 ```xml
-<PackageReference Include="Inceptus.DocumentEngine.Bpmn.Blazor" Version="0.1.4" />
+<PackageReference Include="Inceptus.DocumentEngine.Bpmn.Blazor" Version="0.1.6" />
 ```
 
 Register the modeler in the application's `Program.cs`. The extension namespace is `Microsoft.Extensions.DependencyInjection`:
@@ -78,6 +78,12 @@ Keep the host's generated scoped-CSS bundle linked in `wwwroot/index.html`, usin
 Razor static-web-asset integration supplies the package's JavaScript, scoped CSS and font. Do not copy modeler assets or reference engine source projects in a package consumer. Keep ordinary Blazor framework bootstrapping and the host's application base configuration. Root and non-root deployment use the same package assets; there are no modeler-specific asset URL options.
 
 `Class`, `Style` and `AdditionalAttributes` (`IReadOnlyDictionary<string, object>?`, captured unmatched attributes) apply to the component wrapper. Ensure ancestor layout allows it to receive width and height.
+
+## Source Demo
+
+The canonical source Demo is `src/Inceptus.DocumentEngine.Blazor`. It uses project references to the current engine and starts with its embedded branching order-process sample. Run it with `dotnet run --project src/Inceptus.DocumentEngine.Blazor -c Release`. The sample includes named event-gateway branches, an expandable subprocess and a boundary timer. Its two closely spaced branch labels have explicit placements; Reset label position restores the automatic near-source placement.
+
+The Demo exercises the current activity selection, drag-preview, viewport culling, pan/zoom and renderer-cache paths without opt-in settings. Select activity bodies and captions, move activities, use Undo/Redo, navigate into the subprocess, and pan or zoom the diagram. Selection and viewport changes remain transient; accepted edits use the existing command and History path. The Demo is not packaged; package consumers use the public component described above.
 
 ## UI localization
 

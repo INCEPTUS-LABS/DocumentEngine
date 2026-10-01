@@ -1,5 +1,14 @@
 # Release notes
 
+## 0.1.6 candidate
+
+- Prepares the coordinated six-package release checkpoint after A1.2.13. The published 0.1.5 identity remains immutable; Canvas2D requires Runtime exactly [0.1.6], and other family dependencies retain their minimum-version policy.
+- Adds BPMN SequenceFlow names with automatic near-source branch labels, editable through Properties, with manual placement, reset and exact Undo/Redo.
+- Includes dependency-safe pan reuse, renderer-resident frame caching, bounded Blazor presentation work and viewport culling, plus document-origin viewport normalization and stable boundary guides.
+- Reduces orthogonal routing work and bounds activity drag-preview, hit-testing and selection work while preserving the existing Document, command, History and derived-processing authorities.
+- Refreshes the canonical source Demo with named event-gateway branches alongside its activities, subprocess and boundary timer. No feature switch is required for the accepted fast paths.
+- Retains net10.0, existing native/PublishedProcess formats, dependency baselines and portable symbols. These are local preparation artifacts; public source provenance and publication remain separate release steps. A1.2.14 is not included.
+
 ## 0.1.5 development
 
 - Defaults the source Blazor host UI to neutral English while keeping data culture invariant; reusable modeler languages remain host-selected.

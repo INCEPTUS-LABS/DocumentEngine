@@ -1,6 +1,7 @@
 using Inceptus.DocumentEngine.Canvas2D.Scene;
 using Inceptus.DocumentEngine.Contracts.Canvas2D;
 using Inceptus.DocumentEngine.Contracts.Geometry;
+using Inceptus.DocumentEngine.Contracts.Properties;
 
 namespace Inceptus.DocumentEngine.Canvas2D.HitTesting;
 
@@ -21,13 +22,29 @@ public sealed class Canvas2DSceneHitTestService
 
     public Canvas2DSceneHitTestResult? HitTest(
         Canvas2DScene scene,
-        PointD documentPoint)
+        PointD documentPoint) => HitTestCore(scene, documentPoint, forHover: false);
+
+    /// <summary>Acquires ordinary hover without changing click, context or gesture acquisition.</summary>
+    public Canvas2DSceneHitTestResult? HitTestForHover(
+        Canvas2DScene scene,
+        PointD documentPoint) => HitTestCore(scene, documentPoint, forHover: true);
+
+    private Canvas2DSceneHitTestResult? HitTestCore(
+        Canvas2DScene scene,
+        PointD documentPoint,
+        bool forHover)
     {
         ArgumentNullException.ThrowIfNull(scene);
 
         for (var index = scene.Items.Length - 1; index >= 0; index--)
         {
             var item = scene.Items[index];
+            if (forHover && item.Metadata.TryGetValue(
+                    Canvas2DTransientInteractionMetadata.ExcludeFromHover, out var excluded) &&
+                excluded.Kind == PropertyValueKind.Boolean && excluded.BooleanValue)
+            {
+                continue;
+            }
             if (IsHit(item, documentPoint))
             {
                 if (Canvas2DConnectorLineJumpMetadata.TryResolveHitTarget(

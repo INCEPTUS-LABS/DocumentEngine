@@ -2357,7 +2357,7 @@ public sealed class Canvas2DSceneBuilderTests
             inputs.VisualModel,
             editorState).Scene);
 
-        Assert.Equal(expectedCount, scene.Items.Count(item =>
+        Assert.Equal(expectedCount, scene.BoundaryGuides.Items.Count(item =>
             item.Origin.StableSourceKey?.StartsWith(
                 "document-boundary:",
                 StringComparison.Ordinal) == true));
@@ -2434,7 +2434,7 @@ public sealed class Canvas2DSceneBuilderTests
     private static Canvas2DSceneItem BoundaryGuide(
         Canvas2DScene scene,
         string stableSourceKey) =>
-        Assert.Single(scene.Items, item =>
+        Assert.Single(scene.BoundaryGuides.Items, item =>
             StringComparer.Ordinal.Equals(
                 item.Origin.StableSourceKey,
                 stableSourceKey));

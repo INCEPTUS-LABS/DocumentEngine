@@ -117,9 +117,12 @@ public sealed class PhaseL55ConnectorPropertiesAndLabelArchitectureTests
         Assert.Contains("relationship.Relationship.Properties", demo,
             StringComparison.Ordinal);
         Assert.Contains("Canvas2DTextLayoutService", layout, StringComparison.Ordinal);
-        Assert.Contains("Canvas2DConnectorPathGeometry.ResolvePoint", layout,
+        var resolver = ReadProductionFile(
+            "Inceptus.DocumentEngine.Canvas2D", "Scene", "Canvas2DConnectorLabelResolver.cs");
+        Assert.Contains("Canvas2DConnectorLabelResolver.Resolve", layout,
             StringComparison.Ordinal);
-        Assert.Contains("placement.Offset", layout, StringComparison.Ordinal);
+        Assert.Contains("Canvas2DConnectorPathGeometry.ResolvePoint", resolver, StringComparison.Ordinal);
+        Assert.Contains("placement.Offset", resolver, StringComparison.Ordinal);
         Assert.Contains("totalLength", path, StringComparison.Ordinal);
         Assert.Contains("bestLength / totalLength", path, StringComparison.Ordinal);
         Assert.DoesNotContain("ConnectorLabelPlacement", renderer, StringComparison.Ordinal);

@@ -72,7 +72,7 @@ public sealed class MoveLabelCommandHandlerTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task EquivalentDefaultOrExplicitPlacementIsANoOp(bool useExplicitDefault)
+    public async Task ExplicitDefaultIsManualAndOnlyAnIdenticalManualValueIsANoOp(bool useExplicitDefault)
     {
         var snapshot = Snapshot(
             DocumentRevision.Zero,
@@ -83,11 +83,20 @@ public sealed class MoveLabelCommandHandlerTests
             snapshot,
             CancellationToken.None);
 
-        Assert.False(result.Succeeded);
-        Assert.Null(result.ProposedDocument);
-        Assert.Equal(
-            CommandExecutionDiagnosticCodes.LabelPlacementUnchanged,
-            Assert.Single(result.Diagnostics).Code);
+        Assert.Equal(!useExplicitDefault, result.Succeeded);
+        if (useExplicitDefault)
+        {
+            Assert.Null(result.ProposedDocument);
+            Assert.Equal(CommandExecutionDiagnosticCodes.LabelPlacementUnchanged,
+                Assert.Single(result.Diagnostics).Code);
+        }
+        else
+        {
+            Assert.True(ConnectorLabelPlacement.TryRead(
+                Assert.Single(result.ProposedDocument!.VisualModel.VisualStates).Properties,
+                out var manual));
+            Assert.Equal(ConnectorLabelPlacement.Default, manual);
+        }
     }
 
     [Fact]

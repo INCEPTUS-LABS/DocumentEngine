@@ -468,10 +468,12 @@ public sealed partial class Canvas2DSceneBuilder
                 continue;
             }
 
-            var placement = edge.Source.VisualStateId is { } visualStateId &&
-                visuals.TryGetValue(visualStateId, out var visual)
-                    ? ConnectorLabelPlacement.Resolve(visual.Properties)
-                    : ConnectorLabelPlacement.Default;
+            ConnectorLabelPlacement? placement = null;
+            if (edge.Source.VisualStateId is { } visualStateId &&
+                visuals.TryGetValue(visualStateId, out var visual))
+            {
+                ConnectorLabelPlacement.TryRead(visual.Properties, out placement);
+            }
             var requestedLineHeight = ConnectorLabelStyle.FontSize *
                 _connectorLabelLayout.LineHeightMultiplier;
             var textLayout = await layoutService.LayoutAsync(
@@ -486,16 +488,18 @@ public sealed partial class Canvas2DSceneBuilder
                 return null;
             }
 
-            var routePoint = Canvas2DConnectorPathGeometry.ResolvePoint(
-                route.Path,
-                placement.PathPosition);
+            var textSize = new SizeD(
+                textLayout.Lines.Max(static line => line.Metrics.Width),
+                textLayout.Lines.Sum(static line => line.Metrics.LineHeight));
+            var anchor = Canvas2DConnectorLabelResolver.Resolve(
+                label, route.Path, placement, textSize);
             layouts.Add(
                 label.Id,
                 new Canvas2DMeasuredConnectorLabel(
                     label,
                     route,
                     placement,
-                    routePoint + placement.Offset,
+                    anchor,
                     textLayout));
         }
 
@@ -565,13 +569,10 @@ public sealed partial class Canvas2DSceneBuilder
     private static Canvas2DSceneItem CreateUnmeasuredConnectorLabelItem(
         ProjectedLabel label,
         RoutedConnectorGeometry route,
-        ConnectorLabelPlacement placement,
+        ConnectorLabelPlacement? placement,
         SceneObjectId connectorSceneObjectId,
         IEnumerable<KeyValuePair<string, PropertyValue>> persistentAppearance)
     {
-        var anchor = Canvas2DConnectorPathGeometry.ResolvePoint(
-            route.Path,
-            placement.PathPosition) + placement.Offset;
         var lineHeight = ConnectorLabelStyle.FontSize *
             Canvas2DConnectorLabelLayoutConfiguration.Default.LineHeightMultiplier;
         var localBounds = new RectD(
@@ -579,6 +580,8 @@ public sealed partial class Canvas2DSceneBuilder
             -(lineHeight / 2d),
             Canvas2DConnectorLabelLayoutConfiguration.Default.MaximumWidth,
             lineHeight);
+        var anchor = Canvas2DConnectorLabelResolver.Resolve(
+            label, route.Path, placement, localBounds.Size);
         var localAnchor = new PointD(0d, 0d);
         var origin = CreateOrigin(label, [label.OwnerId]);
         return new Canvas2DSceneItem(
@@ -644,6 +647,6 @@ internal sealed record Canvas2DMeasuredLabelBox(
 internal sealed record Canvas2DMeasuredConnectorLabel(
     ProjectedLabel Label,
     RoutedConnectorGeometry Route,
-    ConnectorLabelPlacement Placement,
+    ConnectorLabelPlacement? Placement,
     PointD Anchor,
     Canvas2DTextLayout TextLayout);

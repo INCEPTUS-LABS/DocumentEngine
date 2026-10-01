@@ -6,6 +6,8 @@
 @using Inceptus.DocumentEngine.Contracts.Toolbox
 @using Microsoft.AspNetCore.Components.Web
 
+@{ _renderedInputs = CaptureRenderInputs(); }
+
 <aside id="@DomId("toolbox")"
        class="@PanelClass"
        aria-labelledby="@DomId("toolbox-heading")"
@@ -139,6 +141,8 @@
     private const string UnknownIconFallbackGlyph = "□";
     private readonly string _fallbackDomIdPrefix = $"inceptus-{Guid.NewGuid():N}";
     private readonly ToolboxPresentationState _presentation = new();
+    private ToolboxCatalog? _reconciledCatalog;
+    private RenderInputs? _renderedInputs;
 
     [Parameter]
     public string? DomIdPrefix { get; set; }
@@ -196,8 +200,29 @@
     protected override void OnParametersSet()
     {
         base.OnParametersSet();
-        _presentation.Reconcile(VisibleGroups.Select(static entry => entry.Group.GroupId));
+        if (!ReferenceEquals(_reconciledCatalog, Catalog))
+        {
+            _presentation.Reconcile(VisibleGroups.Select(static entry => entry.Group.GroupId));
+            _reconciledCatalog = Catalog;
+        }
     }
+
+    protected override bool ShouldRender() => _renderedInputs != CaptureRenderInputs();
+
+    private RenderInputs CaptureRenderInputs() => new(
+        Catalog, SelectedItemId, SelectedItemIdChanged, DomIdPrefix,
+        RenderCulture?.Name, System.Globalization.CultureInfo.CurrentUICulture.Name,
+        _presentation.ExpandedToolboxGroupId, _presentation.ViewMode);
+
+    private sealed record RenderInputs(
+        ToolboxCatalog Catalog,
+        ToolboxItemId? SelectedItemId,
+        EventCallback<ToolboxItemId> SelectionChanged,
+        string? DomIdPrefix,
+        string? RenderCulture,
+        string UICulture,
+        ToolboxGroupId? ExpandedGroup,
+        ToolboxViewMode ViewMode);
 
     internal async Task<bool> SelectItemAsync(ToolboxItemId itemId)
     {

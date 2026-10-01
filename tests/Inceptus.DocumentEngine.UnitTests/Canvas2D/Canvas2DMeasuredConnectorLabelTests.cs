@@ -238,6 +238,32 @@ public sealed class Canvas2DMeasuredConnectorLabelTests
     }
 
     [Fact]
+    public async Task NearSourceRoutePreviewUsesCurrentPathAndMeasuredTextSize()
+    {
+        var intent = new ConnectorLabelPlacementIntent(24d, 8d);
+        var initial = await BuildAsync("Approved", intent: intent);
+        var visualId = initial.Edge.Source.VisualStateId!;
+        var gesture = new EditorGestureSnapshot(
+            "test:near-source-preview", Canvas2DRouteGestureMetadata.Kind,
+            new PointD(160d, 45d), new PointD(160d, 70d),
+            [
+                new(Canvas2DRouteGestureMetadata.TargetSceneObjectId,
+                    PropertyValue.FromText(Canvas2DSceneObjectIdentity.ForProjected(initial.Edge.Id, "connector").Value)),
+                new(Canvas2DRouteGestureMetadata.TargetVisualStateId, PropertyValue.FromText(visualId.Value)),
+                new(Canvas2DRouteGestureMetadata.BendIndex, PropertyValue.FromInteger(1)),
+            ]);
+        var preview = await BuildAsync("Approved", intent: intent,
+            editorState: new EditorStateSnapshot(selection: [visualId], activeGesture: gesture));
+        var transient = Assert.Single(preview.Scene.Items, item =>
+            item.Origin.ProjectedObjectId == preview.Label.Id &&
+            item.Origin.StableSourceKey?.StartsWith("route-label-preview:", StringComparison.Ordinal) == true);
+        PointD[] effectivePreview = [new(110d, 45d), new(160d, 70d), new(210d, 45d)];
+        var expected = Canvas2DConnectorLabelResolver.Resolve(preview.Label, effectivePreview, null, transient.Bounds.Size);
+        Assert.Equal(expected, Anchor(transient));
+        Assert.Equal(Canvas2DHitTestMode.None, transient.HitTestPolicy.Mode);
+    }
+
+    [Fact]
     public async Task AuthoritativeRouteChangeRecomputesAbsoluteAnchorFromSamePlacement()
     {
         var placement = new ConnectorLabelPlacement(0.25d, new VectorD(5d, -7d));
@@ -267,11 +293,12 @@ public sealed class Canvas2DMeasuredConnectorLabelTests
         ConnectorLabelPlacement? placement = null,
         EditorStateSnapshot? editorState = null,
         PointD[]? routePath = null,
-        bool useMeasuredLayout = true)
+        bool useMeasuredLayout = true,
+        ConnectorLabelPlacementIntent? intent = null)
     {
         var inputs = Canvas2DSceneTestData.CreateWithPersistentRoute();
         var edge = Assert.Single(inputs.Graph.Edges);
-        var label = new ProjectedLabel(edge.Source, edge.Id, text);
+        var label = new ProjectedLabel(edge.Source, edge.Id, text, connectorPlacement: intent);
         var graph = new ProjectedGraph(
             inputs.Graph.DocumentId,
             inputs.Graph.SourceRevision,

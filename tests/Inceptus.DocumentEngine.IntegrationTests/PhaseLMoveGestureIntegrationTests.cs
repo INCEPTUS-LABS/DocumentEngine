@@ -301,6 +301,12 @@ public sealed class PhaseLMoveGestureIntegrationTests
             return ValueTask.FromResult(Success());
         }
 
+        public ValueTask<Canvas2DInteropOperationResult> RenderViewportAsync(Canvas2DViewportFrame frame)
+        {
+            Interlocked.Increment(ref _renderCount);
+            return ValueTask.FromResult(Success());
+        }
+
         public ValueTask<Canvas2DTextMeasurementInteropResult> MeasureTextAsync(
             Canvas2DTextMeasurementRequestData request) =>
             ValueTask.FromResult(new Canvas2DTextMeasurementInteropResult

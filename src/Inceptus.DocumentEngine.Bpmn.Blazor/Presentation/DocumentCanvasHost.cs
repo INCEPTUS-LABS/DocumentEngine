@@ -182,7 +182,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
         _publishPackageBuilder = publishPackageBuilder ?? PublishPackageBuilder;
     }
 
-    internal event Func<Task>? StateChanged;
+    internal event Func<EditingSessionGeneration?, Task>? StateChanged;
 
     internal ValueTask UndoAsync(CancellationToken cancellationToken = default) =>
         ExecuteHistoryOperationAsync(isUndo: true, cancellationToken);
@@ -952,6 +952,110 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
     }
 
     internal async ValueTask<HistoryOperationResult?>
+        ExecuteConnectorLabelContextActionAsync(
+            CancellationToken cancellationToken = default)
+    {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            _lifetimeToken);
+        try
+        {
+            await EnterModelerOperationAsync(linked.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (linked.IsCancellationRequested)
+        {
+            return null;
+        }
+
+        var notify = false;
+        try
+        {
+            EditingSession? session;
+            DocumentCanvasContextMenuState? context;
+            lock (_sync)
+            {
+                session = _disposed || !_initialized || _propertiesFormOpen ||
+                    _modelViewPropertiesFormOpen
+                    ? null
+                    : _session;
+                context = _contextMenu;
+                notify = _contextMenu is not null;
+                _contextMenu = null;
+            }
+
+            if (session is null || context?.ConnectorLabelAction is not { } action ||
+                context.TargetVisualStateId is not { } targetVisualStateId ||
+                context.TargetSceneObjectId is null)
+            {
+                return null;
+            }
+
+            var state = session.CaptureState();
+            if (state.Status != EditingSessionStatus.Ready ||
+                state.EditorState.ActiveGesture is not null ||
+                state.DocumentId != context.SourceScene.DocumentId ||
+                state.DocumentRevision != context.DocumentRevision ||
+                state.ActiveScopeId != context.ScopeId ||
+                state.Generation.Value < context.SessionGeneration.Value ||
+                state.CurrentScene is null ||
+                !state.CurrentScene.Viewport.Equals(context.SourceScene.Viewport) ||
+                state.CurrentScene.DocumentId != state.DocumentId ||
+                !state.EditorState.Selection.Contains(targetVisualStateId) ||
+                GetSpatialRegionId(state, targetVisualStateId) !=
+                    context.TargetPresentation?.Id ||
+                !session.TryCaptureDocumentSnapshot(out var document) ||
+                document is null ||
+                document.Revision != state.DocumentRevision ||
+                !document.VisualModel.TryGetVisualState(
+                    targetVisualStateId,
+                    out var visualState) ||
+                visualState is null ||
+                visualState.SemanticElementId != action.RelationshipId ||
+                !document.SemanticModel.TryGetRelationship(action.RelationshipId, out _) ||
+                !ConnectorLabelPlacement.TryRead(visualState.Properties, out var manualPlacement) ||
+                manualPlacement != action.ManualPlacement ||
+                !state.CurrentScene.Items.Any(item =>
+                    item.Id == context.TargetSceneObjectId &&
+                    item.Layer == Canvas2DSceneLayer.Connector &&
+                    item.Origin.VisualStateId == targetVisualStateId &&
+                    item.Origin.SemanticElementId == action.RelationshipId &&
+                    item.Equals(context.SourceScene.Items.SingleOrDefault(source =>
+                        source.Id == context.TargetSceneObjectId))))
+            {
+                return null;
+            }
+
+            var command = new MoveLabelCommand(
+                document.DocumentId,
+                document.Revision,
+                targetVisualStateId,
+                targetPlacement: null);
+            var result = await session.ExecuteForSceneTargetAsync(
+                command,
+                state.CurrentScene,
+                state.Generation,
+                context.TargetSceneObjectId,
+                context.TargetPresentation,
+                linked.Token).ConfigureAwait(false);
+            notify |= RetainContextCommandDiagnostics(session, state, result);
+            if (result.IsCommitted)
+            {
+                await session.WaitForIdleAsync(linked.Token).ConfigureAwait(false);
+            }
+
+            return result;
+        }
+        finally
+        {
+            await CompleteModelerOperationAsync().ConfigureAwait(false);
+            if (notify)
+            {
+                _ = NotifyStateChangedSafelyAsync();
+            }
+        }
+    }
+
+    internal async ValueTask<HistoryOperationResult?>
         ExecuteNodeLabelContextActionAsync(
             CancellationToken cancellationToken = default)
     {
@@ -1379,25 +1483,26 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                         "The selected Data field is no longer available for editing.");
                 }
 
-                command = currentField.Definition.MutationKind switch
-                {
-                    SemanticPropertyMutationKind.Name when !current.IsConnector =>
-                        new UpdateSemanticElementNameCommand(
-                            current.DocumentId,
-                            current.Revision,
-                            current.SemanticId,
-                            currentField.Definition.SemanticPropertyKey,
-                            targetValue.TextValue),
-                    SemanticPropertyMutationKind.Property =>
-                        new UpdateSemanticElementPropertyCommand(
-                            current.DocumentId,
-                            current.Revision,
-                            current.SemanticId,
-                            currentField.Definition.SemanticPropertyKey,
-                            targetValue),
-                    _ => throw new InvalidOperationException(
-                        "A relationship Data field cannot use the Semantic Name mutation path."),
-                };
+                command = ModelerPropertyEditing.CreateCommand(
+                    current, currentField.Definition, targetValue) ?? currentField.Definition.MutationKind switch
+                    {
+                        SemanticPropertyMutationKind.Name when !current.IsConnector =>
+                            new UpdateSemanticElementNameCommand(
+                                current.DocumentId,
+                                current.Revision,
+                                current.SemanticId,
+                                currentField.Definition.SemanticPropertyKey,
+                                targetValue.TextValue),
+                        SemanticPropertyMutationKind.Property =>
+                            new UpdateSemanticElementPropertyCommand(
+                                current.DocumentId,
+                                current.Revision,
+                                current.SemanticId,
+                                currentField.Definition.SemanticPropertyKey,
+                                targetValue),
+                        _ => throw new InvalidOperationException(
+                            "A relationship Data field cannot use the Semantic Name mutation path."),
+                    };
             }
             else
             {
@@ -2860,7 +2965,8 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                                 contextMenu.ScopeNavigationAction,
                                 contextMenu.ScopeId,
                                 contextMenu.InteractionScopeId,
-                                contextMenu.TargetPresentation)
+                                contextMenu.TargetPresentation,
+                                contextMenu.ConnectorLabelAction)
                             : DocumentCanvasContextMenuState.CreateSemanticClamped(
                                 contextMenu.CssPosition,
                                 surfaceSize,
@@ -4145,6 +4251,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
         object? sender,
         EditingSessionStateChangedEventArgs eventArgs)
     {
+        EditingSessionGeneration? pendingPanGeneration = null;
         var releasePointerCapture = false;
         var resetPointerCursor = false;
         var forceCursorReset = false;
@@ -4156,6 +4263,17 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
             if (_disposed || !ReferenceEquals(sender, _session))
             {
                 return;
+            }
+
+            // Every notification still reconciles host state. Only this explicitly proven
+            // Pan generation may omit an intermediate surrounding-editor render.
+            if (eventArgs.State.IsPanPresentationPending && _initialized &&
+                _observedDocumentRevision == eventArgs.State.DocumentRevision &&
+                _hostDiagnostics.IsEmpty && _interactionDiagnostics.IsEmpty &&
+                _contextMenu is null && !_propertiesFormOpen && !_modelViewPropertiesFormOpen &&
+                !_validationInFlight && !_surfaceRenderPending)
+            {
+                pendingPanGeneration = eventArgs.State.Generation;
             }
 
             var activeGestureId = eventArgs.State.EditorState.ActiveGesture?.Id;
@@ -4385,14 +4503,14 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                 expectedCaptureGeneration);
         }
 
-        _ = NotifyStateChangedSafelyAsync();
+        _ = NotifyStateChangedSafelyAsync(pendingPanGeneration);
     }
 
-    private async Task NotifyStateChangedSafelyAsync()
+    private async Task NotifyStateChangedSafelyAsync(EditingSessionGeneration? pendingPanGeneration = null)
     {
         try
         {
-            await NotifyStateChangedAsync().ConfigureAwait(false);
+            await NotifyStateChangedAsync(pendingPanGeneration).ConfigureAwait(false);
         }
 #pragma warning disable CA1031 // A detached UI notification cannot affect session correctness.
         catch (Exception exception) when (IsNonFatal(exception))
@@ -4402,7 +4520,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
 #pragma warning restore CA1031
     }
 
-    private async Task NotifyStateChangedAsync()
+    private async Task NotifyStateChangedAsync(EditingSessionGeneration? pendingPanGeneration = null)
     {
         var handlers = StateChanged;
         if (handlers is null)
@@ -4410,9 +4528,9 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
             return;
         }
 
-        foreach (var handler in handlers.GetInvocationList().Cast<Func<Task>>())
+        foreach (var handler in handlers.GetInvocationList().Cast<Func<EditingSessionGeneration?, Task>>())
         {
-            await handler().ConfigureAwait(false);
+            await handler(pendingPanGeneration).ConfigureAwait(false);
         }
     }
 
@@ -4845,6 +4963,24 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
             return null;
         }
 
+        // A connector label shares the owning connector's visual context. Keep
+        // segment actions from the original hit, so a label hit cannot add a point.
+        var contextItem = current.CurrentScene.Items.SingleOrDefault(item =>
+            item.Id == visualTargetSceneObjectId);
+        if (contextItem is { Layer: Canvas2DSceneLayer.Label })
+        {
+            var connectors = current.CurrentScene.Items.Where(item =>
+                item.Layer == Canvas2DSceneLayer.Connector &&
+                item.Geometry.Kind == Canvas2DSceneGeometryKind.Path &&
+                item.Origin.VisualStateId == visualTarget &&
+                item.Origin.SemanticElementId == contextItem.Origin.SemanticElementId &&
+                contextItem.Origin.RelatedSceneObjectIds.Contains(item.Id)).ToArray();
+            if (connectors.Length == 1)
+            {
+                visualTargetSceneObjectId = connectors[0].Id;
+            }
+        }
+
         var deletionAction = TryCreateDeletionRequest(
                 session,
                 current,
@@ -4865,6 +5001,21 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                 out var resolvedScopeNavigationAction)
                 ? resolvedScopeNavigationAction
                 : null;
+        var connectorLabelAction = document is not null &&
+            document.Revision == current.DocumentRevision &&
+            document.VisualModel.TryGetVisualState(visualTarget, out var labelOwner) &&
+            labelOwner is not null &&
+            document.SemanticModel.TryGetRelationship(labelOwner.SemanticElementId, out _) &&
+            ConnectorLabelPlacement.TryRead(labelOwner.Properties, out var manualPlacement) &&
+            manualPlacement is not null &&
+            current.CurrentScene.Items.Any(item =>
+                item.Id == visualTargetSceneObjectId &&
+                item.Layer == Canvas2DSceneLayer.Connector &&
+                item.Origin.VisualStateId == visualTarget &&
+                item.Origin.SemanticElementId == labelOwner.SemanticElementId)
+                ? new DocumentCanvasConnectorLabelContextAction(
+                    labelOwner.SemanticElementId, manualPlacement)
+                : null;
         return DocumentCanvasContextMenuState.CreateClamped(
             cssPoint,
             surfaceSize.Value,
@@ -4880,7 +5031,8 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
             scopeNavigationAction,
             current.ActiveScopeId,
             current.ActiveScopeId,
-            result.HitResult?.SpatialRegion);
+            result.HitResult?.SpatialRegion,
+            connectorLabelAction);
     }
 
     private static bool TryResolveScopeNavigationAction(
@@ -5143,7 +5295,8 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                 : source.DocumentChangedSubscribers.Append(notificationSource),
             source.ConnectorAnchorPolicyProvider,
             source.ModelProfileCatalog,
-            source.InitialModelProfileViewState);
+            source.InitialModelProfileViewState,
+            source.RoutingInputPreparer);
     }
 
     private static EditorStateSnapshot CopyEditorStateWithViewport(

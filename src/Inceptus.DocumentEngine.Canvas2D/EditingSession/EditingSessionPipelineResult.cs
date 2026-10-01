@@ -17,11 +17,17 @@ internal sealed class EditingSessionPipelineResult
         EditingSessionPipelineStatus status,
         EditingSessionPipelineArtifacts? artifacts,
         Canvas2DScene? scene,
-        IEnumerable<Diagnostic>? diagnostics)
+        IEnumerable<Diagnostic>? diagnostics,
+        bool reusedPanContent = false,
+        bool reusedMoveContent = false,
+        bool reusedSelectionContent = false)
     {
         Status = status;
         Artifacts = artifacts;
         Scene = scene;
+        ReusedPanContent = reusedPanContent;
+        ReusedMoveContent = reusedMoveContent;
+        ReusedSelectionContent = reusedSelectionContent;
         Diagnostics = EditingSessionDiagnosticCollection.CopyAndOrder(
             diagnostics,
             nameof(diagnostics));
@@ -33,12 +39,21 @@ internal sealed class EditingSessionPipelineResult
 
     internal Canvas2DScene? Scene { get; }
 
+    internal bool ReusedPanContent { get; }
+
+    internal bool ReusedMoveContent { get; }
+
+    internal bool ReusedSelectionContent { get; }
+
     internal ImmutableArray<Diagnostic> Diagnostics { get; }
 
     internal static EditingSessionPipelineResult Success(
         EditingSessionPipelineArtifacts artifacts,
         Canvas2DScene scene,
-        IEnumerable<Diagnostic>? diagnostics = null)
+        IEnumerable<Diagnostic>? diagnostics = null,
+        bool reusedPanContent = false,
+        bool reusedMoveContent = false,
+        bool reusedSelectionContent = false)
     {
         ArgumentNullException.ThrowIfNull(artifacts);
         ArgumentNullException.ThrowIfNull(scene);
@@ -46,7 +61,10 @@ internal sealed class EditingSessionPipelineResult
             EditingSessionPipelineStatus.Succeeded,
             artifacts,
             scene,
-            diagnostics);
+            diagnostics,
+            reusedPanContent,
+            reusedMoveContent,
+            reusedSelectionContent);
     }
 
     internal static EditingSessionPipelineResult Failure(IEnumerable<Diagnostic> diagnostics) =>

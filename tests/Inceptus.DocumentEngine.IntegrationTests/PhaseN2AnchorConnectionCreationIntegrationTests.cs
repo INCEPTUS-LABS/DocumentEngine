@@ -366,14 +366,14 @@ public sealed class PhaseN2AnchorConnectionCreationIntegrationTests
         var sourceVisual = Assert.Single(harness.Document.VisualModel.VisualStates,
             item => item.Id == harness.SourceVisualId);
         var movedSourcePosition = sourceVisual.Position + new VectorD(45d, 25d);
-        var moveSource = await harness.Placement.Session.ExecuteAsync(
+        var transientSource = await harness.Placement.Session.ExecuteAsync(
             new MoveVisualStateCommand(
                 harness.Document.DocumentId,
                 harness.Document.Revision,
                 harness.SourceVisualId,
                 movedSourcePosition,
                 VisualPlacementMode.Pinned));
-        Assert.True(moveSource.IsCommitted);
+        Assert.True(transientSource.IsCommitted);
         await harness.Placement.WaitForIdleAsync();
         AssertFlowStillBound(harness, stableRelationship);
         Assert.Equal(
@@ -501,7 +501,10 @@ public sealed class PhaseN2AnchorConnectionCreationIntegrationTests
         Assert.Equal(harness.SourceSemanticId, properties.SourceId);
         Assert.Equal(harness.TargetSemanticId, properties.TargetId);
         Assert.NotNull(properties.LabelPlacement);
-        Assert.Empty(properties.DataFields);
+        var nameField = Assert.Single(properties.DataFields);
+        Assert.Equal(BpmnSemanticProperties.Name, nameField.Definition.SemanticPropertyKey);
+        Assert.True(nameField.CanEdit);
+        Assert.Equal(string.Empty, nameField.EditorValue);
     }
 
     [Fact]

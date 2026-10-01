@@ -37,7 +37,11 @@ public sealed partial class EditingSession : IAsyncDisposable
     private EditingSessionStatus _status = EditingSessionStatus.Rebuilding;
     private EditingSessionGeneration _generation;
     private EditingSessionGeneration? _presentedGeneration;
+    private PendingPanPresentation? _pendingPanPresentation;
     private Canvas2DScene? _currentScene;
+    private long _surfaceGeneration;
+    private long _currentSceneSurfaceGeneration;
+    private int _surfaceOperations;
     private Canvas2DScene? _lastKnownGoodScene;
     private Canvas2DScene? _activeGestureFallbackScene;
     private bool _currentSceneHasActiveGesture;
@@ -69,6 +73,12 @@ public sealed partial class EditingSession : IAsyncDisposable
     private bool _closing;
     private bool _closed;
 
+    private sealed record PendingPanPresentation(
+        EditingSessionGeneration Generation,
+        EditorStateSnapshot EditorState,
+        DocumentRevision Revision,
+        long SurfaceGeneration);
+
     private EditingSession(
         Document document,
         Canvas2DRenderer renderer,
@@ -86,10 +96,12 @@ public sealed partial class EditingSession : IAsyncDisposable
         _activeModelProfileViewState = configuration.InitialModelProfileViewState;
         _activeModelProfileElementViewState = ModelProfileElementViewStateSnapshot.Empty;
         _lastModelProfileState = document.SemanticModel.ModelProfiles;
-        _editorState = new EditorStateStore(configuration.InitialEditorState);
+        var initialEditorState = NormalizeEditorStateViewport(
+            configuration.InitialEditorState, configuration.InitialEditorState.Viewport);
+        _editorState = new EditorStateStore(initialEditorState);
         _history = new HistoryManager(document);
         _lastDocumentRevision = document.Revision;
-        _finalEditorState = configuration.InitialEditorState;
+        _finalEditorState = initialEditorState;
         _finalHistoryStatus = _history.CaptureStatus();
         _expectedEventRevision = document.Revision;
         _observedEventRevision = document.Revision;

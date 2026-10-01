@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using Inceptus.DocumentEngine.Canvas2D.Scene;
+using Inceptus.DocumentEngine.Canvas2D.Rendering;
 using Inceptus.DocumentEngine.Contracts.Canvas2D;
 using Inceptus.DocumentEngine.Contracts.Commands;
 using Inceptus.DocumentEngine.Contracts.Diagnostics;
@@ -44,7 +45,9 @@ public sealed partial class EditingSession
             NodeGeometryPipelineImpact? nodeGeometryImpact = null,
             ScopeNavigationTransition? scopeTransition = null,
             ModelProfileViewStateSnapshot? requestedModelProfileViewState = null,
-            ModelProfileElementViewStateSnapshot? requestedModelProfileElementViewState = null)
+            ModelProfileElementViewStateSnapshot? requestedModelProfileElementViewState = null,
+            Canvas2DScene? panSource = null,
+            Canvas2DScene? transientSource = null)
     {
         CancellationTokenSource? preceding;
         Canvas2DScene? staleToDispose;
@@ -81,6 +84,20 @@ public sealed partial class EditingSession
             }
 
             preceding = _runCancellation;
+            var surfaceGeneration = _surfaceGeneration;
+            if (_surfaceOperations != 0 ||
+                _currentSceneSurfaceGeneration != surfaceGeneration ||
+                !ReferenceEquals(panSource, _currentScene))
+            {
+                panSource = null;
+            }
+            if (_surfaceOperations != 0 ||
+                _currentSceneSurfaceGeneration != surfaceGeneration ||
+                !ReferenceEquals(transientSource, _currentScene) ||
+                (transientSource is not null && !_renderer.HasAcknowledgedContent(transientSource)))
+            {
+                transientSource = null;
+            }
             EditingSessionPipelineArtifacts? retainedTargetScopeArtifacts = null;
             if (scopeTransition is not null)
             {
@@ -205,12 +222,21 @@ public sealed partial class EditingSession
                 sceneOnlyArtifacts = null;
             }
 
+            var panEditorState = EditorState.CaptureSnapshot();
+            var deferPanPresentation = panSource is not null && sceneOnlyArtifacts is not null &&
+                _presentedGeneration == _generation && _runtimeDiagnostics.IsEmpty &&
+                _presentationDiagnostics.IsEmpty &&
+                _pipeline.CanDeferPanPresentation(panSource, snapshot, sceneOnlyArtifacts,
+                    panEditorState, pipelineModelProfileViewState, pipelineModelProfileElementViewState);
             var linked = CancellationTokenSource.CreateLinkedTokenSource(
                 cancellationToken,
                 _lifetime.Token);
             _runCancellation = linked;
             _generation = new EditingSessionGeneration(checked(_generation.Value + 1));
             var generation = _generation;
+            _pendingPanPresentation = deferPanPresentation
+                ? new(generation, panEditorState, snapshot.Revision, surfaceGeneration)
+                : null;
             staleToDispose = null;
             currentToDispose = null;
             fallbackToDispose = null;
@@ -284,6 +310,9 @@ public sealed partial class EditingSession
                 compatibleScopeLayoutArtifacts,
                 nodeLayoutHistory,
                 nodeGeometryImpact,
+                panSource,
+                transientSource,
+                surfaceGeneration,
                 linked);
             _activeRuns.Add(generation.Value, task);
             _ = task.ContinueWith(
@@ -322,6 +351,9 @@ public sealed partial class EditingSession
         EditingSessionPipelineArtifacts? compatibleScopeLayoutArtifacts,
         ImmutableArray<EditingSessionPipelineArtifacts> nodeLayoutHistory,
         NodeGeometryPipelineImpact? nodeGeometryImpact,
+        Canvas2DScene? panSource,
+        Canvas2DScene? transientSource,
+        long surfaceGeneration,
         CancellationTokenSource runCancellation)
     {
         try
@@ -340,6 +372,9 @@ public sealed partial class EditingSession
                 compatibleScopeLayoutArtifacts,
                 nodeLayoutHistory,
                 nodeGeometryImpact,
+                panSource,
+                transientSource,
+                surfaceGeneration,
                 runCancellation).ConfigureAwait(false);
         }
         finally
@@ -381,14 +416,31 @@ public sealed partial class EditingSession
         EditingSessionPipelineArtifacts? compatibleScopeLayoutArtifacts,
         ImmutableArray<EditingSessionPipelineArtifacts> nodeLayoutHistory,
         NodeGeometryPipelineImpact? nodeGeometryImpact,
+        Canvas2DScene? panSource,
+        Canvas2DScene? transientSource,
+        long surfaceGeneration,
         CancellationTokenSource runCancellation)
     {
         await Task.Yield();
         EditingSessionPipelineResult result;
         try
         {
-            result = sceneOnlyArtifacts is not null
-                ? await _pipeline.RebuildSceneAsync(
+            result = panSource is not null && sceneOnlyArtifacts is not null
+                ? await _pipeline.RebuildSceneForPanAsync(
+                    panSource,
+                    snapshot,
+                    sceneOnlyArtifacts,
+                    editorState,
+                    pipelineModelProfileViewState,
+                    pipelineModelProfileElementViewState,
+                    runCancellation.Token).ConfigureAwait(false)
+                : transientSource is not null && sceneOnlyArtifacts is not null
+                    ? await _pipeline.RebuildSceneForTransientPresentationAsync(
+                        transientSource, snapshot, sceneOnlyArtifacts, editorState,
+                        pipelineModelProfileViewState, pipelineModelProfileElementViewState,
+                        runCancellation.Token).ConfigureAwait(false)
+                : sceneOnlyArtifacts is not null
+                    ? await _pipeline.RebuildSceneAsync(
                     snapshot,
                     sceneOnlyArtifacts,
                     editorState,
@@ -480,6 +532,7 @@ public sealed partial class EditingSession
                 PulseStateUnderLock();
             }
             else if (HasValidProvenance(result, snapshot, activeScopeId) &&
+                     !result.ReusedPanContent &&
                      TryReconcileEditorStateForScene(
                          editorState,
                          result.Scene,
@@ -500,7 +553,9 @@ public sealed partial class EditingSession
                 PulseStateUnderLock();
             }
             else if (HasValidProvenance(result, snapshot, activeScopeId) &&
-                     !EditorState.CaptureSnapshot().Equals(editorState))
+                     (!EditorState.CaptureSnapshot().Equals(editorState) ||
+                      ((result.ReusedPanContent || result.ReusedMoveContent || result.ReusedSelectionContent) &&
+                       surfaceGeneration != _surfaceGeneration)))
             {
                 sceneToDispose = result.Scene;
                 followUpArtifacts = result.Artifacts;
@@ -552,6 +607,11 @@ public sealed partial class EditingSession
 
                 _lastKnownGoodSceneNeedsRender = false;
                 _currentScene = result.Scene;
+                if (!result.ReusedPanContent)
+                {
+                    _pendingPanPresentation = null;
+                }
+                _currentSceneSurfaceGeneration = surfaceGeneration;
                 _currentSceneHasActiveGesture = hasActiveGesture;
                 _artifacts = result.Artifacts;
                 _compatibleArtifacts = result.Artifacts;
@@ -810,7 +870,8 @@ public sealed partial class EditingSession
         EditorStateSnapshot editorState,
         CancellationToken cancellationToken,
         DocumentScopeId? expectedScopeId = null,
-        EditingSessionGeneration? requiredGeneration = null)
+        EditingSessionGeneration? requiredGeneration = null,
+        Canvas2DSurfaceSize? surfaceSize = null)
     {
         if (cancellationToken.IsCancellationRequested ||
             !await TryEnterCommandAsync(cancellationToken).ConfigureAwait(false))
@@ -851,6 +912,8 @@ public sealed partial class EditingSession
                     }
 
                     state = CaptureStateUnderLock();
+                    editorState = NormalizeEditorStateViewport(
+                        editorState, state.EditorState.Viewport, surfaceSize);
                     artifacts = _compatibleArtifacts;
                     expectedGeneration = _generation;
                     if (state.EditorState.Equals(editorState))
@@ -897,7 +960,8 @@ public sealed partial class EditingSession
                     snapshot,
                     artifacts,
                     cancellationToken,
-                    expectedGeneration);
+                    expectedGeneration,
+                    transientSource: state.CurrentScene);
                 runTask = started.Task;
             }
         }

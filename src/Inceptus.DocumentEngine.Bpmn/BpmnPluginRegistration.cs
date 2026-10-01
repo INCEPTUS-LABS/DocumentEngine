@@ -1154,6 +1154,16 @@ public sealed class BpmnPluginRegistration
         ScopeNavigationRegistrations = n91.ScopeNavigationRegistrations;
         ModelProfileDefinitions = BpmnModelProfiles.Definitions;
         BackgroundActions = BpmnCanvasBackgroundActions.Definitions;
+        CommandHandlers = [.. CommandHandlers,
+            Handler<UpdateBpmnSequenceFlowNameCommand>(UpdateBpmnSequenceFlowNameCommand.KnownTypeId,
+                new BpmnSequenceFlowNameCommandHandler())];
+        CommandValidators = [.. CommandValidators,
+            Validator(UpdateBpmnSequenceFlowNameCommand.KnownTypeId, "bpmn:validator/sequence-flow-name",
+                new BpmnSequenceFlowNameCommandHandler())];
+        HistoryPolicies = [.. HistoryPolicies,
+            new CommandHistoryPolicyRegistration(UpdateBpmnSequenceFlowNameCommand.KnownTypeId,
+                new BpmnSequenceFlowNameHistoryPolicy())];
+        PropertiesSchemas = [.. PropertiesSchemas, BpmnSequenceFlowPropertiesSchema.Definition];
     }
 
     private BpmnPluginRegistration(BpmnPluginRegistration n100, N101RegistrationMarker _)

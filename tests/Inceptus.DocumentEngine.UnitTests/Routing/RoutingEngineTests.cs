@@ -11,7 +11,7 @@ using Inceptus.DocumentEngine.Runtime.Routing;
 
 namespace Inceptus.DocumentEngine.UnitTests.Routing;
 
-public sealed class RoutingEngineTests
+public sealed partial class RoutingEngineTests
 {
     private static readonly DocumentId DocumentId = new("test:routing-document");
     private static readonly DocumentRevision Revision = new(23);

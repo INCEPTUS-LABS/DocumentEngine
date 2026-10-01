@@ -33,6 +33,7 @@ public sealed partial class EditingSession
                     // invalidates the current scene or changes Ready to RuntimeFaulted.
                     _presentationDiagnostics = result.Diagnostics;
                     _presentedGeneration = result.Succeeded ? generation : null;
+                    _pendingPanPresentation = null;
                     stateChanged = true;
                 }
             }
@@ -86,9 +87,18 @@ public sealed partial class EditingSession
         Canvas2DSurfaceSize surfaceSize,
         CancellationToken cancellationToken)
     {
-        if (IsClosedOrClosing())
+        lock (_sync)
         {
-            return RendererFailure("The Editing Session is closed.");
+            if (_closing || _closed)
+            {
+                return RendererFailure("The Editing Session is closed.");
+            }
+
+            // Invalidate Pan reuse before awaiting browser resize, including DPR-only
+            // observations. A concurrent result retains its original surface generation.
+            _surfaceGeneration = checked(_surfaceGeneration + 1);
+            _pendingPanPresentation = null;
+            _surfaceOperations++;
         }
 
         try
@@ -132,20 +142,17 @@ public sealed partial class EditingSession
             if (result.Succeeded)
             {
                 var state = CaptureState();
-                var visibleRegion = Canvas2DSceneBuilder.CalculateVisibleDocumentRegion(
+                var viewport = Canvas2DViewportNormalizer.Normalize(
                     state.EditorState.Viewport,
                     surfaceSize);
-                if (state.EditorState.Viewport.VisibleDocumentRegion != visibleRegion)
+                if (!state.EditorState.Viewport.Equals(viewport))
                 {
-                    var viewport = new Inceptus.DocumentEngine.Contracts.EditorState.ViewportSnapshot(
-                        state.EditorState.Viewport.Zoom,
-                        state.EditorState.Viewport.Pan,
-                        visibleRegion);
                     var updated = await UpdateEditorStateCoreAsync(
                         CopyEditorStateWithViewport(state.EditorState, viewport),
                         linked.Token,
                         state.ActiveScopeId,
-                        state.Generation).ConfigureAwait(false);
+                        state.Generation,
+                        surfaceSize).ConfigureAwait(false);
                     if (!updated.Succeeded)
                     {
                         return RendererFailure(
@@ -172,6 +179,13 @@ public sealed partial class EditingSession
                 EditingSessionDiagnosticCodes.PipelineCancelled,
                 "The renderer operation was cancelled.",
                 _documentId.Value));
+        }
+        finally
+        {
+            lock (_sync)
+            {
+                _surfaceOperations--;
+            }
         }
     }
 

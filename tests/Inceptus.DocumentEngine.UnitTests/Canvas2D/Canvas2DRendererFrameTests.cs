@@ -32,7 +32,7 @@ public sealed class Canvas2DRendererFrameTests
     }
 
     [Fact]
-    public async Task RepeatedRenderingBuildsIndependentFramesWithoutTransformAccumulation()
+    public async Task RepeatedRenderingUsesAcknowledgedContentWithoutTransformAccumulation()
     {
         var execution = new Canvas2DRendererTestExecution();
         await using var renderer = await CreateInitializedRenderer(execution);
@@ -41,14 +41,14 @@ public sealed class Canvas2DRendererFrameTests
         await renderer.RenderAsync(scene);
         var first = Assert.IsType<Canvas2DRenderFrame>(execution.LastFrame);
         await renderer.RenderAsync(scene);
-        var second = Assert.IsType<Canvas2DRenderFrame>(execution.LastFrame);
+        var second = Assert.IsType<Canvas2DViewportFrame>(execution.LastViewportFrame);
 
-        Assert.NotSame(first, second);
-        Assert.NotSame(first.Items, second.Items);
-        Assert.Equal(
-            first.Items.Select(FrameFingerprint),
-            second.Items.Select(FrameFingerprint));
-        Assert.Equal(2, execution.Calls.Count(call => call == "render"));
+        Assert.Same(first, execution.LastFrame);
+        Assert.Equal(first.ViewportTransform, second.ViewportTransform);
+        Assert.Equal(first.ContentVersion, second.ContentVersion);
+        Assert.True(second.PresentationVersion > first.PresentationVersion);
+        Assert.Single(execution.Calls, call => call == "render");
+        Assert.Single(execution.Calls, call => call == "renderViewport");
     }
 
     [Fact]
@@ -190,24 +190,6 @@ public sealed class Canvas2DRendererFrameTests
             inputs.VisualModel,
             inputs.EditorState).Scene);
     }
-
-    private static string FrameFingerprint(Canvas2DRenderItem item) => string.Join(
-        '|',
-        item.Id,
-        item.Layer,
-        item.ZIndex,
-        item.GeometryKind,
-        item.GeometryBounds,
-        item.Transform,
-        item.Clip,
-        item.Fill,
-        item.Stroke,
-        item.StrokeWidth,
-        item.Opacity,
-        item.TextAnchor,
-        item.TextAlignment,
-        item.TextBaseline,
-        item.IsVisible);
 
     private static Canvas2DRendererConfiguration RenderingConfiguration(
         IEnumerable<KeyValuePair<string, string>>? imageResources = null) => new(

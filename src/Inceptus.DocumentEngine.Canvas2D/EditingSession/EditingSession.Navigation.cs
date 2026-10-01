@@ -211,16 +211,7 @@ public sealed partial class EditingSession
         var zoom = cachedViewport?.Zoom ?? ViewportSnapshot.Default.Zoom;
         var pan = cachedViewport?.Pan ?? ViewportSnapshot.Default.Pan;
         var target = new ViewportSnapshot(zoom, pan);
-        if (currentViewport.VisibleDocumentRegion is null)
-        {
-            return target;
-        }
-
-        var surface = Canvas2DSceneBuilder.CalculateCanvasCssSurface(currentViewport);
-        return new ViewportSnapshot(
-            zoom,
-            pan,
-            Canvas2DSceneBuilder.CalculateVisibleDocumentRegion(target, surface));
+        return PreserveVisibleDocumentRegion(currentViewport, target);
     }
 
     private static ImmutableArray<DocumentScopeId> CreateScopePath(

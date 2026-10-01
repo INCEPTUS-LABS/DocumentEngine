@@ -307,7 +307,9 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
         Canvas2DSceneHitTestResult? hit;
         try
         {
-            hit = _hitTestService.HitTest(observed.CurrentScene, documentPoint);
+            hit = kind == InteractionKind.Hover
+                ? _hitTestService.HitTestForHover(observed.CurrentScene, documentPoint)
+                : _hitTestService.HitTest(observed.CurrentScene, documentPoint);
         }
 #pragma warning disable CA1031 // Malformed transient geometry becomes a stable interaction diagnostic.
         catch (Exception exception) when (IsNonFatal(exception))
@@ -834,10 +836,13 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
                         hit);
                 }
 
-                var placement = ConnectorLabelPlacement.Resolve(visualState.Properties);
-                var anchor = Canvas2DConnectorPathGeometry.ResolvePoint(
-                    originalRoute,
-                    placement.PathPosition) + placement.Offset;
+                var labelBounds = Canvas2DConnectorLabelResolver.PresentedBounds(
+                    observed.CurrentScene.Items.Where(item =>
+                        item.Layer == Canvas2DSceneLayer.Label &&
+                        item.Origin.ProjectedObjectId == labelProjectedObjectId));
+                var anchor = new PointD(
+                    labelBounds.X + (labelBounds.Width / 2d),
+                    labelBounds.Y + (labelBounds.Height / 2d));
                 originalBounds = new RectD(anchor.X, anchor.Y, 0d, 0d);
             }
 

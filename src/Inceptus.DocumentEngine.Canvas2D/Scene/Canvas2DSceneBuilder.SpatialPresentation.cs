@@ -529,26 +529,35 @@ public sealed partial class Canvas2DSceneBuilder
         List<Canvas2DSceneItem> items,
         PresentedConnector presented)
     {
-        var placement = edge.Source.VisualStateId is { } connectorVisualStateId &&
-            visualsById.TryGetValue(connectorVisualStateId, out var connectorVisual)
-                ? ConnectorLabelPlacement.Resolve(connectorVisual.Properties)
-                : ConnectorLabelPlacement.Default;
-        var canonicalAnchor = Canvas2DConnectorPathGeometry.ResolvePoint(
-            presented.Request.CanonicalLogicalPath,
-            placement.PathPosition);
-        var displayedAnchor = Canvas2DConnectorPathGeometry.ResolvePoint(
-            presented.Route.DisplayedLogicalPath,
-            placement.PathPosition);
-        var translation = displayedAnchor - canonicalAnchor;
-        var labelIds = labelsById.Values
-            .Where(label => label.OwnerId == edge.Id)
-            .Select(static label => label.Id)
-            .ToHashSet();
+        ConnectorLabelPlacement? placement = null;
+        if (edge.Source.VisualStateId is { } connectorVisualStateId &&
+            visualsById.TryGetValue(connectorVisualStateId, out var connectorVisual))
+        {
+            ConnectorLabelPlacement.TryRead(connectorVisual.Properties, out placement);
+        }
+
+        var translations = new Dictionary<ProjectedObjectId, VectorD>();
+        foreach (var projectedLabel in labelsById.Values.Where(label => label.OwnerId == edge.Id))
+        {
+            var lines = items.Where(item =>
+                item.Origin.ProjectedObjectId == projectedLabel.Id).ToArray();
+            if (lines.Length == 0)
+            {
+                continue;
+            }
+
+            var bounds = Canvas2DConnectorLabelResolver.PresentedBounds(lines);
+            var currentAnchor = new PointD(
+                bounds.X + (bounds.Width / 2d), bounds.Y + (bounds.Height / 2d));
+            var displayedAnchor = Canvas2DConnectorLabelResolver.Resolve(
+                projectedLabel, presented.Route.DisplayedLogicalPath, placement, bounds.Size);
+            translations.Add(projectedLabel.Id, displayedAnchor - currentAnchor);
+        }
         for (var index = 0; index < items.Count; index++)
         {
             var label = items[index];
             if (label.Origin.ProjectedObjectId is not { } labelId ||
-                !labelIds.Contains(labelId))
+                !translations.TryGetValue(labelId, out var translation))
             {
                 continue;
             }

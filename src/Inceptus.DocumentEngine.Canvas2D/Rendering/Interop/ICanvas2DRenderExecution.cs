@@ -20,6 +20,9 @@ internal interface ICanvas2DRenderExecution : IAsyncDisposable
     ValueTask<Canvas2DInteropOperationResult> RenderAsync(
         Canvas2DRenderFrame frame);
 
+    ValueTask<Canvas2DInteropOperationResult> RenderViewportAsync(
+        Canvas2DViewportFrame frame);
+
     ValueTask<Canvas2DTextMeasurementInteropResult> MeasureTextAsync(
         Canvas2DTextMeasurementRequestData request);
 }

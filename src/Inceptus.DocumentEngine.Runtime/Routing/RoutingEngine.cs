@@ -10,7 +10,7 @@ namespace Inceptus.DocumentEngine.Runtime.Routing;
 /// <summary>
 /// Framework-owned orchestration for immutable Routing Algorithm execution.
 /// </summary>
-public sealed class RoutingEngine
+public sealed partial class RoutingEngine
 {
     private readonly RoutingAlgorithmRegistry _registry;
 
@@ -66,6 +66,7 @@ public sealed class RoutingEngine
 
         var diagnostics = new List<Diagnostic>();
         ValidateCompatibility(graph, layout, diagnostics, cancellationToken);
+        ValidatePreparedInput(graph, layout, context.PreparedInput, diagnostics, cancellationToken);
         if (HasErrors(diagnostics))
         {
             return RoutingExecutionResult.Failure(

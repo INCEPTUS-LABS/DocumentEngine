@@ -13,7 +13,7 @@ using Inceptus.DocumentEngine.Runtime.Routing;
 
 namespace Inceptus.DocumentEngine.UnitTests.Bpmn;
 
-public sealed class BpmnRoutingAlgorithmTests
+public sealed partial class BpmnRoutingAlgorithmTests
 {
     private const string ProjectedSemanticTypeProperty = "BPMN.ProjectedSemanticType";
 
@@ -1511,7 +1511,7 @@ public sealed class BpmnRoutingAlgorithmTests
         [
             new RoutingAlgorithmRegistration(
                 BpmnAlgorithmIds.DefaultRouting,
-                new BpmnRoutingAlgorithm()),
+                new ExactReferenceCheckingRouter()),
         ]);
 
     private static RoutingResult Route(ProjectedGraph graph, LayoutResult layout)

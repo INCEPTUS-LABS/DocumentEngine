@@ -897,6 +897,18 @@
     box-shadow: 0 0 0 0.25rem rgba(239, 68, 68, 0.12);
 }
 
+.canvas-diagnostics {
+    /* Transient diagnostics must not resize and reset the acknowledged Canvas. */
+    flex: 0 0 2.25rem;
+    min-height: 0;
+    overflow: auto;
+}
+
+.canvas-diagnostics .presentation-error {
+    padding: 0.25rem 1rem 0.25rem 2.15rem;
+    overflow-wrap: anywhere;
+}
+
 .presentation-error {
     margin: 0;
     padding: 0 1rem 1rem 2.15rem;

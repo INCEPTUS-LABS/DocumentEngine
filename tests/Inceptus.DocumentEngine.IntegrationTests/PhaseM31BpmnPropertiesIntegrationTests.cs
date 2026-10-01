@@ -725,6 +725,13 @@ public sealed class PhaseM31BpmnPropertiesIntegrationTests
     internal sealed class RecordingRenderExecution : ICanvas2DRenderExecution
     {
         internal int RenderCount { get; private set; }
+        internal int FullUploadCount { get; private set; }
+        internal int ViewportRenderCount { get; private set; }
+        internal Canvas2DRenderFrame? LastContent { get; private set; }
+        internal Canvas2DViewportFrame? LastViewport { get; private set; }
+        internal TaskCompletionSource? RenderStarted { get; set; }
+        internal TaskCompletionSource? RenderRelease { get; set; }
+        internal Canvas2DInteropOperationResult RenderResult { get; set; } = Success();
 
         public ValueTask<Canvas2DInteropOperationResult> InitializeAsync(
             string canvasElementId,
@@ -738,10 +745,24 @@ public sealed class PhaseM31BpmnPropertiesIntegrationTests
             Canvas2DSurfaceSize surfaceSize) =>
             ValueTask.FromResult(Success());
 
-        public ValueTask<Canvas2DInteropOperationResult> RenderAsync(Canvas2DRenderFrame frame)
+        public async ValueTask<Canvas2DInteropOperationResult> RenderAsync(Canvas2DRenderFrame frame)
         {
             RenderCount++;
-            return ValueTask.FromResult(Success());
+            FullUploadCount++;
+            LastContent = frame;
+            RenderStarted?.TrySetResult();
+            if (RenderRelease is not null) await RenderRelease.Task;
+            return RenderResult;
+        }
+
+        public async ValueTask<Canvas2DInteropOperationResult> RenderViewportAsync(Canvas2DViewportFrame frame)
+        {
+            RenderCount++;
+            ViewportRenderCount++;
+            LastViewport = frame;
+            RenderStarted?.TrySetResult();
+            if (RenderRelease is not null) await RenderRelease.Task;
+            return RenderResult;
         }
 
         public ValueTask<Canvas2DTextMeasurementInteropResult> MeasureTextAsync(

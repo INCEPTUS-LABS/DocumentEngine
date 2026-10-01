@@ -11,6 +11,37 @@ namespace Inceptus.DocumentEngine.UnitTests.History;
 
 public sealed class MoveLabelHistoryTests
 {
+    [Fact]
+    public async Task ExplicitMidpointMoveUndoRedoResetAndUndoResetPreserveExactPresence()
+    {
+        var document = Assert.IsType<Document>(DocumentFactory.Create(
+            MoveLabelCommandHandlerTests.Snapshot(DocumentRevision.Zero)).Document);
+        var history = new HistoryManager(document);
+        var processor = new CommandProcessor();
+        AssertPresence(false);
+        Assert.True((await history.ExecuteAsync(processor,
+            MoveLabelCommandHandlerTests.Command(document.Revision, ConnectorLabelPlacement.Default))).IsCommitted);
+        AssertPresence(true);
+        Assert.True((await history.UndoAsync(processor)).IsCommitted);
+        AssertPresence(false);
+        Assert.True((await history.RedoAsync(processor)).IsCommitted);
+        AssertPresence(true);
+        Assert.True((await history.ExecuteAsync(processor,
+            MoveLabelCommandHandlerTests.Command(document.Revision, null))).IsCommitted);
+        AssertPresence(false);
+        Assert.True((await history.UndoAsync(processor)).IsCommitted);
+        AssertPresence(true);
+        Assert.True((await history.RedoAsync(processor)).IsCommitted);
+        AssertPresence(false);
+
+        void AssertPresence(bool expected)
+        {
+            var visual = Assert.Single(document.VisualModel.VisualStates);
+            Assert.Equal(expected, ConnectorLabelPlacement.TryRead(visual.Properties, out var placement));
+            Assert.Equal(expected ? ConnectorLabelPlacement.Default : null, placement);
+        }
+    }
+
     private static readonly ConnectorLabelPlacement Moved =
         new(0.85d, new(4d, -6d));
 

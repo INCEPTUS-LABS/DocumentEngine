@@ -205,8 +205,10 @@ public sealed partial class DocumentCanvasHostTests
         Assert.True((await firstSession.UpdateEditorStateAsync(firstTransientState)).Succeeded);
         await firstSession.WaitForIdleAsync();
 
-        Assert.Equal(firstTransientState.Selection, firstSession.CaptureState().EditorState.Selection);
-        Assert.Equal(firstTransientState.Viewport, firstSession.CaptureState().EditorState.Viewport);
+        Assert.Equal(firstTransientState.Selection.AsEnumerable(), firstSession.CaptureState().EditorState.Selection);
+        Assert.Equal(firstTransientState.Viewport.Zoom, firstSession.CaptureState().EditorState.Viewport.Zoom);
+        Assert.Equal(new VectorD(0d, -19d), firstSession.CaptureState().EditorState.Viewport.Pan);
+        Assert.Equal(0d, firstSession.CaptureState().EditorState.Viewport.VisibleDocumentRegion!.Value.Left);
         Assert.Equal(secondStateBefore.EditorState, secondSession.CaptureState().EditorState);
         Assert.Equal(secondRenderCallsBefore, secondExecution.Calls.Count);
 

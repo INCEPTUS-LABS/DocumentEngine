@@ -73,7 +73,7 @@ public sealed class PhaseN41InteractiveViewportPanningArchitectureTests
     }
 
     [Fact]
-    public void PanIsUnrestrictedNotationNeutralAndPreservesCanonicalTransformAuthority()
+    public void PanUsesCentralOriginNormalizationAndPreservesNotationNeutralTransformAuthority()
     {
         var host = ReadProductionFile(
             "Inceptus.DocumentEngine.Bpmn.Blazor",
@@ -99,9 +99,16 @@ public sealed class PhaseN41InteractiveViewportPanningArchitectureTests
         Assert.All(forbidden, token =>
             Assert.DoesNotContain(token, panSource, StringComparison.OrdinalIgnoreCase));
 
-        Assert.Contains("Canvas2DSceneBuilder.CalculateVisibleDocumentRegion", viewport,
+        Assert.Contains("Canvas2DViewportNormalizer.Normalize", viewport,
             StringComparison.Ordinal);
         Assert.DoesNotContain("Matrix2D", viewport, StringComparison.Ordinal);
+        var normalizer = ReadProductionFile("Inceptus.DocumentEngine.Canvas2D", "Scene", "Canvas2DViewportNormalizer.cs");
+        Assert.Contains("Canvas2DSceneBuilder.CalculateVisibleDocumentRegion", normalizer, StringComparison.Ordinal);
+        Assert.Contains("DocumentGeometryBoundary.MinimumX", normalizer, StringComparison.Ordinal);
+        Assert.Contains("DocumentGeometryBoundary.MinimumY", normalizer, StringComparison.Ordinal);
+        Assert.Contains("TransformVector", normalizer, StringComparison.Ordinal);
+        Assert.DoesNotContain("VisualModel", normalizer, StringComparison.Ordinal);
+        Assert.DoesNotContain("Bpmn", normalizer, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

@@ -12,7 +12,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Inceptus.DocumentEngine.UnitTests.Blazor;
 
-public sealed class ToolboxPanelTests
+public sealed partial class ToolboxPanelTests
 {
     [Fact]
     public async Task NeutralCatalogRendersOrderedAccessibleButtonsFromDefinitionData()

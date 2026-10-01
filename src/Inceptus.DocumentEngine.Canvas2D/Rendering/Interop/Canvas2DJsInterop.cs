@@ -104,6 +104,16 @@ internal sealed class Canvas2DJsInterop : ICanvas2DRenderExecution
         return result;
     }
 
+    public async ValueTask<Canvas2DInteropOperationResult> RenderViewportAsync(
+        Canvas2DViewportFrame frame)
+    {
+        ArgumentNullException.ThrowIfNull(frame);
+        var result = await RequireInitialized().InvokeAsync<Canvas2DInteropOperationResult>(
+            "renderViewport", frame);
+        ArgumentNullException.ThrowIfNull(result);
+        return result;
+    }
+
     public async ValueTask<Canvas2DTextMeasurementInteropResult> MeasureTextAsync(
         Canvas2DTextMeasurementRequestData request)
     {

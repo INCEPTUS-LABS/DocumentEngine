@@ -227,7 +227,7 @@ public sealed partial class DocumentCanvasHostTests
         // HtmlRenderer does not run OnAfterRender: wire the same live host callback
         // that the browser component subscribes after its canvas is initialized.
         host.StateChanged += typeof(DocumentCanvas).GetMethod("HandleHostStateChangedAsync", PropertiesUxFlags)!
-            .CreateDelegate<Func<Task>>(activator.Canvas.Component);
+            .CreateDelegate<Func<Inceptus.DocumentEngine.Canvas2D.EditingSession.EditingSessionGeneration?, Task>>(activator.Canvas.Component);
         await renderer.Dispatcher.InvokeAsync(async () =>
         {
             await InvokePropertiesUxAsync(activator.Canvas.Component,

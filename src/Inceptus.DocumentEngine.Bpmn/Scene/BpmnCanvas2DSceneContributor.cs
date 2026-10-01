@@ -40,7 +40,11 @@ public sealed class BpmnCanvas2DSceneContributor : ICanvas2DSceneContributor
 
     private static readonly Canvas2DSceneContributorDescriptor Descriptor = new(
         new Canvas2DSceneContributorId("bpmn:scene/flow-node-visuals"),
-        "1");
+        "1",
+        Canvas2DScenePanDependency.Invariant,
+        Canvas2DSceneMoveGestureDependency.Invariant,
+        Canvas2DSceneTransientDependency.Invariant,
+        Canvas2DSceneTransientDependency.Invariant);
 
     internal static Canvas2DSceneContributorRegistration Registration { get; } =
         new(Descriptor, new BpmnCanvas2DSceneContributor());

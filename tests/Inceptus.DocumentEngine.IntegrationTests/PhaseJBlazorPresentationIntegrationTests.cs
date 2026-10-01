@@ -159,6 +159,12 @@ public sealed class PhaseJBlazorPresentationIntegrationTests
             return ValueTask.FromResult(Success());
         }
 
+        public ValueTask<Canvas2DInteropOperationResult> RenderViewportAsync(Canvas2DViewportFrame frame)
+        {
+            Calls.Add("render");
+            return ValueTask.FromResult(Success());
+        }
+
         public ValueTask<Canvas2DTextMeasurementInteropResult> MeasureTextAsync(
             Canvas2DTextMeasurementRequestData request)
         {

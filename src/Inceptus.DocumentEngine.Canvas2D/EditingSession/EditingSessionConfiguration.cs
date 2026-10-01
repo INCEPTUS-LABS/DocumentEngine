@@ -37,7 +37,8 @@ public sealed class EditingSessionConfiguration
         IEnumerable<IDocumentChangedSubscriber>? documentChangedSubscribers = null,
         IElementConnectorAnchorPolicyProvider? connectorAnchorPolicyProvider = null,
         ModelProfileCatalog? modelProfileCatalog = null,
-        ModelProfileViewStateSnapshot? initialModelProfileViewState = null)
+        ModelProfileViewStateSnapshot? initialModelProfileViewState = null,
+        IRoutingInputPreparer? routingInputPreparer = null)
     {
         ArgumentNullException.ThrowIfNull(projectionEngine);
         ArgumentNullException.ThrowIfNull(layoutEngine);
@@ -55,6 +56,7 @@ public sealed class EditingSessionConfiguration
         ProjectionContext = projectionContext ?? ProjectionContext.Empty;
         LayoutContext = layoutContext ?? LayoutContext.Empty;
         RoutingContext = routingContext ?? RoutingContext.Empty;
+        RoutingInputPreparer = routingInputPreparer;
         InitialEditorState = initialEditorState ?? EditorStateSnapshot.Empty;
         CommandHandlers = Copy(commandHandlers, nameof(commandHandlers));
         CommandValidators = Copy(commandValidators, nameof(commandValidators));
@@ -86,6 +88,8 @@ public sealed class EditingSessionConfiguration
     public LayoutContext LayoutContext { get; }
 
     public RoutingContext RoutingContext { get; }
+
+    public IRoutingInputPreparer? RoutingInputPreparer { get; }
 
     public EditorStateSnapshot InitialEditorState { get; }
 

@@ -177,9 +177,17 @@ public sealed class PhaseGRoutingArchitectureTests
             type == typeof(DocumentChangedEvent) ||
             type == typeof(EditorStateSnapshot) ||
             type == typeof(HistoryStatus) ||
-            type == typeof(Document) ||
-            type == typeof(DocumentSnapshot));
-        Assert.DoesNotContain(signatureTypes, IsForbiddenRoutingDependency);
+            type == typeof(Document));
+        // A1.2.11 explicitly permits the pure upstream preparer to inspect an immutable
+        // snapshot. The engine, algorithm and prepared output retain the original boundary.
+        Assert.DoesNotContain(routingTypes
+            .Where(type => type != typeof(IRoutingInputPreparer))
+            .SelectMany(GetAllDeclaredSignatureTypes), type => type == typeof(DocumentSnapshot));
+        var prepare = Assert.Single(typeof(IRoutingInputPreparer).GetMethods());
+        Assert.Equal(typeof(PreparedRoutingInput), prepare.ReturnType);
+        Assert.Equal(new[] { typeof(DocumentSnapshot), typeof(DocumentScopeId), typeof(ProjectedGraph),
+            typeof(LayoutResult), typeof(CancellationToken) }, prepare.GetParameters().Select(parameter => parameter.ParameterType));
+        Assert.DoesNotContain(signatureTypes.Where(type => type != typeof(DocumentSnapshot)), IsForbiddenRoutingDependency);
         Assert.DoesNotContain(routingTypes, type => ContainsAny(
             type.Name,
             "CommandProcessor",

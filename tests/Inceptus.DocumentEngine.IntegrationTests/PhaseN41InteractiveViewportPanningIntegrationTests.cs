@@ -65,6 +65,7 @@ public sealed class PhaseN41InteractiveViewportPanningIntegrationTests
         Assert.Equal(fullRunsBeforePan, harness.Pipeline.FullRunCount);
         Assert.Equal(layoutPreservingRunsBeforePan, harness.Pipeline.NodeLayoutPreservingRunCount);
         Assert.Equal(sceneRunsBeforePan + 1, harness.Pipeline.SceneOnlyRunCount);
+        Assert.Equal(1, harness.Pipeline.PanReuseCount);
         Assert.Same(beforePan.ProjectedGraph, afterPan.ProjectedGraph);
         Assert.Same(beforePan.LayoutResult, afterPan.LayoutResult);
         Assert.Same(beforePan.RoutingResult, afterPan.RoutingResult);
@@ -109,10 +110,12 @@ public sealed class PhaseN41InteractiveViewportPanningIntegrationTests
     public async Task N4NodesRemainHitTestableAndSelectableAfterPan()
     {
         await using var harness = await PlacementHarness.CreateAsync();
+        Assert.True((await harness.Session.ResizeAsync(harness.SurfaceSize)).Succeeded);
         var documentBefore = harness.Composition.Document.CaptureSnapshot();
         var before = harness.Session.CaptureState();
         Assert.True((await harness.Session.PanViewportAsync(
             new VectorD(-240.5d, 135.25d))).Succeeded);
+        Assert.Equal(1, harness.Pipeline.PanReuseCount);
         await using var interaction = new Canvas2DInteractionController(harness.Session);
         VisualStateId[] n4Visuals =
         [
@@ -148,7 +151,7 @@ public sealed class PhaseN41InteractiveViewportPanningIntegrationTests
         Assert.Equal(before.DocumentRevision, after.DocumentRevision);
         Assert.Equal(before.HistoryStatus, after.HistoryStatus);
         Assert.Equal(before.EditorState.Viewport.Zoom, after.EditorState.Viewport.Zoom);
-        Assert.Equal(before.EditorState.Viewport.Pan + new VectorD(-240.5d, 135.25d),
+        Assert.Equal(before.EditorState.Viewport.Pan + new VectorD(-240.5d, 0d),
             after.EditorState.Viewport.Pan);
     }
 }

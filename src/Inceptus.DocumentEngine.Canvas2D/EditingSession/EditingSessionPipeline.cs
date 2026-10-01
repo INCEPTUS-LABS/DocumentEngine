@@ -18,6 +18,68 @@ namespace Inceptus.DocumentEngine.Canvas2D.EditingSession;
 
 internal sealed partial class EditingSessionPipeline : ISessionPipelineProcessing
 {
+    public ValueTask<EditingSessionPipelineResult> RebuildSceneForTransientPresentationAsync(
+        Canvas2DScene previousScene,
+        DocumentSnapshot document,
+        EditingSessionPipelineArtifacts artifacts,
+        EditorStateSnapshot editorState,
+        ModelProfileViewStateSnapshot modelProfileViewState,
+        ModelProfileElementViewStateSnapshot modelProfileElementViewState,
+        CancellationToken cancellationToken)
+    {
+        var scene = _configuration.SceneBuilder.TryReuseForMovePreview(
+            previousScene, document, artifacts.ScopeId, modelProfileViewState,
+            modelProfileElementViewState, artifacts.ProjectedGraph, artifacts.LayoutResult,
+            artifacts.RoutingResult, editorState, cancellationToken);
+        var reusedMove = scene is not null;
+        scene ??= _configuration.SceneBuilder.TryReuseForSelection(
+            previousScene, document, artifacts.ScopeId, modelProfileViewState,
+            modelProfileElementViewState, artifacts.ProjectedGraph, artifacts.LayoutResult,
+            artifacts.RoutingResult, editorState, cancellationToken);
+        return scene is null
+            ? RebuildSceneAsync(document, artifacts, editorState, modelProfileViewState,
+                modelProfileElementViewState, cancellationToken)
+            : ValueTask.FromResult(EditingSessionPipelineResult.Success(
+                artifacts, scene, artifacts.LayoutResult.Diagnostics
+                    .Concat(artifacts.RoutingResult.Diagnostics).Concat(scene.Diagnostics),
+                reusedMoveContent: reusedMove, reusedSelectionContent: !reusedMove));
+    }
+
+    public bool CanDeferPanPresentation(
+        Canvas2DScene previousScene,
+        DocumentSnapshot document,
+        EditingSessionPipelineArtifacts artifacts,
+        EditorStateSnapshot editorState,
+        ModelProfileViewStateSnapshot modelProfileViewState,
+        ModelProfileElementViewStateSnapshot modelProfileElementViewState) =>
+        _configuration.SceneBuilder.CanDeferPanPresentation(
+            previousScene, document, artifacts.ScopeId, modelProfileViewState,
+            modelProfileElementViewState, artifacts.ProjectedGraph, artifacts.LayoutResult,
+            artifacts.RoutingResult, editorState);
+
+    public ValueTask<EditingSessionPipelineResult> RebuildSceneForPanAsync(
+        Canvas2DScene previousScene,
+        DocumentSnapshot document,
+        EditingSessionPipelineArtifacts artifacts,
+        EditorStateSnapshot editorState,
+        ModelProfileViewStateSnapshot modelProfileViewState,
+        ModelProfileElementViewStateSnapshot modelProfileElementViewState,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var scene = _configuration.SceneBuilder.TryReuseForPan(
+            previousScene, document, artifacts.ScopeId, modelProfileViewState,
+            modelProfileElementViewState, artifacts.ProjectedGraph, artifacts.LayoutResult,
+            artifacts.RoutingResult, editorState);
+        return scene is null
+            ? RebuildSceneAsync(document, artifacts, editorState, modelProfileViewState,
+                modelProfileElementViewState, cancellationToken)
+            : ValueTask.FromResult(EditingSessionPipelineResult.Success(
+                artifacts, scene, artifacts.LayoutResult.Diagnostics
+                    .Concat(artifacts.RoutingResult.Diagnostics).Concat(scene.Diagnostics),
+                reusedPanContent: true));
+    }
+
     private readonly EditingSessionConfiguration _configuration;
     private readonly Canvas2DRenderer? _renderer;
 
@@ -352,11 +414,47 @@ internal sealed partial class EditingSessionPipeline : ISessionPipelineProcessin
         }
 
         cancellationToken.ThrowIfCancellationRequested();
+        RoutingContext routingContext;
+#pragma warning disable CA1031 // Pure plugin preparation faults become an atomic pipeline failure.
+        try
+        {
+            if (projection.Graph.DocumentId != document.DocumentId ||
+                projection.Graph.SourceRevision != document.Revision ||
+                layout.DocumentId != document.DocumentId || layout.SourceRevision != document.Revision ||
+                !document.SemanticModel.TryGetScope(activeScopeId, out _))
+            {
+                return FromStageFailure(false, [new Diagnostic(
+                    RoutingDiagnosticCodes.InvalidInput, DiagnosticSeverity.Error,
+                    "Routing preparation requires the current Document, scope, graph and layout.",
+                    document.DocumentId.Value)]);
+            }
+
+            var prepared = _configuration.RoutingInputPreparer?.Prepare(
+                document, activeScopeId, projection.Graph, layout, cancellationToken);
+            routingContext = _configuration.RoutingInputPreparer is null
+                ? _configuration.RoutingContext
+                : new RoutingContext(_configuration.RoutingContext.Options, prepared);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException and
+            not StackOverflowException and not AccessViolationException)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return FromStageFailure(false, [new Diagnostic(
+                RoutingDiagnosticCodes.InputPreparationFailure, DiagnosticSeverity.Error,
+                "Routing input preparation failed.", document.DocumentId.Value)]);
+        }
+#pragma warning restore CA1031
+
+        cancellationToken.ThrowIfCancellationRequested();
         var routing = _configuration.RoutingEngine.Route(
             projection.Graph,
             layout,
             _configuration.RoutingAlgorithmId,
-            _configuration.RoutingContext,
+            routingContext,
             cancellationToken);
         if (!routing.IsSuccessful || routing.Result is null)
         {

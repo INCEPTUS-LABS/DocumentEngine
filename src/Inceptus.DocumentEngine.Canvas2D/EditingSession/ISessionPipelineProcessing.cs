@@ -5,11 +5,42 @@ using Inceptus.DocumentEngine.Contracts.Commands;
 using Inceptus.DocumentEngine.Contracts.Primitives;
 using Inceptus.DocumentEngine.Contracts.Profiles;
 using Inceptus.DocumentEngine.Contracts.Visuals;
+using Inceptus.DocumentEngine.Canvas2D.Scene;
 
 namespace Inceptus.DocumentEngine.Canvas2D.EditingSession;
 
 internal interface ISessionPipelineProcessing
 {
+    ValueTask<EditingSessionPipelineResult> RebuildSceneForTransientPresentationAsync(
+        Canvas2DScene previousScene,
+        DocumentSnapshot document,
+        EditingSessionPipelineArtifacts artifacts,
+        EditorStateSnapshot editorState,
+        ModelProfileViewStateSnapshot modelProfileViewState,
+        ModelProfileElementViewStateSnapshot modelProfileElementViewState,
+        CancellationToken cancellationToken) =>
+        RebuildSceneAsync(document, artifacts, editorState, modelProfileViewState,
+            modelProfileElementViewState, cancellationToken);
+
+    bool CanDeferPanPresentation(
+        Canvas2DScene previousScene,
+        DocumentSnapshot document,
+        EditingSessionPipelineArtifacts artifacts,
+        EditorStateSnapshot editorState,
+        ModelProfileViewStateSnapshot modelProfileViewState,
+        ModelProfileElementViewStateSnapshot modelProfileElementViewState) => false;
+
+    ValueTask<EditingSessionPipelineResult> RebuildSceneForPanAsync(
+        Canvas2DScene previousScene,
+        DocumentSnapshot document,
+        EditingSessionPipelineArtifacts artifacts,
+        EditorStateSnapshot editorState,
+        ModelProfileViewStateSnapshot modelProfileViewState,
+        ModelProfileElementViewStateSnapshot modelProfileElementViewState,
+        CancellationToken cancellationToken) =>
+        RebuildSceneAsync(document, artifacts, editorState, modelProfileViewState,
+            modelProfileElementViewState, cancellationToken);
+
     ValueTask<EditingSessionPipelineResult> RunFullAsync(
         DocumentSnapshot document,
         DocumentScopeId activeScopeId,

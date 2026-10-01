@@ -1094,6 +1094,47 @@ public sealed class PhaseN1ToolboxPlacementIntegrationTests
 
         internal int SceneOnlyRunCount => Volatile.Read(ref _sceneOnlyRunCount);
 
+        internal int PanReuseCount { get; private set; }
+
+        public async ValueTask<EditingSessionPipelineResult> RebuildSceneForPanAsync(
+            Canvas2DScene previousScene,
+            DocumentSnapshot document,
+            EditingSessionPipelineArtifacts artifacts,
+            EditorStateSnapshot editorState,
+            Inceptus.DocumentEngine.Contracts.Profiles.ModelProfileViewStateSnapshot view,
+            Inceptus.DocumentEngine.Contracts.Profiles.ModelProfileElementViewStateSnapshot elements,
+            CancellationToken cancellationToken)
+        {
+            if (Volatile.Read(ref _failNextSceneOnlyRun) == 1)
+            {
+                return await RebuildSceneAsync(artifacts, document.VisualModel, editorState, cancellationToken);
+            }
+            Interlocked.Increment(ref _sceneOnlyRunCount);
+            var result = await inner.RebuildSceneForPanAsync(previousScene, document, artifacts,
+                editorState, view, elements, cancellationToken);
+            if (result.ReusedPanContent)
+            {
+                PanReuseCount++;
+            }
+            return result;
+        }
+
+        public ValueTask<EditingSessionPipelineResult> RebuildSceneAsync(
+            DocumentSnapshot document,
+            EditingSessionPipelineArtifacts artifacts,
+            EditorStateSnapshot editorState,
+            Inceptus.DocumentEngine.Contracts.Profiles.ModelProfileViewStateSnapshot view,
+            Inceptus.DocumentEngine.Contracts.Profiles.ModelProfileElementViewStateSnapshot elements,
+            CancellationToken cancellationToken)
+        {
+            if (Volatile.Read(ref _failNextSceneOnlyRun) == 1)
+            {
+                return RebuildSceneAsync(artifacts, document.VisualModel, editorState, cancellationToken);
+            }
+            Interlocked.Increment(ref _sceneOnlyRunCount);
+            return inner.RebuildSceneAsync(document, artifacts, editorState, view, elements, cancellationToken);
+        }
+
         internal void FailNextSceneOnlyRun() =>
             Interlocked.Exchange(ref _failNextSceneOnlyRun, 1);
 
@@ -1202,6 +1243,12 @@ public sealed class PhaseN1ToolboxPlacementIntegrationTests
             ValueTask.FromResult(Success());
 
         public ValueTask<Canvas2DInteropOperationResult> RenderAsync(Canvas2DRenderFrame frame)
+        {
+            Interlocked.Increment(ref _renderCount);
+            return ValueTask.FromResult(Success());
+        }
+
+        public ValueTask<Canvas2DInteropOperationResult> RenderViewportAsync(Canvas2DViewportFrame frame)
         {
             Interlocked.Increment(ref _renderCount);
             return ValueTask.FromResult(Success());

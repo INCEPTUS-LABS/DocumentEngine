@@ -24,6 +24,10 @@ internal enum DocumentCanvasContextMenuKind
     Background,
 }
 
+internal sealed record DocumentCanvasConnectorLabelContextAction(
+    SemanticElementId RelationshipId,
+    ConnectorLabelPlacement ManualPlacement);
+
 internal sealed record DocumentCanvasContextMenuState(
     DocumentCanvasContextMenuKind Kind,
     PointD CssPosition,
@@ -43,7 +47,8 @@ internal sealed record DocumentCanvasContextMenuState(
     ImmutableArray<SemanticSceneViewActionDefinition> SemanticViewActions,
     ImmutableArray<SemanticSceneCommandActionDefinition> SemanticCommandActions,
     DocumentScopeId InteractionScopeId,
-    Canvas2DSpatialRegion? TargetPresentation)
+    Canvas2DSpatialRegion? TargetPresentation,
+    DocumentCanvasConnectorLabelContextAction? ConnectorLabelAction = null)
 {
     private const double HorizontalInset = 8d;
     private const double VerticalInset = 8d;
@@ -66,13 +71,15 @@ internal sealed record DocumentCanvasContextMenuState(
         DocumentCanvasScopeNavigationContextAction? scopeNavigationAction = null,
         DocumentScopeId? scopeId = null,
         DocumentScopeId? interactionScopeId = null,
-        Canvas2DSpatialRegion? targetPresentation = null)
+        Canvas2DSpatialRegion? targetPresentation = null,
+        DocumentCanvasConnectorLabelContextAction? connectorLabelAction = null)
     {
         ArgumentNullException.ThrowIfNull(targetVisualStateId);
         ArgumentNullException.ThrowIfNull(targetSceneObjectId);
         ArgumentNullException.ThrowIfNull(sourceScene);
         var maximumX = Math.Max(HorizontalInset, surfaceSize.CssWidth - ExpectedWidth - HorizontalInset);
         var actionCount = 1 + (connectorRouteAction is null ? 0 : 1) +
+            (connectorLabelAction is null ? 0 : 1) +
             AnchorActionCount(connectorAnchorAction) +
             (nodeLabelAction is null ? 0 : 1) +
             (deletionAction is null ? 0 : 1) +
@@ -103,7 +110,8 @@ internal sealed record DocumentCanvasContextMenuState(
             [],
             [],
             interactionScopeId ?? scopeId ?? new DocumentScopeId(sourceScene.DocumentId.Value),
-            targetPresentation);
+            targetPresentation,
+            connectorLabelAction);
     }
 
     internal static DocumentCanvasContextMenuState CreateBackgroundClamped(
@@ -344,7 +352,8 @@ internal sealed record DocumentCanvasPropertySnapshot(
 
         var dataFields = schemaCatalog.TryGetSchema(typeId, out var schema)
             ? schema.Fields
-                .Select(field => CreateDataProperty(field, semanticProperties, isConnector))
+                .Select(field => CreateDataProperty(field, semanticProperties, isConnector,
+                    allowMissingText: ModelerPropertyEditing.CanEditMissingValue(typeId, field)))
                 .ToImmutableArray()
             : [];
 
@@ -451,7 +460,7 @@ internal sealed record DocumentCanvasPropertySnapshot(
              definition.MutationKind == SemanticPropertyMutationKind.Property) &&
             (definition.MutationKind != SemanticPropertyMutationKind.Name ||
               !string.IsNullOrWhiteSpace(value.TextValue));
-        if (!isAvailable && allowMissingText && !isConnector &&
+        if (!isAvailable && allowMissingText && value is null &&
             expectedKind == PropertyValueKind.Text &&
             definition.MutationKind != SemanticPropertyMutationKind.Name)
         {

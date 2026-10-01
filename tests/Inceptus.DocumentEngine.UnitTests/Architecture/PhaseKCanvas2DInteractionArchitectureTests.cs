@@ -38,17 +38,19 @@ public sealed class PhaseKCanvas2DInteractionArchitectureTests
             type.Name.Contains("Backend", StringComparison.Ordinal) ||
             type.Name.Contains("Provider", StringComparison.Ordinal));
 
-        var hitTest = Assert.Single(
-            service.GetMethods(
-                BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
-            static method => !method.IsSpecialName);
-        Assert.Equal("HitTest", hitTest.Name);
-        Assert.Equal(
-            [typeof(Canvas2DScene), typeof(PointD)],
-            hitTest.GetParameters().Select(static parameter => parameter.ParameterType));
-        Assert.Equal(
-            $"{HitTestingNamespace}.Canvas2DSceneHitTestResult",
-            hitTest.ReturnType.FullName);
+        var methods = service.GetMethods(
+                BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+            .Where(static method => !method.IsSpecialName).OrderBy(static method => method.Name).ToArray();
+        Assert.Equal(["HitTest", "HitTestForHover"], methods.Select(static method => method.Name));
+        foreach (var hitTest in methods)
+        {
+            Assert.Equal(
+                [typeof(Canvas2DScene), typeof(PointD)],
+                hitTest.GetParameters().Select(static parameter => parameter.ParameterType));
+            Assert.Equal(
+                $"{HitTestingNamespace}.Canvas2DSceneHitTestResult",
+                hitTest.ReturnType.FullName);
+        }
     }
 
     [Fact]

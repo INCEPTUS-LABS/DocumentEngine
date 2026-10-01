@@ -20,7 +20,7 @@ public sealed class EditingSessionViewportTests
     {
         var inputs = Canvas2DSceneTestData.Create();
         var surface = new Canvas2DSurfaceSize(800d, 450d, 1.25d);
-        var initialViewport = new ViewportSnapshot(0.8d, new VectorD(30d, -20d));
+        var initialViewport = new ViewportSnapshot(0.8d, new VectorD(-30d, -20d));
         var initialEditorState = new EditorStateSnapshot(
             selection: [inputs.VisualModel.VisualStates[0].Id],
             viewport: new ViewportSnapshot(
@@ -100,7 +100,7 @@ public sealed class EditingSessionViewportTests
             item.Origin.VisualStateId is not null &&
             item.HitTestPolicy.Mode != Canvas2DHitTestMode.None);
         var visibleRegion = Canvas2DSceneBuilder.CalculateVisibleDocumentRegion(
-            new ViewportSnapshot(1.25d, new VectorD(18d, -7d)),
+            new ViewportSnapshot(1.25d, new VectorD(0d, -7d)),
             new Canvas2DSurfaceSize(800d, 450d, 1d));
         var initialEditorState = new EditorStateSnapshot(
             selection: [target.Origin.VisualStateId!],
@@ -109,7 +109,7 @@ public sealed class EditingSessionViewportTests
             focusTargetId: "focus:canvas",
             viewport: new ViewportSnapshot(
                 1.25d,
-                new VectorD(18d, -7d),
+                new VectorD(0d, -7d),
                 visibleRegion),
             temporaryFeedback:
             [
@@ -151,31 +151,32 @@ public sealed class EditingSessionViewportTests
         Assert.Same(before.LayoutResult, after.LayoutResult);
         Assert.Same(before.RoutingResult, after.RoutingResult);
         Assert.Equal(requested.Zoom, after.EditorState.Viewport.Zoom);
-        Assert.Equal(requested.Pan, after.EditorState.Viewport.Pan);
+        var expected = new ViewportSnapshot(requested.Zoom, new VectorD(-32.5d, 0d));
+        Assert.Equal(expected.Pan, after.EditorState.Viewport.Pan);
         Assert.Equal(
             Canvas2DSceneBuilder.CalculateVisibleDocumentRegion(
-                requested,
+                expected,
                 new Canvas2DSurfaceSize(800d, 450d, 1d)),
             after.EditorState.Viewport.VisibleDocumentRegion);
         Assert.Equal(after.EditorState.Viewport, after.CurrentScene!.Viewport);
-        Assert.Contains(before.CurrentScene!.Items, item =>
+        Assert.Contains(before.CurrentScene!.BoundaryGuides.Items, item =>
             StringComparer.Ordinal.Equals(
                 item.Origin.StableSourceKey,
                 "document-boundary:y-axis"));
-        Assert.DoesNotContain(before.CurrentScene.Items, item =>
+        Assert.DoesNotContain(before.CurrentScene.BoundaryGuides.Items, item =>
             StringComparer.Ordinal.Equals(
                 item.Origin.StableSourceKey,
                 "document-boundary:x-axis"));
-        Assert.DoesNotContain(after.CurrentScene.Items, item =>
+        Assert.DoesNotContain(after.CurrentScene.BoundaryGuides.Items, item =>
             StringComparer.Ordinal.Equals(
                 item.Origin.StableSourceKey,
                 "document-boundary:y-axis"));
-        Assert.Contains(after.CurrentScene.Items, item =>
+        Assert.Contains(after.CurrentScene.BoundaryGuides.Items, item =>
             StringComparer.Ordinal.Equals(
                 item.Origin.StableSourceKey,
                 "document-boundary:x-axis"));
         Assert.Equal(
-            new PointD(requested.Pan.X, requested.Pan.Y),
+            new PointD(expected.Pan.X, expected.Pan.Y),
             after.CurrentScene.ViewportTransform.TransformPoint(default));
         Assert.True(initialEditorState.Selection.AsSpan().SequenceEqual(
             after.EditorState.Selection.AsSpan()));
@@ -199,13 +200,13 @@ public sealed class EditingSessionViewportTests
     {
         var inputs = Canvas2DSceneTestData.Create();
         var visibleRegion = Canvas2DSceneBuilder.CalculateVisibleDocumentRegion(
-            new ViewportSnapshot(1.5d, new VectorD(20d, -30d)),
+            new ViewportSnapshot(1.5d, new VectorD(-20d, -30d)),
             new Canvas2DSurfaceSize(1200d, 750d, 1d));
         var initialEditorState = new EditorStateSnapshot(
             activeToolId: "tool:select",
             viewport: new ViewportSnapshot(
                 1.5d,
-                new VectorD(20d, -30d),
+                new VectorD(-20d, -30d),
                 visibleRegion));
         var document = EditingSessionTestHarness.CreateDocument(inputs);
         var pipeline = new ControlledEditingSessionPipeline();

@@ -109,7 +109,7 @@ public sealed class SolutionArchitectureTests
     {
         var buildProperties = XDocument.Load(Path.Combine(RepositoryRoot, "Directory.Build.props"));
 
-        Assert.Equal("0.1.5", ReadElementValue(buildProperties, "Version"));
+        Assert.Equal("0.1.6", ReadElementValue(buildProperties, "Version"));
         Assert.Equal("Robert Prokopczuk", ReadElementValue(buildProperties, "Authors"));
 
         var releaseTargets = XDocument.Load(Path.Combine(RepositoryRoot, "Directory.Build.targets"));
@@ -484,6 +484,10 @@ public sealed class SolutionArchitectureTests
             "Inceptus.DocumentEngine.Contracts.Canvas2D.Canvas2DSceneContributionResult",
             "Inceptus.DocumentEngine.Contracts.Canvas2D.Canvas2DSceneContributionStage",
             "Inceptus.DocumentEngine.Contracts.Canvas2D.Canvas2DSceneContributorDescriptor",
+            "Inceptus.DocumentEngine.Contracts.Canvas2D.Canvas2DScenePanDependency",
+            "Inceptus.DocumentEngine.Contracts.Canvas2D.Canvas2DSceneMoveGestureDependency",
+            "Inceptus.DocumentEngine.Contracts.Canvas2D.Canvas2DSceneTransientDependency",
+            "Inceptus.DocumentEngine.Contracts.Canvas2D.Canvas2DTransientInteractionMetadata",
             "Inceptus.DocumentEngine.Contracts.Canvas2D.Canvas2DSceneContributorId",
             "Inceptus.DocumentEngine.Contracts.Canvas2D.Canvas2DSceneContributorRegistration",
             "Inceptus.DocumentEngine.Contracts.Canvas2D.Canvas2DSceneDiagnosticCodes",
@@ -672,6 +676,7 @@ public sealed class SolutionArchitectureTests
             "Inceptus.DocumentEngine.Contracts.Properties.PropertyValue",
             "Inceptus.DocumentEngine.Contracts.Properties.PropertyValueKind",
             "Inceptus.DocumentEngine.Contracts.Properties.SemanticPropertyMutationKind",
+            "Inceptus.DocumentEngine.Contracts.Projection.ConnectorLabelPlacementIntent",
             "Inceptus.DocumentEngine.Contracts.Projection.ElementProjectionRuleInput",
             "Inceptus.DocumentEngine.Contracts.Projection.IProjectedObject",
             "Inceptus.DocumentEngine.Contracts.Projection.IProjectionRule",
@@ -709,11 +714,14 @@ public sealed class SolutionArchitectureTests
             "Inceptus.DocumentEngine.Contracts.Publishing.PublishedTokenRoleClassification",
             "Inceptus.DocumentEngine.Contracts.Publishing.PublishedTokenRoleClassificationRequest",
             "Inceptus.DocumentEngine.Contracts.Routing.IRoutingAlgorithm",
+            "Inceptus.DocumentEngine.Contracts.Routing.IRoutingInputPreparer",
+            "Inceptus.DocumentEngine.Contracts.Routing.PreparedRoutingInput",
             "Inceptus.DocumentEngine.Contracts.Routing.RoutedConnectorGeometry",
             "Inceptus.DocumentEngine.Contracts.Routing.RoutingAlgorithmRegistration",
             "Inceptus.DocumentEngine.Contracts.Routing.RoutingAlgorithmResult",
             "Inceptus.DocumentEngine.Contracts.Routing.RoutingComputation",
             "Inceptus.DocumentEngine.Contracts.Routing.RoutingContext",
+            "Inceptus.DocumentEngine.Contracts.Routing.RoutingObstacleDomain",
             "Inceptus.DocumentEngine.Contracts.Routing.RoutingDiagnosticCodes",
             "Inceptus.DocumentEngine.Contracts.Routing.RoutingExecutionResult",
             "Inceptus.DocumentEngine.Contracts.Routing.RoutingExecutionStatus",

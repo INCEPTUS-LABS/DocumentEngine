@@ -756,6 +756,7 @@ public sealed class BpmnDemoPipelineTests
                 "Continue after selected services",
                 "Customer message",
                 "Handle timeout",
+                "Message",
                 "Notify customer",
                 "Optional services",
                 "Prepare shipment",
@@ -766,6 +767,7 @@ public sealed class BpmnDemoPipelineTests
                 "Response timeout",
                 "Review order",
                 "Synchronise",
+                "Timeout",
             ],
             graph.Labels.Select(static label => label.Text).Order(StringComparer.Ordinal));
         var gatewayNode = Assert.Single(graph.Nodes, node =>

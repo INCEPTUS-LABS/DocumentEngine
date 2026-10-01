@@ -28,7 +28,10 @@ public sealed class Canvas2DScene : IEquatable<Canvas2DScene>, IDisposable
         PropertyMap contributorMetadata,
         IEnumerable<Canvas2DSceneItem> items,
         IEnumerable<Diagnostic>? diagnostics = null,
-        Canvas2DSpatialPresentationPlan? spatialPresentationPlan = null)
+        Canvas2DSpatialPresentationPlan? spatialPresentationPlan = null,
+        Canvas2DScenePanReuseSource? panReuseSource = null,
+        Canvas2DBoundaryGuidePresentation? boundaryGuides = null,
+        Canvas2DBoundedPresentation? movePreview = null)
     {
         ArgumentNullException.ThrowIfNull(documentId);
         ArgumentNullException.ThrowIfNull(layoutAlgorithmId);
@@ -54,6 +57,9 @@ public sealed class Canvas2DScene : IEquatable<Canvas2DScene>, IDisposable
         ContributorMetadata = contributorMetadata;
         Items = items.ToImmutableArray();
         SpatialPresentationPlan = spatialPresentationPlan;
+        PanReuseSource = panReuseSource;
+        BoundaryGuides = boundaryGuides ?? Canvas2DBoundaryGuidePresentation.Empty;
+        BoundedPresentation = movePreview;
         Diagnostics = Canvas2DSceneDiagnosticCollection.CopyAndOrder(
             diagnostics,
             nameof(diagnostics));
@@ -95,6 +101,74 @@ public sealed class Canvas2DScene : IEquatable<Canvas2DScene>, IDisposable
 
     public int ItemCount => Items.Length;
 
+    internal Canvas2DScenePanReuseSource? PanReuseSource { get; }
+
+    internal Canvas2DBoundaryGuidePresentation BoundaryGuides { get; }
+
+    internal Canvas2DBoundedPresentation? BoundedPresentation { get; }
+
+    internal ImmutableArray<Canvas2DSceneItem> RenderContent => BoundedPresentation?.Source.Items ?? Items;
+
+    internal Canvas2DScene WithBoundedPresentation(
+        Canvas2DBoundedPresentation presentation,
+        ImmutableArray<Canvas2DSceneItem> items,
+        Canvas2DScenePanReuseSource? panSource) =>
+        new(this, presentation, items, panSource);
+
+    private Canvas2DScene(Canvas2DScene previous, Canvas2DBoundedPresentation presentation,
+        ImmutableArray<Canvas2DSceneItem> items, Canvas2DScenePanReuseSource? panSource)
+    {
+        DocumentId = previous.DocumentId;
+        SourceRevision = previous.SourceRevision;
+        LayoutAlgorithmId = previous.LayoutAlgorithmId;
+        RoutingAlgorithmId = previous.RoutingAlgorithmId;
+        Configuration = previous.Configuration;
+        Contributors = previous.Contributors;
+        Viewport = presentation.EditorState.Viewport;
+        ViewportTransform = previous.ViewportTransform;
+        ActiveToolId = previous.ActiveToolId;
+        FocusTargetId = previous.FocusTargetId;
+        ToolState = previous.ToolState;
+        ContributorMetadata = previous.ContributorMetadata;
+        Items = items;
+        BoundaryGuides = previous.BoundaryGuides;
+        SpatialPresentationPlan = previous.SpatialPresentationPlan;
+        Diagnostics = previous.Diagnostics;
+        PanReuseSource = panSource;
+        BoundedPresentation = presentation;
+    }
+
+    internal Canvas2DScene WithPan(
+        Canvas2DScenePanReuseSource source,
+        Canvas2DBoundaryGuidePresentation boundaryGuides) => new(this, source, boundaryGuides);
+
+    private Canvas2DScene(
+        Canvas2DScene previous,
+        Canvas2DScenePanReuseSource source,
+        Canvas2DBoundaryGuidePresentation boundaryGuides)
+    {
+        DocumentId = previous.DocumentId;
+        SourceRevision = previous.SourceRevision;
+        LayoutAlgorithmId = previous.LayoutAlgorithmId;
+        RoutingAlgorithmId = previous.RoutingAlgorithmId;
+        Configuration = previous.Configuration;
+        Contributors = previous.Contributors;
+        Viewport = source.EditorState.Viewport;
+        ViewportTransform = Canvas2DSceneBuilder.CreateViewportTransform(Viewport);
+        ActiveToolId = previous.ActiveToolId;
+        FocusTargetId = previous.FocusTargetId;
+        ToolState = previous.ToolState;
+        ContributorMetadata = previous.ContributorMetadata;
+        Items = previous.Items;
+        BoundaryGuides = boundaryGuides;
+        SpatialPresentationPlan = previous.SpatialPresentationPlan;
+        Diagnostics = previous.Diagnostics;
+        PanReuseSource = source;
+        BoundedPresentation = previous.BoundedPresentation is { } move
+            ? move with { EditorState = source.EditorState }
+            : null;
+    }
+
     internal Canvas2DScene RebindToCommittedRevision(
         DocumentId documentId,
         DocumentRevision previousRevision,
@@ -130,7 +204,8 @@ public sealed class Canvas2DScene : IEquatable<Canvas2DScene>, IDisposable
             ContributorMetadata,
             Items,
             Diagnostics,
-            SpatialPresentationPlan);
+            SpatialPresentationPlan,
+            boundaryGuides: BoundaryGuides);
     }
 
     public void Dispose()
@@ -154,6 +229,7 @@ public sealed class Canvas2DScene : IEquatable<Canvas2DScene>, IDisposable
         ToolState.Equals(other.ToolState) &&
         ContributorMetadata.Equals(other.ContributorMetadata) &&
         Items.AsSpan().SequenceEqual(other.Items.AsSpan()) &&
+        BoundaryGuides.HasSamePresentation(other.BoundaryGuides) &&
         Equals(SpatialPresentationPlan, other.SpatialPresentationPlan) &&
         Canvas2DSceneDiagnosticCollection.SequenceEquals(Diagnostics, other.Diagnostics);
 
@@ -184,6 +260,12 @@ public sealed class Canvas2DScene : IEquatable<Canvas2DScene>, IDisposable
         }
 
         hash.Add(SpatialPresentationPlan);
+        hash.Add(BoundaryGuides.HorizontalContentIndex);
+        hash.Add(BoundaryGuides.VerticalContentIndex);
+        foreach (var guide in BoundaryGuides.Items)
+        {
+            hash.Add(guide);
+        }
 
         Canvas2DSceneDiagnosticCollection.AddHashCode(ref hash, Diagnostics);
         return hash.ToHashCode();

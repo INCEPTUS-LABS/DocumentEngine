@@ -238,10 +238,12 @@ public sealed partial class Canvas2DSceneBuilder
 
             if (routes.TryGetValue(label.OwnerId, out var connectorRoute))
             {
-                var placement = label.Source.VisualStateId is { } connectorVisualStateId &&
-                    visualsById.TryGetValue(connectorVisualStateId, out var connectorVisual)
-                        ? ConnectorLabelPlacement.Resolve(connectorVisual.Properties)
-                        : ConnectorLabelPlacement.Default;
+                ConnectorLabelPlacement? placement = null;
+                if (label.Source.VisualStateId is { } connectorVisualStateId &&
+                    visualsById.TryGetValue(connectorVisualStateId, out var connectorVisual))
+                {
+                    ConnectorLabelPlacement.TryRead(connectorVisual.Properties, out placement);
+                }
                 items.Add(CreateUnmeasuredConnectorLabelItem(
                     label,
                     connectorRoute,
@@ -360,7 +362,8 @@ public sealed partial class Canvas2DSceneBuilder
         List<Diagnostic> diagnostics,
         IReadOnlyDictionary<ProjectedObjectId, Canvas2DMeasuredNodeLabel>? measuredLabels,
         IReadOnlyDictionary<ProjectedObjectId, Canvas2DMeasuredConnectorLabel>?
-            measuredConnectorLabels)
+            measuredConnectorLabels,
+        Canvas2DEditorOverlayInputs? overlayInputs = null)
     {
         ComposeDocumentBoundaryGuides(editorState, items);
 
@@ -403,28 +406,10 @@ public sealed partial class Canvas2DSceneBuilder
         var persistentItems = items.ToArray();
         var hasLineJumps = persistentItems.Any(
             Canvas2DConnectorLineJumpMetadata.HasHitTarget);
-        var visualStatesById = visualModel.VisualStates.ToDictionary(static visual => visual.Id);
-        var connectorAnchorsByNode = graph.Ports
-            .Select(static port => new
-            {
-                Port = port,
-                Anchor = ProjectedConnectorAnchorMetadata.TryDecode(port, out var anchor)
-                    ? anchor
-                    : null,
-            })
-            .Where(static candidate => candidate.Anchor is not null)
-            .GroupBy(static candidate => candidate.Port.OwnerNodeId)
-            .ToDictionary(
-                static group => group.Key,
-                static group => group
-                    .Select(static candidate => candidate.Anchor!)
-                    .OrderBy(static anchor => anchor.Side)
-                    .ThenBy(static anchor => anchor.Order)
-                    .ThenBy(static anchor => anchor.Id.Value, StringComparer.Ordinal)
-                    .ToArray());
-        var referencedAnchorIds = ConnectorAnchorOccupancy
-            .EnumerateEndpointReferences(visualModel)
-            .ToHashSet();
+        overlayInputs ??= CreateEditorOverlayInputs(graph, visualModel);
+        var visualStatesById = overlayInputs.Visuals;
+        var connectorAnchorsByNode = overlayInputs.Anchors;
+        var referencedAnchorIds = overlayInputs.ReferencedAnchors;
 
         for (var index = 0; index < editorState.Selection.Length; index++)
         {

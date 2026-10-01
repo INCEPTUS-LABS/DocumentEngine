@@ -8,6 +8,8 @@ internal sealed class Canvas2DRendererTestExecution : ICanvas2DRenderExecution
 {
     internal List<string> Calls { get; } = [];
 
+    internal Canvas2DViewportFrame? LastViewportFrame { get; private set; }
+
     internal Canvas2DRenderFrame? LastFrame { get; private set; }
 
     internal Canvas2DSurfaceSize? LastSurfaceSize { get; private set; }
@@ -83,6 +85,24 @@ internal sealed class Canvas2DRendererTestExecution : ICanvas2DRenderExecution
     {
         Calls.Add("render");
         LastFrame = frame;
+        RenderEnteredSignal?.TrySetResult();
+        if (RenderReleaseSignal is not null)
+        {
+            await RenderReleaseSignal.Task;
+        }
+
+        if (RenderException is not null)
+        {
+            throw RenderException;
+        }
+
+        return RenderResult;
+    }
+
+    public async ValueTask<Canvas2DInteropOperationResult> RenderViewportAsync(Canvas2DViewportFrame frame)
+    {
+        Calls.Add("renderViewport");
+        LastViewportFrame = frame;
         RenderEnteredSignal?.TrySetResult();
         if (RenderReleaseSignal is not null)
         {

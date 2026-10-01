@@ -8,6 +8,7 @@ using Inceptus.DocumentEngine.Contracts.Primitives;
 using Inceptus.DocumentEngine.Contracts.Profiles;
 using Inceptus.DocumentEngine.Contracts.Projection;
 using Inceptus.DocumentEngine.Contracts.Properties;
+using Inceptus.DocumentEngine.Contracts.Routing;
 using Inceptus.DocumentEngine.Contracts.Validation;
 using Inceptus.DocumentEngine.Organizational.Commands;
 using Inceptus.DocumentEngine.Organizational.ContextMenus;
@@ -113,6 +114,7 @@ public sealed class OrganizationalPluginRegistration
                 eligibilityPolicy),
         ];
         ProjectionRules = [OrganizationalPoolProjectionRule.Registration];
+        RoutingInputPreparer = new OrganizationalRoutingInputPreparer(eligibilityPolicy);
         PropertiesSchemas = [OrganizationalPoolPropertiesSchema.Definition];
         DiagramDeletionRegistrations =
         [
@@ -143,6 +145,8 @@ public sealed class OrganizationalPluginRegistration
     public ImmutableArray<CommandHistoryPolicyRegistration> HistoryPolicies { get; }
 
     public ImmutableArray<ProjectionRuleRegistration> ProjectionRules { get; }
+
+    public IRoutingInputPreparer RoutingInputPreparer { get; }
 
     public ImmutableArray<ElementPropertiesSchema> PropertiesSchemas { get; }
 

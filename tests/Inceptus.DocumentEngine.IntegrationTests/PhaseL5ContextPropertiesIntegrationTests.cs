@@ -1365,7 +1365,10 @@ public sealed class PhaseL5ContextPropertiesIntegrationTests
         var dragDelta = new VectorD(72d, 26d);
         var pointerStart = new PointD(label.Bounds.Left + 1d, originalAnchor.Y);
         var pointerTarget = pointerStart + dragDelta;
-        var targetAnchor = originalAnchor + dragDelta;
+        var convertedDelta = Canvas2DRenderer.ConvertCssToDocument(scene,
+            scene.ViewportTransform.TransformPoint(pointerTarget)) -
+            Canvas2DRenderer.ConvertCssToDocument(scene, scene.ViewportTransform.TransformPoint(pointerStart));
+        var targetAnchor = originalAnchor + convertedDelta;
         var before = session.CaptureState();
         var beforeCounters = harness.CaptureCounters();
         var beforeEvents = harness.Events.Events.Count;
@@ -3050,6 +3053,12 @@ public sealed class PhaseL5ContextPropertiesIntegrationTests
             ValueTask.FromResult(Success());
 
         public ValueTask<Canvas2DInteropOperationResult> RenderAsync(Canvas2DRenderFrame frame)
+        {
+            RenderCount++;
+            return ValueTask.FromResult(Success());
+        }
+
+        public ValueTask<Canvas2DInteropOperationResult> RenderViewportAsync(Canvas2DViewportFrame frame)
         {
             RenderCount++;
             return ValueTask.FromResult(Success());

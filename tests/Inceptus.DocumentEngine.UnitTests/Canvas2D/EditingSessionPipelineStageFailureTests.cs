@@ -3,6 +3,7 @@ using Inceptus.DocumentEngine.Canvas2D.EditingSession;
 using Inceptus.DocumentEngine.Canvas2D.Scene;
 using Inceptus.DocumentEngine.Contracts.Canvas2D;
 using Inceptus.DocumentEngine.Contracts.Diagnostics;
+using Inceptus.DocumentEngine.Contracts.Documents;
 using Inceptus.DocumentEngine.Contracts.Layout;
 using Inceptus.DocumentEngine.Contracts.Primitives;
 using Inceptus.DocumentEngine.Contracts.Projection;
@@ -19,6 +20,8 @@ public sealed class EditingSessionPipelineStageFailureTests
     [InlineData(PipelineStage.Projection, ProjectionDiagnosticCodes.UnsupportedSemanticType)]
     [InlineData(PipelineStage.Layout, LayoutDiagnosticCodes.MissingAlgorithm)]
     [InlineData(PipelineStage.Routing, RoutingDiagnosticCodes.MissingAlgorithm)]
+    [InlineData(PipelineStage.RoutingPreparation, RoutingDiagnosticCodes.InputPreparationFailure)]
+    [InlineData(PipelineStage.InvalidRoutingPreparation, RoutingDiagnosticCodes.InvalidInput)]
     [InlineData(PipelineStage.Scene, Canvas2DSceneDiagnosticCodes.ContributorFailure)]
     public async Task ConcretePipelineClassifiesEachStageFailureWithoutPartialRuntimeState(
         PipelineStage stage,
@@ -83,7 +86,10 @@ public sealed class EditingSessionPipelineStageFailureTests
             source.ProjectionContext,
             source.LayoutContext,
             source.RoutingContext,
-            source.InitialEditorState);
+            source.InitialEditorState,
+            routingInputPreparer: stage is PipelineStage.RoutingPreparation or PipelineStage.InvalidRoutingPreparation
+                ? new FailingRoutingPreparer(stage == PipelineStage.RoutingPreparation)
+                : null);
     }
 
     public enum PipelineStage
@@ -91,7 +97,16 @@ public sealed class EditingSessionPipelineStageFailureTests
         Projection,
         Layout,
         Routing,
+        RoutingPreparation,
+        InvalidRoutingPreparation,
         Scene,
+    }
+
+    private sealed class FailingRoutingPreparer(bool throws) : IRoutingInputPreparer
+    {
+        public PreparedRoutingInput? Prepare(DocumentSnapshot document, DocumentScopeId activeScopeId,
+            ProjectedGraph graph, LayoutResult layout, CancellationToken cancellationToken) =>
+            throws ? throw new InvalidOperationException("Test provider failed.") : new PreparedRoutingInput(graph, layout, []);
     }
 
     private sealed class FailingSceneContributor : ICanvas2DSceneContributor

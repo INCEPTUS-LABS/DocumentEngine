@@ -639,11 +639,40 @@ public sealed partial class Canvas2DSceneBuilder
             (transform.M12 * x) + (transform.M22 * y) + transform.OffsetY);
 
     private static int CompareItems(Canvas2DSceneItem left, Canvas2DSceneItem right)
+        => CompareItemOrder(left.Layer, left.ZIndex, left.Id.Value,
+            right.Layer, right.ZIndex, right.Id.Value);
+
+    private static int CompareItemOrder(
+        Canvas2DSceneLayer leftLayer, int leftZIndex, string leftId,
+        Canvas2DSceneLayer rightLayer, int rightZIndex, string rightId)
     {
-        var comparison = left.Layer.CompareTo(right.Layer);
-        comparison = comparison != 0 ? comparison : left.ZIndex.CompareTo(right.ZIndex);
+        var comparison = leftLayer.CompareTo(rightLayer);
+        comparison = comparison != 0 ? comparison : leftZIndex.CompareTo(rightZIndex);
         return comparison != 0
             ? comparison
-            : StringComparer.Ordinal.Compare(left.Id.Value, right.Id.Value);
+            : StringComparer.Ordinal.Compare(leftId, rightId);
+    }
+
+    private static int FindBoundaryGuideContentIndex(List<Canvas2DSceneItem> content, string key)
+    {
+        var id = Canvas2DSceneObjectIdentity.ForEditorState(key).Value;
+        var low = 0;
+        var high = content.Count;
+        while (low < high)
+        {
+            var middle = low + ((high - low) / 2);
+            var item = content[middle];
+            if (CompareItemOrder(item.Layer, item.ZIndex, item.Id.Value,
+                    Canvas2DSceneLayer.Background, 0, id) < 0)
+            {
+                low = middle + 1;
+            }
+            else
+            {
+                high = middle;
+            }
+        }
+
+        return low;
     }
 }

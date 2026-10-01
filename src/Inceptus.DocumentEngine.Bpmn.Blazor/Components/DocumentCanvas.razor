@@ -324,6 +324,13 @@
                                     role="menuitem"
                                     @onclick="OpenPropertiesAsync">@Text["Context_Properties"]</button>
                         }
+                        @if (contextMenu.ConnectorLabelAction is not null)
+                        {
+                            <button id="@DomId("reset-connector-label-action")"
+                                    type="button"
+                                    role="menuitem"
+                                    @onclick="ExecuteConnectorLabelContextActionAsync">@Text["Context_ResetLabel"]</button>
+                        }
                         @if (contextMenu.ConnectorRouteAction?.Kind is
                             Canvas2DConnectorRouteContextActionKind.AddPoint)
                         {
@@ -666,10 +673,12 @@
             </div>
         </footer>
 
-        @if (ErrorMessage is not null)
-        {
-            <p class="presentation-error" role="alert">@ErrorMessage</p>
-        }
+        <div class="canvas-diagnostics">
+            @if (ErrorMessage is not null)
+            {
+                <p class="presentation-error" role="alert">@ErrorMessage</p>
+            }
+        </div>
         @if (_nativeDocumentOperationErrorMessage is not null)
         {
             <p id="@DomId("native-document-error")"
@@ -1412,7 +1421,7 @@
         _componentLifetime.Dispose();
     }
 
-    private Task HandleHostStateChangedAsync() => InvokeAsync(() =>
+    private Task HandleHostStateChangedAsync(EditingSessionGeneration? pendingPanGeneration) => InvokeAsync(() =>
     {
         lock (_lifecycleSync)
         {
@@ -1430,7 +1439,19 @@
         ReconcilePublicationDialog();
         ReconcilePublishOperation();
 
-        StateHasChanged();
+        // Captures and reconciliation remain unconditional. A delayed callback must not
+        // suppress a newer generation, completion, failure, or a local editor operation.
+        if (pendingPanGeneration is not { } generation ||
+            _state?.Session is not { IsPanPresentationPending: true } session ||
+            session.Generation != generation ||
+            _propertiesDraft is not null || _modelViewPropertiesDraft is not null ||
+            _issuesPanel.IsOpen || _toolboxSelection.SelectedItemId is not null ||
+            _publicationDialogOpen || _publishInProgress ||
+            _newDiagramConfirmationOpen || _newDiagramInProgress ||
+            _nativeDocumentImportInProgress || _nativeDocumentExportInProgress)
+        {
+            StateHasChanged();
+        }
     });
 
     private void OpenNewDiagramConfirmation()
@@ -2519,6 +2540,31 @@
         }
 
         await host.CancelActiveInteractionAsync(_componentLifetime.Token);
+        RefreshHostState(host);
+    }
+
+    private async Task ExecuteConnectorLabelContextActionAsync()
+    {
+        DocumentCanvasHost? host;
+        lock (_lifecycleSync)
+        {
+            host = _disposed ? null : _host;
+        }
+
+        if (host is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _ = await host.ExecuteConnectorLabelContextActionAsync(_componentLifetime.Token);
+        }
+        catch (OperationCanceledException) when (_componentLifetime.IsCancellationRequested)
+        {
+            return;
+        }
+
         RefreshHostState(host);
     }
 

@@ -31,6 +31,13 @@ class Renderer {
     #initialized = false;
     #disposed = false;
     #cancelFontLoad = null;
+    #content = null;
+    #contentBounds = null;
+    #presentationItems = [];
+    #contentVersion = 0;
+    #presentationVersion = 0;
+    #operationEpoch = 0;
+    #contentReady = false;
 
     constructor(canvas, context, canvasElementId) {
         this.#canvas = canvas;
@@ -115,6 +122,11 @@ class Renderer {
             return failure("CANVAS2D_RENDERER_RESIZE_FAILED", "Canvas2DSurfaceSize");
         }
 
+        this.#operationEpoch++;
+        this.#content = null;
+        this.#contentBounds = null;
+        this.#presentationItems = [];
+        this.#contentReady = false;
         this.#canvas.style.width = `${surface.cssWidth}px`;
         this.#canvas.style.height = `${surface.cssHeight}px`;
         if (this.#canvas.width !== width) {
@@ -132,10 +144,20 @@ class Renderer {
             return failure("CANVAS2D_RENDERER_DISPOSED", "Canvas2DRenderer");
         }
 
-        if (!frame || !frame.viewportTransform || !Array.isArray(frame.items)) {
+        if (!this.#initialized || !validPresentation(frame) || !Array.isArray(frame.items) ||
+            !validViewportLines(frame.viewportLines, frame.items.length) ||
+            !validPresentationItems(frame.presentationItems, frame.items.length) ||
+            frame.contentVersion <= this.#contentVersion ||
+            frame.presentationVersion <= this.#presentationVersion) {
             return failure("CANVAS2D_RENDERER_RENDERING_FAILED", "Canvas2DRenderFrame");
         }
 
+        // Reserve ordering before the first await. A newer upload/resize/disposal invalidates
+        // this operation even if an old image decode subsequently completes successfully.
+        this.#contentVersion = frame.contentVersion;
+        this.#presentationVersion = frame.presentationVersion;
+        const epoch = ++this.#operationEpoch;
+        this.#contentReady = false;
         if (!frame.items.every(validItemPaint)) {
             return failure("CANVAS2D_RENDERER_RENDERING_FAILED", "Canvas2DSceneStyle");
         }
@@ -145,11 +167,59 @@ class Renderer {
             return failure("CANVAS2D_RENDERER_RESIZE_FAILED", "Canvas2DSurfaceSize");
         }
 
-        const resources = await this.#loadRequiredImages(frame.items);
+        const resources = await this.#loadRequiredImages(frame.presentationItems?.length
+            ? frame.items.concat(frame.presentationItems.map(entry => entry.item)) : frame.items);
+        if (this.#disposed || epoch !== this.#operationEpoch) {
+            return failure("CANVAS2D_RENDERER_RENDERING_FAILED", "Canvas2DRenderFrame");
+        }
         if (!resources.succeeded) {
             return resources;
         }
 
+        // Validation and resources complete before replacing the one complete drawing set.
+        // There is no asynchronous boundary between installation and drawing.
+        const bounds = frame.items.map(conservativeItemBounds);
+        this.#content = frame.items;
+        this.#contentBounds = bounds;
+        this.#presentationItems = frame.presentationItems ?? [];
+        const result = this.#draw(frame.viewportTransform, this.#content, dpr,
+            frame.viewportLines, this.#presentationItems);
+        this.#contentReady = result.succeeded;
+        return result;
+    }
+
+    renderViewport(frame) {
+        if (this.#disposed) {
+            return failure("CANVAS2D_RENDERER_DISPOSED", "Canvas2DRenderer");
+        }
+        if (!this.#initialized || !validPresentation(frame) ||
+            !this.#contentReady || !this.#content ||
+            !validViewportLines(frame.viewportLines, this.#content.length) ||
+            !validPresentationItems(frame.presentationItems, this.#content.length) ||
+            frame.contentVersion !== this.#contentVersion ||
+            frame.presentationVersion <= this.#presentationVersion) {
+            return failure("CANVAS2D_RENDERER_RENDERING_FAILED", "Canvas2DViewportFrame");
+        }
+        this.#presentationVersion = frame.presentationVersion;
+        const dpr = Number(this.#canvas.dataset.inceptusDpr);
+        if (!finitePositive(dpr)) {
+            this.#contentReady = false;
+            return failure("CANVAS2D_RENDERER_RESIZE_FAILED", "Canvas2DSurfaceSize");
+        }
+        // Bounded requests may only use image resources already installed by a full frame.
+        if (frame.presentationItems?.some(entry => entry.item.isVisible &&
+            entry.item.geometryKind === 4 && !this.#images.has(entry.item.content))) {
+            this.#contentReady = false;
+            return failure("CANVAS2D_RENDERER_RENDERING_FAILED", "Canvas2DRenderFrame");
+        }
+        this.#presentationItems = frame.presentationItems ?? this.#presentationItems;
+        const result = this.#draw(frame.viewportTransform, this.#content, dpr,
+            frame.viewportLines, this.#presentationItems);
+        this.#contentReady = result.succeeded;
+        return result;
+    }
+
+    #draw(viewportTransform, items, dpr, viewportLines = null, presentationItems = null) {
         const context = this.#context;
         try {
             context.save();
@@ -164,14 +234,39 @@ class Renderer {
             context.textBaseline = "top";
             context.setLineDash([]);
             context.scale(dpr, dpr);
-            applyTransform(context, frame.viewportTransform);
+            applyTransform(context, viewportTransform);
 
+            const visibleBounds = hasUnboundedEffects(context) ? null :
+                visibleDocumentBounds(viewportTransform, this.#canvas.width, this.#canvas.height, dpr);
+            let lineIndex = 0;
+            let presentationIndex = 0;
             // Items arrive in the immutable Scene's canonical layer/z/identity order.
-            for (const item of frame.items) {
+            for (let index = 0; index <= items.length; index++) {
+                while (lineIndex < (viewportLines?.length ?? 0) &&
+                    viewportLines[lineIndex].beforeContentIndex === index) {
+                    this.#drawViewportLine(viewportLines[lineIndex++]);
+                }
+                while (presentationIndex < (presentationItems?.length ?? 0) &&
+                    presentationItems[presentationIndex].beforeContentIndex === index) {
+                    const item = presentationItems[presentationIndex++].item;
+                    if (item.isVisible && !outsideViewport(conservativeItemBounds(item), visibleBounds)) {
+                        this.#drawItem(item);
+                    }
+                }
+                if (index === items.length) {
+                    break;
+                }
+                const item = items[index];
                 if (!item.isVisible) {
                     continue;
                 }
+                if (outsideViewport(this.#contentBounds[index], visibleBounds)) {
+                    continue;
+                }
                 this.#drawItem(item);
+            }
+            while (lineIndex < (viewportLines?.length ?? 0)) {
+                this.#drawViewportLine(viewportLines[lineIndex++]);
             }
             context.restore();
             return success();
@@ -192,6 +287,23 @@ class Renderer {
                 // The renderer result remains the sole observable failure surface.
             }
             return failure("CANVAS2D_RENDERER_RENDERING_FAILED", "Canvas2DRenderFrame");
+        }
+    }
+
+    #drawViewportLine(line) {
+        const context = this.#context;
+        context.save();
+        try {
+            context.globalAlpha = line.opacity;
+            context.strokeStyle = line.stroke;
+            context.lineWidth = line.strokeWidth;
+            context.setLineDash(line.dashPattern);
+            context.beginPath();
+            context.moveTo(line.start.x, line.start.y);
+            context.lineTo(line.end.x, line.end.y);
+            context.stroke();
+        } finally {
+            context.restore();
         }
     }
 
@@ -268,6 +380,11 @@ class Renderer {
             return;
         }
         this.#disposed = true;
+        this.#operationEpoch++;
+        this.#content = null;
+        this.#contentBounds = null;
+        this.#contentReady = false;
+        this.#presentationItems = [];
         this.#cancelFontLoad?.();
         const ownedCanvas = this.#ownsCanvas;
         let failed = false;
@@ -427,6 +544,9 @@ class Renderer {
                 image.decoding = "async";
                 image.src = uri;
                 await image.decode();
+                if (this.#disposed) {
+                    return failure("CANVAS2D_RENDERER_DISPOSED", "Canvas2DRenderer");
+                }
                 this.#images.set(reference, image);
             } catch {
                 return failure("CANVAS2D_RENDERER_IMAGE_LOAD_FAILED", reference);
@@ -434,6 +554,20 @@ class Renderer {
         }
         return success();
     }
+}
+
+function validPresentationItems(items, contentLength) {
+    if (items == null) return true;
+    if (!Array.isArray(items) || items.length > 128) return false;
+    let precedingIndex = -1;
+    return items.every(entry => {
+        if (!entry || !Number.isSafeInteger(entry.beforeContentIndex) ||
+            entry.beforeContentIndex < precedingIndex || entry.beforeContentIndex > contentLength ||
+            entry.beforeContentIndex < 0 || !entry.item || entry.item.layer !== 5 ||
+            !validItemPaint(entry.item)) return false;
+        precedingIndex = entry.beforeContentIndex;
+        return true;
+    });
 }
 
 class UnavailableRenderer {
@@ -523,12 +657,154 @@ function validSurface(surface) {
         finitePositive(surface.devicePixelRatio);
 }
 
+function validPresentation(frame) {
+    const matrix = frame?.viewportTransform;
+    return frame && Number.isSafeInteger(frame.contentVersion) && frame.contentVersion > 0 &&
+        Number.isSafeInteger(frame.presentationVersion) && frame.presentationVersion > 0 &&
+        matrix && [matrix.m11, matrix.m12, matrix.m21, matrix.m22, matrix.offsetX, matrix.offsetY]
+            .every(Number.isFinite);
+}
+
+// Managed presentation supplies line presence, geometry, style and canonical insertion
+// position. This validates a bounded drawing command, never Document boundary policy.
+function validViewportLines(lines, contentLength) {
+    if (lines == null) return true;
+    if (!Array.isArray(lines) || lines.length > 2) return false;
+    let previousIndex = 0;
+    return lines.every(line => {
+        if (!line || !Number.isSafeInteger(line.beforeContentIndex) ||
+            line.beforeContentIndex < previousIndex || line.beforeContentIndex > contentLength ||
+            !line.start || !line.end ||
+            ![line.start.x, line.start.y, line.end.x, line.end.y].every(Number.isFinite) ||
+            typeof line.stroke !== "string" || !line.stroke || !validPaint(line.stroke) ||
+            !finitePositive(line.strokeWidth) || !Number.isFinite(line.opacity) ||
+            line.opacity < 0 || line.opacity > 1 ||
+            !Array.isArray(line.dashPattern) || line.dashPattern.length > 2 ||
+            !line.dashPattern.every(finiteNonNegative)) return false;
+        previousIndex = line.beforeContentIndex;
+        return true;
+    });
+}
+
 function finitePositive(value) {
     return Number.isFinite(value) && value > 0;
 }
 
 function finiteNonNegative(value) {
     return Number.isFinite(value) && value >= 0;
+}
+
+// Rendering metadata only. Unknown/invalid data must reach the ordinary draw/failure path,
+// never disappear because an optimistic bound happened to be outside the surface.
+function conservativeItemBounds(item) {
+    if (!item?.isVisible || ![0, 1, 2, 4].includes(item.geometryKind) ||
+        !safeMatrix(item.transform) || !rectBounds(item.geometryBounds) ||
+        (item.clip != null && !rectBounds(item.clip)) ||
+        !finiteNonNegative(item.opacity) || item.opacity > 1 ||
+        !finiteNonNegative(item.strokeWidth) ||
+        !Array.isArray(item.dashPattern) || !item.dashPattern.every(finiteNonNegative)) {
+        return null;
+    }
+
+    let bounds = rectBounds(item.geometryBounds);
+    if (item.geometryKind === 2) {
+        // Complete path, including intermediate segments/jumps/closed-path decorations.
+        if (!Array.isArray(item.points) || item.points.length < (item.isClosed ? 3 : 2)) return null;
+        let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
+        for (const point of item.points) {
+            if (!point || !safeCoordinate(point.x) || !safeCoordinate(point.y)) return null;
+            left = Math.min(left, point.x);
+            top = Math.min(top, point.y);
+            right = Math.max(right, point.x);
+            bottom = Math.max(bottom, point.y);
+        }
+        bounds = { left, top, right, bottom };
+    }
+
+    if (item.stroke && item.geometryKind !== 4) {
+        // Canvas ignores lineWidth=0, retaining the inherited width. Do not guess it.
+        if (item.strokeWidth === 0) return null;
+        // Butt caps, miter joins, miterLimit=10; this also encloses every dashed segment.
+        const padding = 10 * item.strokeWidth;
+        bounds = { left: bounds.left - padding, top: bounds.top - padding,
+            right: bounds.right + padding, bottom: bounds.bottom + padding };
+    }
+    // Clip is already in document space. Ignoring it only produces false positives.
+    return transformBounds(bounds, item.transform);
+}
+
+function rectBounds(rect) {
+    if (!rect || ![rect.x, rect.y, rect.width, rect.height].every(safeCoordinate) ||
+        rect.width < 0 || rect.height < 0) return null;
+    const right = rect.x + rect.width, bottom = rect.y + rect.height;
+    return safeCoordinate(right) && safeCoordinate(bottom) ?
+        { left: rect.x, top: rect.y, right, bottom } : null;
+}
+
+// Extreme coordinates remain supported by drawing conservatively. Limit only the
+// optimization's arithmetic. Outward guards also allow for native Canvas float precision.
+function safeCoordinate(value) {
+    return Number.isFinite(value) && Math.abs(value) <= 1e12;
+}
+
+function safeMatrix(matrix) {
+    return matrix && [matrix.m11, matrix.m12, matrix.m21, matrix.m22,
+        matrix.offsetX, matrix.offsetY].every(safeCoordinate);
+}
+
+function transformBounds(bounds, matrix) {
+    let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
+    let magnitude = 1;
+    for (const x of [bounds.left, bounds.right]) {
+        for (const y of [bounds.top, bounds.bottom]) {
+            const ax = matrix.m11 * x, cy = matrix.m21 * y;
+            const bx = matrix.m12 * x, dy = matrix.m22 * y;
+            const px = ax + cy + matrix.offsetX, py = bx + dy + matrix.offsetY;
+            magnitude = Math.max(magnitude, Math.abs(ax) + Math.abs(cy) + Math.abs(matrix.offsetX),
+                Math.abs(bx) + Math.abs(dy) + Math.abs(matrix.offsetY));
+            if (!safeCoordinate(px) || !safeCoordinate(py) || !safeCoordinate(magnitude)) return null;
+            left = Math.min(left, px); top = Math.min(top, py);
+            right = Math.max(right, px); bottom = Math.max(bottom, py);
+        }
+    }
+    const guard = magnitude * 1e-6;
+    return { left: left - guard, top: top - guard, right: right + guard, bottom: bottom + guard };
+}
+
+function visibleDocumentBounds(matrix, width, height, dpr) {
+    if (!safeMatrix(matrix)) return null;
+    const scale = Math.max(Math.abs(matrix.m11), Math.abs(matrix.m12),
+        Math.abs(matrix.m21), Math.abs(matrix.m22));
+    if (scale === 0) return null;
+    const a = matrix.m11 / scale, b = matrix.m12 / scale;
+    const c = matrix.m21 / scale, d = matrix.m22 / scale;
+    const determinant = a * d - b * c;
+    // Ill-conditioned or singular views draw everything; the accepted contract is unchanged.
+    if (!Number.isFinite(determinant) || Math.abs(determinant) <= 1e-8) return null;
+    const factor = (1 / scale) / determinant;
+    const inverse = { m11: d * factor, m12: -b * factor, m21: -c * factor, m22: a * factor,
+        offsetX: 0, offsetY: 0 };
+    if (!safeMatrix(inverse)) return null;
+    // Subtract translation before inversion to avoid an extra cancellation-prone offset sum.
+    // Two device pixels cover raster-edge filtering; the relative guard covers inversion error.
+    const guard = 2 / dpr + 1e-6 / Math.abs(determinant) *
+        Math.max(1, width / dpr, height / dpr, Math.abs(matrix.offsetX), Math.abs(matrix.offsetY));
+    const surface = { left: -matrix.offsetX - guard, top: -matrix.offsetY - guard,
+        right: width / dpr - matrix.offsetX + guard,
+        bottom: height / dpr - matrix.offsetY + guard };
+    return transformBounds(surface, inverse);
+}
+
+function outsideViewport(bounds, visibleBounds) {
+    return bounds !== null && visibleBounds !== null &&
+        (bounds.right < visibleBounds.left || bounds.left > visibleBounds.right ||
+            bounds.bottom < visibleBounds.top || bounds.top > visibleBounds.bottom);
+}
+
+function hasUnboundedEffects(context) {
+    return (context.filter != null && context.filter !== "none") ||
+        (context.shadowBlur ?? 0) !== 0 || (context.shadowOffsetX ?? 0) !== 0 ||
+        (context.shadowOffsetY ?? 0) !== 0;
 }
 
 function validItemPaint(item) {

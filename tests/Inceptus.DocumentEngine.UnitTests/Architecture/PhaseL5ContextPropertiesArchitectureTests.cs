@@ -277,6 +277,20 @@ public sealed class PhaseL5ContextPropertiesArchitectureTests
             componentApply,
             StringComparison.Ordinal);
         Assert.Equal(1, CountOccurrences(form, "@onsubmit=\"ApplyPropertiesAsync\""));
+        Assert.DoesNotContain("Context_ResetLabel", form, StringComparison.Ordinal);
+        Assert.DoesNotContain("MoveLabelCommand", apply, StringComparison.Ordinal);
+        Assert.DoesNotContain("resetConnectorLabel", componentApply, StringComparison.Ordinal);
+        var menu = Between(component, "@if (PropertiesAvailable)", "@if (_modelViewPropertiesDraft");
+        Assert.Equal(1, CountOccurrences(menu, "reset-connector-label-action"));
+        Assert.True(menu.IndexOf("Context_Properties", StringComparison.Ordinal) <
+            menu.IndexOf("reset-connector-label-action", StringComparison.Ordinal));
+        Assert.True(menu.IndexOf("reset-connector-label-action", StringComparison.Ordinal) <
+            menu.IndexOf("Context_AddPoint", StringComparison.Ordinal));
+        Assert.True(menu.IndexOf("Context_AddPoint", StringComparison.Ordinal) <
+            menu.IndexOf("Context_DeleteConnection", StringComparison.Ordinal));
+        var resetAction = Between(menu, "@if (contextMenu.ConnectorLabelAction is not null)",
+            "@if (contextMenu.ConnectorRouteAction?.Kind is");
+        Assert.DoesNotContain("disabled", resetAction, StringComparison.Ordinal);
         Assert.DoesNotContain("@onblur", dataGroup, StringComparison.Ordinal);
         Assert.Equal(1, CountOccurrences(dataGroup, "@onchange="));
         Assert.DoesNotContain("@onkeydown", dataGroup, StringComparison.Ordinal);
@@ -327,7 +341,7 @@ public sealed class PhaseL5ContextPropertiesArchitectureTests
             StringComparison.Ordinal);
         Assert.Contains("schemaCatalog.TryGetSchema(typeId", properties,
             StringComparison.Ordinal);
-        Assert.Contains("CreateDataProperty(field, semanticProperties, isConnector)", properties,
+        Assert.Contains("CreateDataProperty(field, semanticProperties, isConnector,", properties,
             StringComparison.Ordinal);
         Assert.Contains("Definition.IsEditable && IsAvailable", properties,
             StringComparison.Ordinal);

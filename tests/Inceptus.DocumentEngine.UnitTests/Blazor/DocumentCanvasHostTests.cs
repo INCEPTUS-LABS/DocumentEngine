@@ -1534,12 +1534,12 @@ public sealed partial class DocumentCanvasHostTests
         Assert.Equal(expectedBounds, body.Bounds);
 
         var panned = await session.UpdateViewportAsync(
-            new ViewportSnapshot(1d, new VectorD(50d, 30d)));
+            new ViewportSnapshot(1d, new VectorD(-50d, -30d)));
         Assert.True(panned.Succeeded);
         var pannedScene = Assert.IsType<global::Inceptus.DocumentEngine.Canvas2D.Scene.Canvas2DScene>(
             session.CaptureState().CurrentScene);
         Assert.Equal(
-            new PointD(882d, 582d),
+            new PointD(782d, 522d),
             pannedScene.ViewportTransform.TransformPoint(expectedPosition));
         Assert.Equal(createdVisual, document.CaptureSnapshot().VisualModel.VisualStates.Single(
             visual => visual.Id == createdVisual.Id));
@@ -2146,13 +2146,14 @@ public sealed partial class DocumentCanvasHostTests
         Assert.Contains(noRouteEdge.Id, undoneFallbackAdd.RoutingResult!.NoRouteEdgeIds);
         Assert.Contains(undoneFallbackAdd.CurrentScene!.Items, item => item.Id == fallbackId);
 
-        Assert.Null(await host.OpenPropertiesAsync(BpmnDemoPipeline.SecondSequenceFlowVisualId));
-        Assert.False(host.TryCaptureSelectedProperties(BpmnDemoPipeline.SecondSequenceFlowVisualId,
+        Assert.NotNull(await host.OpenPropertiesAsync(BpmnDemoPipeline.SecondSequenceFlowVisualId));
+        Assert.True(host.TryCaptureSelectedProperties(BpmnDemoPipeline.SecondSequenceFlowVisualId,
             out var fallbackProperties));
         Assert.NotNull(fallbackProperties);
         Assert.True(fallbackProperties.IsConnector);
-        Assert.Empty(fallbackProperties.DataFields);
-        Assert.False(host.CaptureState().PropertiesFormOpen);
+        Assert.True(Assert.Single(fallbackProperties.DataFields).CanEdit);
+        Assert.True(host.CaptureState().PropertiesFormOpen);
+        host.UpdatePropertiesFormState(false, null, false);
 
         var interactionScene = session.CaptureState().CurrentScene!;
         var interactiveNode = Assert.Single(interactionScene.Items, item =>
@@ -3518,7 +3519,10 @@ public sealed partial class DocumentCanvasHostTests
             item.Origin.StableSourceKey?.StartsWith(
                 "connector-label-preview:",
                 StringComparison.Ordinal) == true);
-        Assert.Equal(Center(label.Bounds) + translation, Center(preview.Bounds));
+        var actualTranslation = Canvas2DRenderer.ConvertCssToDocument(scene,
+            scene.ViewportTransform.TransformPoint(destination)) -
+            Canvas2DRenderer.ConvertCssToDocument(scene, scene.ViewportTransform.TransformPoint(start));
+        Assert.Equal(Center(label.Bounds) + actualTranslation, Center(preview.Bounds));
 
         await pointer.UpDocumentPointAsync(
             previewed.Session.CurrentScene,
@@ -4185,6 +4189,7 @@ public sealed partial class DocumentCanvasHostTests
         await host.InitializeAsync("canvas", "container");
         var resized = new Canvas2DSurfaceSize(860d, 520d, 2d);
         await observer.RaiseAsync(resized);
+        Assert.True((await Session(host).PanViewportAsync(new VectorD(-100d, -100d))).Succeeded);
         var before = Assert.IsType<EditingSessionState>(host.CaptureState().Session);
         var cssCenter = new PointD(resized.CssWidth / 2d, resized.CssHeight / 2d);
         var documentAnchor = Canvas2DRenderer.ConvertCssToDocument(
@@ -4289,7 +4294,8 @@ public sealed partial class DocumentCanvasHostTests
         var after = session.CaptureState();
 
         Assert.Equal(before.EditorState.Viewport.Zoom, after.EditorState.Viewport.Zoom);
-        Assert.Equal(before.EditorState.Viewport.Pan + expectedTranslation,
+        var candidatePan = before.EditorState.Viewport.Pan + expectedTranslation;
+        Assert.Equal(new VectorD(Math.Min(0d, candidatePan.X), Math.Min(0d, candidatePan.Y)),
             after.EditorState.Viewport.Pan);
         Assert.Equal(documentBefore, document.CaptureSnapshot());
         Assert.Equal(before.DocumentRevision, after.DocumentRevision);
@@ -4377,9 +4383,9 @@ public sealed partial class DocumentCanvasHostTests
         Assert.Equal("default", host.CaptureState().CssCursor);
 
         await pointer.MiddleDownCssPointAsync(new PointD(100d, 100d), pointerId: 42);
-        await pointer.MiddleMoveCssPointAsync(new PointD(125d, 130d), pointerId: 42);
-        await pointer.MiddleUpCssPointAsync(new PointD(125d, 130d), pointerId: 42);
-        Assert.Equal(initialPan + new VectorD(25d, 30d),
+        await pointer.MiddleMoveCssPointAsync(new PointD(75d, 70d), pointerId: 42);
+        await pointer.MiddleUpCssPointAsync(new PointD(75d, 70d), pointerId: 42);
+        Assert.Equal(initialPan + new VectorD(-25d, -30d),
             Session(host).CaptureState().EditorState.Viewport.Pan);
         Assert.Equal("default", host.CaptureState().CssCursor);
     }
@@ -4407,7 +4413,7 @@ public sealed partial class DocumentCanvasHostTests
             item.Layer == Canvas2DSceneLayer.Content &&
             item.Origin.VisualStateId == BpmnDemoPipeline.TaskVisualId);
         var start = before.CurrentScene.ViewportTransform.TransformPoint(Center(task.Bounds));
-        var delta = new VectorD(100.5d, 50.25d);
+        var delta = new VectorD(-100.5d, -50.25d);
 
         await PointerObserver(host).MiddleDownCssPointAsync(start);
         Assert.Equal("grabbing", host.CaptureState().CssCursor);
@@ -4768,6 +4774,7 @@ public sealed partial class DocumentCanvasHostTests
         var observer = new RecordingSurfaceObserver(surface);
         await using var host = CreateHost(execution, observer);
         await host.InitializeAsync("canvas", "container");
+        Assert.True((await Session(host).UpdateViewportAsync(new ViewportSnapshot(1d, default))).Succeeded);
         var initial = Assert.IsType<EditingSessionState>(host.CaptureState().Session);
         var initialScene = Assert.IsType<global::Inceptus.DocumentEngine.Canvas2D.Scene.Canvas2DScene>(
             initial.CurrentScene);
@@ -6169,7 +6176,8 @@ public sealed partial class DocumentCanvasHostTests
                 original.DocumentChangedSubscribers,
                 original.ConnectorAnchorPolicyProvider,
                 original.ModelProfileCatalog,
-                original.InitialModelProfileViewState);
+                original.InitialModelProfileViewState,
+                original.RoutingInputPreparer);
             return new DocumentCanvasComposition(
                 composition.Document,
                 configuration,
@@ -6206,6 +6214,9 @@ public sealed partial class DocumentCanvasHostTests
 
     private sealed class RecordingRenderExecution : ICanvas2DRenderExecution
     {
+        internal int FullUploadCount { get; private set; }
+        internal int ViewportRenderCount { get; private set; }
+        internal Canvas2DRenderFrame? LastContent { get; private set; }
         private readonly List<string>? _lifecycle;
         private int _active;
 
@@ -6273,6 +6284,29 @@ public sealed partial class DocumentCanvasHostTests
 
         public async ValueTask<Canvas2DInteropOperationResult> RenderAsync(Canvas2DRenderFrame frame)
         {
+            FullUploadCount++;
+            LastContent = frame;
+            Enter();
+            try
+            {
+                Calls.Add("render");
+                if (BlockRender)
+                {
+                    RenderStarted.TrySetResult();
+                    await RenderRelease.Task.ConfigureAwait(false);
+                }
+
+                return RenderResult;
+            }
+            finally
+            {
+                Exit();
+            }
+        }
+
+        public async ValueTask<Canvas2DInteropOperationResult> RenderViewportAsync(Canvas2DViewportFrame frame)
+        {
+            ViewportRenderCount++;
             Enter();
             try
             {
