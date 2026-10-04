@@ -1,10 +1,31 @@
 # Inceptus Document Engine
 
-A reusable BPMN modeler with immutable native documents and a standalone process presentation export. This README describes the coordinated **0.1.6 release candidate** targeting **net10.0**. Local preparation does not mean the packages have been published to a public feed.
+A reusable BPMN modeler with immutable native documents and a standalone process
+presentation export. This README describes release **0.1.7** targeting
+**net10.0**.
 
 [Product page](https://inceptus.online/bpmn/) · [System/application](https://bpmn.inceptus.online)
 
 [Public release source](https://github.com/INCEPTUS-LABS/DocumentEngine) · [Building and releasing](https://github.com/INCEPTUS-LABS/DocumentEngine/blob/main/docs/releasing.md)
+
+## What's new in 0.1.7
+
+- Adds stable connector routing with persisted complete paths and deterministic
+  per-scope connector order. Valid Automatic routes are preserved and only
+  affected routes are repaired.
+- Adds explicit Automatic, Straight and Manual routing modes.
+- Improves Manual route editing with H/V bridge handling, transient diagonal
+  guidance, Ctrl orthogonal assist and magnetic point snapping.
+- Adds compact Organizational Pools with authored Pool/Unassigned heights,
+  shared scope width and direct mouse edge resizing.
+- Extends bounded interaction fast paths for placement, selection, node-label
+  movement and Manual route-point dragging, avoiding unnecessary full Scene
+  work during supported pointer movement.
+- Introduces native document format v2 with persisted routing and spatial
+  geometry for exact compatible Save/Open.
+
+For the complete version history, see
+[RELEASE-NOTES.md](https://github.com/INCEPTUS-LABS/DocumentEngine/blob/v0.1.7/RELEASE-NOTES.md).
 
 ## Choose an integration level
 
@@ -24,7 +45,7 @@ Use the six packages as an **aligned version family**. The top-level modeler pac
 The validated hosting model is a **standalone Blazor WebAssembly application** on .NET 10. Configure a feed containing the reviewed candidate before adding the package:
 
 ```xml
-<PackageReference Include="Inceptus.DocumentEngine.Bpmn.Blazor" Version="0.1.6" />
+<PackageReference Include="Inceptus.DocumentEngine.Bpmn.Blazor" Version="0.1.7" />
 ```
 
 Register the modeler in the application's `Program.cs`. The extension namespace is `Microsoft.Extensions.DependencyInjection`:

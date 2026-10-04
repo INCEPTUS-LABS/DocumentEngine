@@ -1,5 +1,28 @@
 # Release notes
 
+## 0.1.7
+
+- Adds stable persisted connector routing. Complete connector paths, routing
+  modes and deterministic per-scope order are retained in the Visual Model;
+  valid Automatic routes are preserved and only affected routes are repaired.
+- Adds explicit Automatic, Straight and Manual routing modes. Manual routing
+  supports authored intermediate points without automatic obstacle detours.
+- Improves Manual route editing with horizontal/vertical bridge decoration,
+  transient dashed guidance for diagonal candidate segments, Ctrl orthogonal
+  assist and magnetic H/V snapping with hysteresis.
+- Adds compact Organizational Pool presentation together with authored
+  Pool/Unassigned heights, one shared scope width and direct mouse edge
+  resizing. Connector and connector-label overflow no longer sizes Pool frames.
+- Improves pointer interaction performance through bounded presentation paths
+  for placement, selection, node-label movement and Manual route-point movement,
+  avoiding unnecessary full Scene composition and renderer uploads on supported
+  steady interactions.
+- Adds native document format v2 with persisted routing and spatial geometry,
+  coherent Save/Open reproduction and strict validation of the saved geometry.
+  Native v1 documents are intentionally not accepted by this release.
+- Retains the coordinated six-package family targeting net10.0, portable
+  symbols and Source Link/public-source provenance requirements.
+
 ## 0.1.6 candidate
 
 - Prepares the coordinated six-package release checkpoint after A1.2.13. The published 0.1.5 identity remains immutable; Canvas2D requires Runtime exactly [0.1.6], and other family dependencies retain their minimum-version policy.
