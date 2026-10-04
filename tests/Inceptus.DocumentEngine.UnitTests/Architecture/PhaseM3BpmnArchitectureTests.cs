@@ -33,8 +33,12 @@ public sealed class PhaseM3BpmnArchitectureTests
     public void BpmnScenePolicyConsumesOnlyImmutableGenericContracts()
     {
         var contributor = Assert.Single(BpmnPluginRegistration.M3.SceneContributors).Contributor;
-        var method = Assert.Single(contributor.GetType().GetMethods(
-            BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly));
+        var methods = contributor.GetType().GetMethods(
+            BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly);
+        Assert.IsAssignableFrom<ICanvas2DScopeGeometryContributor>(contributor);
+        Assert.Equal([nameof(ICanvas2DSceneContributor.Contribute), nameof(ICanvas2DScopeGeometryContributor.PrepareBase),
+            nameof(ICanvas2DScopeGeometryContributor.PreparePresentation)], methods.Select(static method => method.Name).Order(StringComparer.Ordinal));
+        var method = Assert.Single(methods, static method => method.Name == nameof(ICanvas2DSceneContributor.Contribute));
 
         Assert.Equal(nameof(ICanvas2DSceneContributor.Contribute), method.Name);
         Assert.Equal(typeof(Canvas2DSceneContributionResult), method.ReturnType);

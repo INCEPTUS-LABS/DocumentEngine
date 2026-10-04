@@ -549,7 +549,7 @@ public sealed class PhaseM34BpmnInclusiveGatewayIntegrationTests
     }
 
     [Fact]
-    public async Task InclusiveBranchBendAddMoveDeletePreservesEndpointsArrowAndHistory()
+    public async Task InclusiveManualBendsPreserveEndpointsArrowAndHistory()
     {
         await using var harness = await HostHarness.CreateAsync();
         var flowId = BpmnDemoPipeline.TwelfthSequenceFlowId;
@@ -557,6 +557,7 @@ public sealed class PhaseM34BpmnInclusiveGatewayIntegrationTests
         var automatic = Route(harness.State, flowId);
         var visualBefore = Visual(harness, visualId);
         var historyBefore = harness.State.HistoryStatus;
+        await BpmnModelerTestComposition.SetRoutingTypeAsync(harness.Session, visualId, ConnectorRoutingType.Manual);
         var firstBend = Midpoint(automatic.SourceAnchor, automatic.DestinationAnchor) +
             new VectorD(0d, -63d);
         var movedBend = firstBend + new VectorD(41d, 27d);
@@ -583,24 +584,18 @@ public sealed class PhaseM34BpmnInclusiveGatewayIntegrationTests
                 Route(harness.State, flowId).DestinationAnchor,
             ]);
         AssertBranchRoute(harness, flowId, visualId, []);
-        Assert.Equal(historyBefore.EntryCount + 3, harness.State.HistoryStatus.EntryCount);
+        Assert.Equal(historyBefore.EntryCount + 1, harness.State.HistoryStatus.EntryCount);
         Assert.Equal(visualBefore.SourceAnchorId, Visual(harness, visualId).SourceAnchorId);
         Assert.Equal(visualBefore.TargetAnchorId, Visual(harness, visualId).TargetAnchorId);
 
         await harness.Host.UndoAsync();
-        AssertBranchRoute(harness, flowId, visualId, [movedBend]);
-        await harness.Host.UndoAsync();
-        AssertBranchRoute(harness, flowId, visualId, [firstBend]);
-        await harness.Host.UndoAsync();
-        Assert.Equal(automatic.Path.AsEnumerable(),
-            Route(harness.State, flowId).Path.AsEnumerable());
+        Assert.Equal(ConnectorRoutingType.Automatic, BpmnModelerTestComposition.SavedRoute(
+            harness.Composition.Document.CaptureSnapshot(), visualId).RoutingType);
         Assert.Empty(Visual(harness, visualId).Route);
 
         await harness.Host.RedoAsync();
-        await harness.Host.RedoAsync();
-        await harness.Host.RedoAsync();
         AssertBranchRoute(harness, flowId, visualId, []);
-        Assert.Equal(2, Visual(harness, visualId).Route.Length);
+        Assert.Equal(2, BpmnModelerTestComposition.SavedRoute(harness.Composition.Document.CaptureSnapshot(), visualId).Path.Length);
     }
 
     [Fact]
@@ -817,12 +812,14 @@ public sealed class PhaseM34BpmnInclusiveGatewayIntegrationTests
     {
         var route = Route(harness.State, flowId);
         var expectedWaypoints = expectedBends.ToArray();
-        var persistent = Visual(harness, visualStateId);
+        Assert.Empty(Visual(harness, visualStateId).Route);
+        var persistent = BpmnModelerTestComposition.SavedRoute(harness.Composition.Document.CaptureSnapshot(), visualStateId);
+        Assert.Equal(ConnectorRoutingType.Manual, persistent.RoutingType);
         Assert.Equal(
             expectedWaypoints.AsEnumerable(),
-            persistent.Route.Skip(1).SkipLast(1));
-        Assert.Equal(route.SourceAnchor, persistent.Route[0]);
-        Assert.Equal(route.DestinationAnchor, persistent.Route[^1]);
+            persistent.ManualDefinition!.Value.AsEnumerable());
+        Assert.Equal(route.SourceAnchor, persistent.Path[0]);
+        Assert.Equal(route.DestinationAnchor, persistent.Path[^1]);
         AssertWaypointsInOrder(route.Path, expectedWaypoints);
         AssertRouteUsesExplicitAnchors(harness, flowId);
         var graph = Assert.IsType<ProjectedGraph>(harness.State.ProjectedGraph);

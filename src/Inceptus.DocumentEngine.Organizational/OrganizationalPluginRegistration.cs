@@ -37,6 +37,11 @@ public sealed class OrganizationalPluginRegistration
         var restorationHandler = new RestoreOrganizationalSnapshotCommandHandler();
         CommandHandlers =
         [
+            Handler<SetOrganizationalScopeWidthCommand>(SetOrganizationalScopeWidthCommand.KnownTypeId,
+                new SetOrganizationalScopeWidthCommandHandler()),
+            Handler<SetOrganizationalRegionExpandedHeightCommand>(
+                SetOrganizationalRegionExpandedHeightCommand.KnownTypeId,
+                new SetOrganizationalRegionExpandedHeightCommandHandler()),
             Handler<CreateOrganizationalPoolCommand>(
                 CreateOrganizationalPoolCommand.KnownTypeId,
                 new OrganizationalCommandHandler<CreateOrganizationalPoolCommand>(
@@ -97,6 +102,10 @@ public sealed class OrganizationalPluginRegistration
         ];
         HistoryPolicies =
         [
+            new CommandHistoryPolicyRegistration(SetOrganizationalScopeWidthCommand.KnownTypeId,
+                new OrganizationalScopeWidthHistoryPolicy()),
+            new CommandHistoryPolicyRegistration(SetOrganizationalRegionExpandedHeightCommand.KnownTypeId,
+                new OrganizationalRegionHeightHistoryPolicy()),
             History<CreateOrganizationalPoolCommand>(
                 CreateOrganizationalPoolCommand.KnownTypeId,
                 eligibilityPolicy),

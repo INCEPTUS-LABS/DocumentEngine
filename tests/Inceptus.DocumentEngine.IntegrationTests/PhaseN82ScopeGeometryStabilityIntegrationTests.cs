@@ -24,6 +24,8 @@ public sealed class PhaseN82ScopeGeometryStabilityIntegrationTests
     {
         var composition = await BpmnModelerTestComposition.DemoFactory.CreateAsync();
         var renderer = Renderer("phase-n82-root-geometry-stability");
+        composition = BpmnModelerTestComposition.WithDocument(composition,
+            await BpmnModelerTestComposition.PrepareFreshDocumentAsync(composition.Document, composition.Configuration, renderer));
         var attachment = await EditingSession.AttachAsync(
             composition.Document,
             renderer,
@@ -83,6 +85,8 @@ public sealed class PhaseN82ScopeGeometryStabilityIntegrationTests
     {
         var composition = await BpmnModelerTestComposition.DemoFactory.CreateAsync();
         var renderer = Renderer("phase-n82-child-geometry-stability");
+        composition = BpmnModelerTestComposition.WithDocument(composition,
+            await BpmnModelerTestComposition.PrepareFreshDocumentAsync(composition.Document, composition.Configuration, renderer));
         var attachment = await EditingSession.AttachAsync(
             composition.Document,
             renderer,
@@ -127,6 +131,8 @@ public sealed class PhaseN82ScopeGeometryStabilityIntegrationTests
     {
         var composition = await BpmnModelerTestComposition.DemoFactory.CreateAsync();
         var renderer = Renderer("phase-n82-inactive-scope-history-stability");
+        composition = BpmnModelerTestComposition.WithDocument(composition,
+            await BpmnModelerTestComposition.PrepareFreshDocumentAsync(composition.Document, composition.Configuration, renderer));
         var attachment = await EditingSession.AttachAsync(
             composition.Document,
             renderer,
@@ -196,6 +202,8 @@ public sealed class PhaseN82ScopeGeometryStabilityIntegrationTests
     {
         var composition = await BpmnModelerTestComposition.DemoFactory.CreateAsync();
         var renderer = Renderer("phase-n82-nested-geometry-stability");
+        composition = BpmnModelerTestComposition.WithDocument(composition,
+            await BpmnModelerTestComposition.PrepareFreshDocumentAsync(composition.Document, composition.Configuration, renderer));
         var attachment = await EditingSession.AttachAsync(
             composition.Document,
             renderer,

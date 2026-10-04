@@ -8,6 +8,7 @@ using Inceptus.DocumentEngine.Canvas2D.Interaction;
 using Inceptus.DocumentEngine.Canvas2D.Scene;
 using Inceptus.DocumentEngine.Contracts.Canvas2D;
 using Inceptus.DocumentEngine.Contracts.Commands;
+using Inceptus.DocumentEngine.Contracts.Routing;
 using Inceptus.DocumentEngine.Contracts.ConnectionCreation;
 using Inceptus.DocumentEngine.Contracts.Creation;
 using Inceptus.DocumentEngine.Contracts.Diagnostics;
@@ -444,6 +445,9 @@ public sealed class PhaseN2AnchorConnectionCreationIntegrationTests
             RoutedEndpoints(harness).Target);
 
         var endpoints = RoutedEndpoints(harness);
+        await BpmnModelerTestComposition.SetRoutingTypeAsync(harness.Placement.Session,
+            harness.FlowVisualId, ConnectorRoutingType.Manual);
+        var routeHistory = harness.State.HistoryStatus;
         var addedBend = new PointD(
             (endpoints.Source.X + endpoints.Target.X) / 2d,
             Math.Min(endpoints.Source.Y, endpoints.Target.Y) - 60d);
@@ -458,7 +462,7 @@ public sealed class PhaseN2AnchorConnectionCreationIntegrationTests
         AssertFlowStillBound(harness, stableRelationship);
         Assert.Equal(
             new[] { endpoints.Source, addedBend, endpoints.Target }.AsEnumerable(),
-            FlowVisual(harness).Route.AsEnumerable());
+            BpmnModelerTestComposition.SavedRoute(harness.Document, harness.FlowVisualId).Path.AsEnumerable());
 
         var movedBend = addedBend + new VectorD(25d, 30d);
         var moveBend = await harness.Placement.Session.ExecuteAsync(
@@ -472,7 +476,7 @@ public sealed class PhaseN2AnchorConnectionCreationIntegrationTests
         AssertFlowStillBound(harness, stableRelationship);
         Assert.Equal(
             new[] { endpoints.Source, movedBend, endpoints.Target }.AsEnumerable(),
-            FlowVisual(harness).Route.AsEnumerable());
+            BpmnModelerTestComposition.SavedRoute(harness.Document, harness.FlowVisualId).Path.AsEnumerable());
 
         var deleteBend = await harness.Placement.Session.ExecuteAsync(
             new UpdateConnectionRouteCommand(
@@ -484,6 +488,8 @@ public sealed class PhaseN2AnchorConnectionCreationIntegrationTests
         await harness.Placement.WaitForIdleAsync();
         AssertFlowStillBound(harness, stableRelationship);
         Assert.Empty(FlowVisual(harness).Route);
+        Assert.Empty(BpmnModelerTestComposition.SavedRoute(harness.Document, harness.FlowVisualId).ManualDefinition!.Value);
+        Assert.Equal(routeHistory, harness.State.HistoryStatus);
         var editedEdge = Assert.Single(harness.State.ProjectedGraph!.Edges,
             item => item.Source.SemanticElementId == harness.FlowRelationshipId);
         Assert.Contains(harness.Scene.Items, item =>

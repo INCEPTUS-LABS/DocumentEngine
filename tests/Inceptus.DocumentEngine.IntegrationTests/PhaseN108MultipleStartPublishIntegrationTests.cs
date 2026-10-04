@@ -37,6 +37,8 @@ public sealed class PhaseN108MultipleStartPublishIntegrationTests
         await using var renderer = CreateRenderer();
         Assert.True((await renderer.InitializeAsync(
             "phase-n108-two-starts", new Canvas2DSurfaceSize(1400d, 900d, 1d))).Succeeded);
+        composition = BpmnModelerTestComposition.WithDocument(composition,
+            await BpmnModelerTestComposition.PrepareFreshDocumentAsync(composition.Document, composition.Configuration, renderer));
         var attached = await EditingSession.AttachAsync(
             composition.Document, renderer, composition.Configuration);
         await using var session = Assert.IsType<EditingSession>(attached.Session);
@@ -323,6 +325,8 @@ public sealed class PhaseN108MultipleStartPublishIntegrationTests
         await using var renderer = CreateRenderer();
         Assert.True((await renderer.InitializeAsync("phase-n108-capture",
             new Canvas2DSurfaceSize(1800d, 1200d, 1d))).Succeeded);
+        composition = BpmnModelerTestComposition.WithDocument(composition,
+            await BpmnModelerTestComposition.PrepareFreshDocumentAsync(composition.Document, composition.Configuration, renderer));
         var attached = await EditingSession.AttachAsync(composition.Document, renderer,
             composition.Configuration);
         await using var session = Assert.IsType<EditingSession>(attached.Session);
@@ -390,13 +394,9 @@ public sealed class PhaseN108MultipleStartPublishIntegrationTests
 
         foreach (var edge in edges)
         {
-            var source = Position(Array.IndexOf(nodeKeys, edge.Source));
-            var target = Position(Array.IndexOf(nodeKeys, edge.Target));
             visuals.Add(new VisualStateSnapshot(
                 new VisualStateId($"test:n108:visual/{edge.Source}-{edge.Target}"),
                 FlowId(edge), new PointD(0d, 0d), new SizeD(0d, 0d), VisualPlacementMode.Manual,
-                route: [new PointD(source.X + 120d, source.Y + 40d),
-                    new PointD(target.X, target.Y + 40d)],
                 sourceAnchorId: SourceAnchorId(edge), targetAnchorId: TargetAnchorId(edge)));
         }
 

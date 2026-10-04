@@ -8,6 +8,7 @@ using Inceptus.DocumentEngine.Contracts.Geometry;
 using Inceptus.DocumentEngine.Contracts.History;
 using Inceptus.DocumentEngine.Contracts.Primitives;
 using Inceptus.DocumentEngine.Contracts.Profiles;
+using Inceptus.DocumentEngine.Contracts.Routing;
 using Inceptus.DocumentEngine.Contracts.Visuals;
 using Inceptus.DocumentEngine.Runtime.Commands;
 using Inceptus.DocumentEngine.Runtime.Documents;
@@ -109,7 +110,12 @@ public sealed partial class EditingSession : IAsyncDisposable
         var subscribers = new IDocumentChangedSubscriber[]
             { _documentChangedSubscriber }
             .Concat(configuration.DocumentChangedSubscribers);
-        _commandProcessor = new CommandProcessor(
+        _commandProcessor = configuration.RoutingEngine.TryGetStablePolicy(configuration.RoutingAlgorithmId, out _)
+            ? new CommandProcessor(
+                configuration.CommandHandlers, configuration.CommandValidators, subscribers,
+                configuration.HistoryPolicies, configuration.ConnectorAnchorPolicyProvider,
+                new ConnectorRoutingStatePreparer(configuration, renderer, renderer.CreateTextMeasurementRequest))
+            : new CommandProcessor(
             configuration.CommandHandlers,
             configuration.CommandValidators,
             subscribers,
@@ -415,11 +421,46 @@ public sealed partial class EditingSession : IAsyncDisposable
 #pragma warning disable CA1031 // Composition failures become stable attachment diagnostics.
         try
         {
+            var snapshot = document.CaptureSnapshot();
+            if (snapshot.VisualModel.RoutingScopes is not null ||
+                configuration.RoutingEngine.TryGetStablePolicy(configuration.RoutingAlgorithmId, out _))
+            {
+                var preparer = new ConnectorRoutingStatePreparer(configuration, renderer, renderer.CreateTextMeasurementRequest);
+                var prepared = await preparer.PrepareAsync(new ConnectorRoutingStatePreparationRequest(
+                    snapshot, snapshot, [], [], null, false,
+                    snapshot.VisualModel.RoutingScopes is null
+                        ? ConnectorRoutingPreparationPurpose.InitialConstruction
+                        : ConnectorRoutingPreparationPurpose.ValidateSavedState), cancellationToken).ConfigureAwait(false);
+                if (!prepared.Succeeded)
+                {
+                    await renderer.DisposeAsync().ConfigureAwait(false);
+                    return new EditingSessionAttachResult(EditingSessionAttachStatus.Failed, null, prepared.Diagnostics);
+                }
+                if (snapshot.VisualModel.RoutingScopes is null)
+                {
+                    var visual = new VisualModelSnapshot(snapshot.DocumentId, snapshot.Revision,
+                        snapshot.VisualModel.VisualStates, snapshot.VisualModel.ProfileElementPresentations, prepared.RoutingScopes);
+                    var reconstructed = DocumentReconstructor.Reconstruct(new Contracts.Documents.DocumentSnapshot(
+                        snapshot.SemanticModel, visual, snapshot.Metadata, snapshot.Publication), configuration.ConnectorAnchorPolicyProvider);
+                    if (reconstructed.Document is null)
+                    {
+                        await renderer.DisposeAsync().ConfigureAwait(false);
+                        return new EditingSessionAttachResult(EditingSessionAttachStatus.Failed, null, reconstructed.Diagnostics);
+                    }
+                    document = reconstructed.Document;
+                }
+            }
             session = new EditingSession(
                 document,
                 renderer,
                 configuration,
                 pipeline ?? new EditingSessionPipeline(configuration, renderer));
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            await renderer.DisposeAsync().ConfigureAwait(false);
+            return new EditingSessionAttachResult(EditingSessionAttachStatus.Cancelled, null,
+                [CancelledDiagnostic(document.DocumentId.Value)]);
         }
         catch (Exception exception) when (IsNonFatal(exception))
         {

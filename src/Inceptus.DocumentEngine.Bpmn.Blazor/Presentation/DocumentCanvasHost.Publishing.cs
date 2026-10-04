@@ -7,9 +7,7 @@ using Inceptus.DocumentEngine.Contracts.Commands;
 using Inceptus.DocumentEngine.Contracts.Diagnostics;
 using Inceptus.DocumentEngine.Contracts.Documents;
 using Inceptus.DocumentEngine.Contracts.Primitives;
-using Inceptus.DocumentEngine.Contracts.Profiles;
 using Inceptus.DocumentEngine.Contracts.Properties;
-using Inceptus.DocumentEngine.Organizational.Profiles;
 
 namespace Inceptus.DocumentEngine.Bpmn.Blazor.Presentation;
 
@@ -286,17 +284,12 @@ internal sealed partial class DocumentCanvasHost
                     "Wait for the editor to become ready, then retry.");
         }
 
-        var publishProfileState = editorState.ModelProfileViewState
-            .WithPreferredVisibility(OrganizationalModelProfile.Id, isVisible: false);
-        var publishElementState = new ModelProfileElementViewStateSnapshot(
-            editorState.ModelProfileElementViewState.CollapsedElements.Where(entry =>
-                entry.ProfileId != OrganizationalModelProfile.Id));
         EditingSessionPresentationCaptureResult capture;
         try
         {
             capture = await session.CapturePresentationAsync(
-                publishProfileState,
-                publishElementState,
+                editorState.ModelProfileViewState,
+                editorState.ModelProfileElementViewState,
                 cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

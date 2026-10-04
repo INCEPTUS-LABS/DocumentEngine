@@ -12,7 +12,7 @@ public sealed partial class DocumentCanvasHostTests
     [InlineData("BPMN.Task")]
     [InlineData("BPMN.UserTask")]
     [InlineData("BPMN.ServiceTask")]
-    public async Task ToolboxRegionRejectionUsesStableDiagnosticSlotWithoutChangingScene(string type)
+    public async Task ToolboxRegionRejectionUsesStableDiagnosticSlotAndRetainsStableSceneContent(string type)
     {
         await using var test = await PanComponentFixture.CreateAsync();
         var session = Session(test.Host);
@@ -28,6 +28,12 @@ public sealed partial class DocumentCanvasHostTests
         var snapshot = test.Host.CaptureDocumentSnapshot().Snapshot;
         var scene = before.CurrentScene!;
         var region = scene.SpatialPresentationPlan!.Regions.Last();
+        var inside = Center(region.Bounds);
+        var insideBody = new RectD(inside.X - 60d, inside.Y - 40d, 120d, 80d);
+        Assert.True(region.Bounds.Contains(insideBody));
+        Assert.True(DocumentGeometryBoundary.Contains(region.MapSceneToLocal(insideBody)));
+        Assert.DoesNotContain(scene.Items, candidate =>
+            candidate.SpatialRegion?.Id == region.Id && candidate.Origin.ProjectedObjectId is not null);
         var outside = new PointD(0d, 0d);
         Assert.DoesNotContain(scene.SpatialPresentationPlan.Regions,
             candidate => candidate.Bounds.Contains(outside));
@@ -46,18 +52,20 @@ public sealed partial class DocumentCanvasHostTests
             await test.Renderer.Dispatcher.InvokeAsync(() =>
                 PointerObserver(test.Host).MoveDocumentPointAsync(scene, outside));
             await test.DrainAsync();
-            var diagnostic = Assert.Single(test.Host.CaptureState().InteractionDiagnostics);
-            Assert.Equal("TOOLBOX_PLACEMENT_UNAVAILABLE", diagnostic.Code);
+            Assert.Single(test.Host.CaptureState().InteractionDiagnostics,
+                item => item.Code == "TOOLBOX_PLACEMENT_OUTSIDE_REGION");
+            Assert.Contains(test.Host.CaptureState().InteractionDiagnostics,
+                item => item.Code == "CMD_VISUAL_STATE_GEOMETRY_INVALID");
             var rejectedMarkup = await test.MarkupAsync();
             Assert.Contains("role=\"alert\"", DiagnosticSlot(rejectedMarkup), StringComparison.Ordinal);
-            Assert.Contains(diagnostic.Message, DiagnosticSlot(rejectedMarkup), StringComparison.Ordinal);
+            Assert.Contains(test.Host.CaptureState().InteractionDiagnostics[0].Message,
+                DiagnosticSlot(rejectedMarkup), StringComparison.Ordinal);
             Assert.Equal(CanvasElements(initialMarkup), CanvasElements(rejectedMarkup));
-            Assert.Same(scene, session.CaptureState().CurrentScene);
-            Assert.Equal(before.Generation, session.CaptureState().Generation);
-            Assert.Same(before.EditorState, session.CaptureState().EditorState);
+            Assert.True(scene.RenderContent == session.CaptureState().CurrentScene!.RenderContent);
+            Assert.False(Assert.Single(session.CaptureState().EditorState.TemporaryFeedback).PlacementPreview!.IsAllowed);
 
             await test.Renderer.Dispatcher.InvokeAsync(() =>
-                PointerObserver(test.Host).MoveDocumentPointAsync(scene, Center(region.Bounds)));
+                PointerObserver(test.Host).MoveDocumentPointAsync(scene, inside));
             await test.DrainAsync();
             Assert.Empty(test.Host.CaptureState().InteractionDiagnostics);
             var readyMarkup = await test.MarkupAsync();
@@ -68,7 +76,7 @@ public sealed partial class DocumentCanvasHostTests
         Assert.Same(snapshot, test.Host.CaptureDocumentSnapshot().Snapshot);
         Assert.Equal(before.HistoryStatus, session.CaptureState().HistoryStatus);
         Assert.Equal(before.DocumentRevision, session.CaptureState().DocumentRevision);
-        Assert.Same(scene, session.CaptureState().CurrentScene);
+        Assert.True(scene.RenderContent == session.CaptureState().CurrentScene!.RenderContent);
         Assert.Equal(uploads, test.Execution.FullUploadCount);
         Assert.Equal(item.ItemId, test.Selection.SelectedItemId);
     }

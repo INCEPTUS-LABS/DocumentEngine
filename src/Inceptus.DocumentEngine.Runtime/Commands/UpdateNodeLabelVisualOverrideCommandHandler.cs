@@ -56,10 +56,7 @@ internal sealed class UpdateNodeLabelVisualOverrideCommandHandler : ICommandHand
         }
 
         if (update.TargetOverride is { } targetOverride &&
-            VisualStatePersistentGeometry.TryResolveAuthoritativeNodeBounds(
-                existing,
-                out var ownerBounds) &&
-            !DocumentGeometryBoundary.Contains(targetOverride.ResolveBounds(ownerBounds)))
+            !IsWithinDocumentOrigin(document, existing, targetOverride))
         {
             return ValueTask.FromResult(CommandHandlerResult.Failure(
             [
@@ -104,7 +101,8 @@ internal sealed class UpdateNodeLabelVisualOverrideCommandHandler : ICommandHand
             document.Revision,
             document.VisualModel.VisualStates.Select(visualState =>
                 visualState.Id == replacement.Id ? replacement : visualState),
-            document.VisualModel.ProfileElementPresentations);
+            document.VisualModel.ProfileElementPresentations,
+            document.VisualModel.RoutingScopes);
 
         return ValueTask.FromResult(CommandHandlerResult.Success(
             new DocumentSnapshot(
@@ -117,4 +115,21 @@ internal sealed class UpdateNodeLabelVisualOverrideCommandHandler : ICommandHand
 
     private static Diagnostic Error(string code, string message, string sourceIdentity) =>
         new(code, DiagnosticSeverity.Error, message, sourceIdentity);
+
+    private static bool IsWithinDocumentOrigin(DocumentSnapshot document, VisualStateSnapshot visual,
+        NodeLabelVisualOverride value)
+    {
+        foreach (var scope in document.VisualModel.RoutingScopes ?? [])
+        {
+            var node = scope.Geometry.Nodes.FirstOrDefault(node => node.VisualStateId == visual.Id);
+            if (node is null) continue;
+            var bounds = value.ResolveBounds(node.LocalBounds);
+            var region = scope.Geometry.Regions.FirstOrDefault(region => region.Id == node.RegionId);
+            if (region?.LocalToScopeTransform is { } transform)
+                bounds = bounds.Translate(new VectorD(transform.OffsetX, transform.OffsetY));
+            return DocumentGeometryBoundary.Contains(bounds);
+        }
+        return !VisualStatePersistentGeometry.TryResolveAuthoritativeNodeBounds(visual, out var owner) ||
+            DocumentGeometryBoundary.Contains(value.ResolveBounds(owner));
+    }
 }

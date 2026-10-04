@@ -85,7 +85,7 @@ public sealed class PhaseL5ContextPropertiesArchitectureTests
         Assert.Equal(3, CountOccurrences(
             dataGroup,
             "readonly=\"@(!field.CanEdit)\""));
-        Assert.Equal(3, CountOccurrences(
+        Assert.Equal(4, CountOccurrences(
             dataGroup,
             "disabled=\"@_propertiesApplying\""));
         Assert.Contains("type=\"text\"", dataGroup, StringComparison.Ordinal);
@@ -249,7 +249,7 @@ public sealed class PhaseL5ContextPropertiesArchitectureTests
 
         Assert.Contains("!dataChanged && !boundsChanged", apply,
             StringComparison.Ordinal);
-        Assert.Contains("dataChanged && boundsChanged", apply, StringComparison.Ordinal);
+        Assert.Contains("(dataChanged ? 1 : 0) + (boundsChanged ? 1 : 0) + (routingChanged ? 1 : 0) > 1", apply, StringComparison.Ordinal);
         Assert.Contains("DocumentCanvasPropertiesApplyStatus.NoChange", apply,
             StringComparison.Ordinal);
         Assert.Contains("changedDataField.TryCreateTargetValue", apply,
@@ -292,7 +292,7 @@ public sealed class PhaseL5ContextPropertiesArchitectureTests
             "@if (contextMenu.ConnectorRouteAction?.Kind is");
         Assert.DoesNotContain("disabled", resetAction, StringComparison.Ordinal);
         Assert.DoesNotContain("@onblur", dataGroup, StringComparison.Ordinal);
-        Assert.Equal(1, CountOccurrences(dataGroup, "@onchange="));
+        Assert.Equal(2, CountOccurrences(dataGroup, "@onchange="));
         Assert.DoesNotContain("@onkeydown", dataGroup, StringComparison.Ordinal);
         Assert.DoesNotContain("MoveVisualStateCommand" + Environment.NewLine +
             "            await", apply, StringComparison.Ordinal);
@@ -360,6 +360,7 @@ public sealed class PhaseL5ContextPropertiesArchitectureTests
                 "MoveVisualStatesCommand",
                 "RemoveConnectorAnchorCommand",
                 "ResizeVisualStateCommand",
+                "SetConnectorRoutingTypeCommand",
                 "SetModelProfileAvailabilityCommand",
                 "UpdateBoundaryAttachmentCommand",
                 "UpdateConnectionRouteCommand",

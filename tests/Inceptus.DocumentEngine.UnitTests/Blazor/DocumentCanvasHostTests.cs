@@ -124,7 +124,17 @@ public sealed partial class DocumentCanvasHostTests
         Assert.Equal(before.ProjectedGraph!.Nodes.AsEnumerable(), added.ProjectedGraph!.Nodes.AsEnumerable());
         Assert.Equal(before.ProjectedGraph.Edges.AsEnumerable(), added.ProjectedGraph.Edges.AsEnumerable());
         Assert.Equal(before.LayoutResult!.Nodes.AsEnumerable(), added.LayoutResult!.Nodes.AsEnumerable());
-        Assert.Equal(before.RoutingResult!.Routes.AsEnumerable(), added.RoutingResult!.Routes.AsEnumerable());
+        var poolTransform = added.CurrentScene!.SpatialPresentationPlan!.Regions.Single(
+            region => region.ContainerSemanticElementId == poolId).LocalToSceneTransform;
+        Assert.Equal(before.RoutingResult!.Routes.Length, added.RoutingResult!.Routes.Length);
+        foreach (var priorRoute in before.RoutingResult.Routes)
+        {
+            var currentRoute = added.RoutingResult.Routes.Single(
+                route => route.ProjectedEdgeId == priorRoute.ProjectedEdgeId);
+            Assert.Equal(priorRoute.Path.Select(poolTransform.TransformPoint), currentRoute.Path);
+            Assert.Equal(priorRoute.SourcePortId, currentRoute.SourcePortId);
+            Assert.Equal(priorRoute.TargetPortId, currentRoute.TargetPortId);
+        }
 
         await OpenOrganizationalPoolContextAsync(host, poolId);
         var menu = Assert.IsType<DocumentCanvasContextMenuState>(host.CaptureState().ContextMenu);
@@ -235,7 +245,14 @@ public sealed partial class DocumentCanvasHostTests
         var hidden = session.CaptureState();
         Assert.Null(hidden.EditorState.SemanticSceneSelection);
         Assert.NotNull(hidden.CurrentScene!.SpatialPresentationPlan);
-        Assert.Equal(beforeHide.CurrentScene!.SpatialPresentationPlan, hidden.CurrentScene.SpatialPresentationPlan);
+        var visiblePlan = beforeHide.CurrentScene!.SpatialPresentationPlan!;
+        var hiddenPlan = hidden.CurrentScene.SpatialPresentationPlan!;
+        Assert.Equal(visiblePlan.Regions.AsEnumerable(), hiddenPlan.Regions.AsEnumerable());
+        Assert.Equal(visiblePlan.VisualPlacements.AsEnumerable(), hiddenPlan.VisualPlacements.AsEnumerable());
+        Assert.Equal(visiblePlan.CanonicalGuidanceToSceneTransform, hiddenPlan.CanonicalGuidanceToSceneTransform);
+        Assert.Equal(visiblePlan.CoordinateMap, hiddenPlan.CoordinateMap);
+        Assert.Equal(visiblePlan.MovementBottomBoundaryRegionId, hiddenPlan.MovementBottomBoundaryRegionId);
+        Assert.Empty(hiddenPlan.ResizeTargets);
         Assert.DoesNotContain(hidden.CurrentScene.Items,
             item => item.Origin.SemanticElementId == firstPool || item.Origin.SemanticElementId == secondPool);
         Assert.Same(snapshot, document.CaptureSnapshot());
@@ -1434,7 +1451,7 @@ public sealed partial class DocumentCanvasHostTests
         Assert.Equal(before.HistoryStatus, activated.Session.HistoryStatus);
         Assert.Equal(renderCount, execution.Calls.Count(call => call == "render"));
 
-        var clicked = new PointD(650d, 350d);
+        var clicked = new PointD(500d, 300d);
         await PointerObserver(host).ClickDocumentPointAsync(before.CurrentScene!, clicked);
         await session.WaitForIdleAsync();
         var after = host.CaptureState().Session!;
@@ -1449,7 +1466,7 @@ public sealed partial class DocumentCanvasHostTests
 
         Assert.Equal(before.DocumentRevision.Increment(), after.DocumentRevision);
         Assert.Equal(before.HistoryStatus.EntryCount + 1, after.HistoryStatus.EntryCount);
-        Assert.Equal(new PointD(590d, 310d), createdVisual.Position);
+        Assert.Equal(new PointD(440d, 260d), createdVisual.Position);
         Assert.Equal(new SizeD(120d, 80d), createdVisual.Size);
         Assert.Equal(VisualPlacementMode.Pinned, createdVisual.PlacementMode);
         Assert.Empty(createdVisual.ConnectorAnchors);
@@ -1497,7 +1514,7 @@ public sealed partial class DocumentCanvasHostTests
         Assert.True(toolboxSelection.Select(messageItem.ItemId));
         await host.RefreshToolboxPlacementAsync();
 
-        await PointerObserver(host).ClickCssPointAsync(new PointD(850d, 570d));
+        await PointerObserver(host).ClickCssPointAsync(new PointD(850d, 350d));
         await session.WaitForIdleAsync();
         var afterPlacement = document.CaptureSnapshot();
         var createdElement = Assert.Single(afterPlacement.SemanticModel.Elements.Where(element =>
@@ -1505,7 +1522,7 @@ public sealed partial class DocumentCanvasHostTests
             !before.SemanticModel.Elements.Any(candidate => candidate.Id == element.Id)));
         var createdVisual = Assert.Single(afterPlacement.VisualModel.VisualStates, visual =>
             visual.SemanticElementId == createdElement.Id);
-        var expectedBounds = new RectD(832d, 552d, 36d, 36d);
+        var expectedBounds = new RectD(832d, 332d, 36d, 36d);
 
         var expectedPosition = new PointD(expectedBounds.X, expectedBounds.Y);
         Assert.Equal(expectedPosition, createdVisual.Position);
@@ -1523,7 +1540,7 @@ public sealed partial class DocumentCanvasHostTests
             item.Origin.VisualStateId == createdVisual.Id &&
             item.Origin.Categories.HasFlag(Canvas2DSceneOriginCategory.ProjectedRuntimeObject));
         Assert.Equal(expectedBounds, body.Bounds);
-        Assert.Equal(new PointD(850d, 570d), Center(body.Bounds));
+        Assert.Equal(new PointD(850d, 350d), Center(body.Bounds));
 
         Assert.Null(await host.OpenPropertiesAsync(createdVisual.Id));
         Assert.False(host.TryCaptureSelectedProperties(createdVisual.Id, out var properties));
@@ -1539,7 +1556,7 @@ public sealed partial class DocumentCanvasHostTests
         var pannedScene = Assert.IsType<global::Inceptus.DocumentEngine.Canvas2D.Scene.Canvas2DScene>(
             session.CaptureState().CurrentScene);
         Assert.Equal(
-            new PointD(782d, 522d),
+            new PointD(782d, 302d),
             pannedScene.ViewportTransform.TransformPoint(expectedPosition));
         Assert.Equal(createdVisual, document.CaptureSnapshot().VisualModel.VisualStates.Single(
             visual => visual.Id == createdVisual.Id));
@@ -1549,7 +1566,7 @@ public sealed partial class DocumentCanvasHostTests
         var zoomedScene = Assert.IsType<global::Inceptus.DocumentEngine.Canvas2D.Scene.Canvas2DScene>(
             session.CaptureState().CurrentScene);
         Assert.Equal(
-            new PointD(1664d, 1104d),
+            new PointD(1664d, 664d),
             zoomedScene.ViewportTransform.TransformPoint(expectedPosition));
         Assert.Equal(createdVisual, document.CaptureSnapshot().VisualModel.VisualStates.Single(
             visual => visual.Id == createdVisual.Id));
@@ -1567,7 +1584,7 @@ public sealed partial class DocumentCanvasHostTests
     }
 
     [Fact]
-    public async Task SwitchingRegisteredToolsAndClickingOverAnObjectUsesTheLatestToolFirst()
+    public async Task SwitchingRegisteredToolsRejectsOccupiedBodyAndThenUsesTheLatestTool()
     {
         var execution = new RecordingRenderExecution();
         var surface = new RecordingSurfaceObserver(new Canvas2DSurfaceSize(900d, 600d, 1d));
@@ -1599,6 +1616,15 @@ public sealed partial class DocumentCanvasHostTests
         await PointerObserver(host).ClickDocumentPointAsync(
             state.CurrentScene,
             Center(existingTask.Bounds));
+        await session.WaitForIdleAsync();
+        Assert.Same(before, document.CaptureSnapshot());
+        Assert.Equal(inclusive.ItemId, selection.SelectedItemId);
+        Assert.Empty(session.CaptureState().EditorState.Selection);
+        Assert.Equal(BpmnSemanticTypes.InclusiveGateway, Assert.Single(
+            session.CaptureState().EditorState.TemporaryFeedback).PlacementPreview!.SemanticTypeId);
+        Assert.False(Assert.Single(session.CaptureState().EditorState.TemporaryFeedback).PlacementPreview!.IsAllowed);
+        await PointerObserver(host).ClickDocumentPointAsync(
+            session.CaptureState().CurrentScene!, new PointD(500d, 300d));
         await session.WaitForIdleAsync();
         var after = document.CaptureSnapshot();
         var created = Assert.Single(after.SemanticModel.Elements.Where(item =>
@@ -1838,10 +1864,11 @@ public sealed partial class DocumentCanvasHostTests
         var execution = new RecordingRenderExecution();
         var surface = new RecordingSurfaceObserver(new Canvas2DSurfaceSize(900d, 600d, 1d));
         var selection = new ToolboxSelectionState();
-        var compositionFactory = new PlacementOverrideCompositionFactory(source =>
+        EditingSession? activeSession = null;
+        var compositionFactory = new PlacementOverrideCompositionFactory(_ =>
             new RevisionAdvancingPlacementFactory(
                 PlacementOverrideCompositionFactory.RealTaskFactory,
-                source.Document));
+                () => activeSession!));
         await using var host = CreateHost(
             execution,
             surface,
@@ -1849,6 +1876,7 @@ public sealed partial class DocumentCanvasHostTests
             toolboxSelection: selection);
         await host.InitializeAsync("canvas", "container");
         var session = Session(host);
+        activeSession = session;
         var document = AttachedDocument(session);
         var before = document.CaptureSnapshot();
 
@@ -1858,13 +1886,15 @@ public sealed partial class DocumentCanvasHostTests
             session.CaptureState().CurrentScene!,
             new PointD(650d, 350d));
 
+        await session.WaitForIdleAsync();
+
         var after = document.CaptureSnapshot();
         Assert.Equal(before.Revision.Increment(), after.Revision);
         Assert.Equal(
             before.SemanticModel.Elements.Count(item => item.TypeId == BpmnSemanticTypes.Task),
             after.SemanticModel.Elements.Count(item => item.TypeId == BpmnSemanticTypes.Task));
         Assert.Equal(PlacementOverrideCompositionFactory.TaskItemId, selection.SelectedItemId);
-        Assert.Equal("crosshair", host.CaptureState().CssCursor);
+        Assert.Equal("default", host.CaptureState().CssCursor);
         Assert.Contains(host.CaptureState().InteractionDiagnostics,
             diagnostic => diagnostic.Code == "TOOLBOX_PLACEMENT_STALE");
     }
@@ -2077,80 +2107,21 @@ public sealed partial class DocumentCanvasHostTests
         Assert.Equal(
             BpmnDemoPipeline.SecondSequenceFlowVisualId,
             fallbackMenu.TargetVisualStateId);
-        Assert.Equal(
-            Canvas2DConnectorRouteContextActionKind.AddPoint,
-            fallbackMenu.ConnectorRouteAction?.Kind);
-        Assert.Equal(
-            DiagramDeletionTargetKind.Connection,
-            fallbackMenu.DeletionAction?.TargetKind);
-
-        var addedFallbackPoint = await host.ExecuteConnectorRouteContextActionAsync();
-        Assert.True(addedFallbackPoint?.IsCommitted);
-        Assert.Equal(
-            UpdateConnectionRouteCommand.KnownTypeId,
-            addedFallbackPoint?.CommandTypeId);
-        await session.WaitForIdleAsync();
-
-        var afterFallbackAdd = session.CaptureState();
-        var afterFallbackAddDocument = document.CaptureSnapshot();
-        var afterFallbackAddVisual = Assert.Single(
-            afterFallbackAddDocument.VisualModel.VisualStates,
-            visual => visual.Id == BpmnDemoPipeline.SecondSequenceFlowVisualId);
-        Assert.Equal(3, afterFallbackAddVisual.Route.Length);
-        Assert.Equal(expectedFallbackPath[0], afterFallbackAddVisual.Route[0]);
-        Assert.Equal(fallbackMidpoint.X, afterFallbackAddVisual.Route[1].X, 10);
-        Assert.Equal(fallbackMidpoint.Y, afterFallbackAddVisual.Route[1].Y, 10);
-        Assert.Equal(expectedFallbackPath[^1], afterFallbackAddVisual.Route[^1]);
-        Assert.Equal(beforeHistory.EntryCount + 2, afterFallbackAdd.HistoryStatus.EntryCount);
-        Assert.Equal(
-            noRouteEdge.Id,
-            Assert.Single(afterFallbackAdd.RoutingResult!.NoRouteEdgeIds));
-        Assert.DoesNotContain(afterFallbackAdd.RoutingResult.Routes, route =>
-            route.ProjectedEdgeId == noRouteEdge.Id);
-        var afterFallbackAddConnector = Assert.Single(
-            afterFallbackAdd.CurrentScene!.Items,
-            item => item.Id == fallbackId);
-        Assert.Equal(
-            expectedFallbackPath,
-            Canvas2DConnectorPathMetadata.Resolve(afterFallbackAddConnector)
-                .Select(afterFallbackAddConnector.Transform.TransformPoint));
-        Assert.Equal(
-            new[]
-            {
-                expectedFallbackPath[0],
-                fallbackMidpoint,
-                expectedFallbackPath[^1],
-            },
-            Canvas2DConnectorPathMetadata.ResolveEditable(afterFallbackAddConnector)
-                .Select(afterFallbackAddConnector.Transform.TransformPoint));
-        var authoredWaypointHandle = Assert.Single(afterFallbackAdd.CurrentScene.Items, item =>
+        Assert.Null(fallbackMenu.ConnectorRouteAction);
+        Assert.Equal(DiagramDeletionTargetKind.Connection, fallbackMenu.DeletionAction?.TargetKind);
+        Assert.Null(await host.ExecuteConnectorRouteContextActionAsync());
+        Assert.Equal(noRouteDocument, document.CaptureSnapshot());
+        Assert.Equal(noRoute.HistoryStatus, session.CaptureState().HistoryStatus);
+        Assert.DoesNotContain(session.CaptureState().CurrentScene!.Items, item =>
             item.Origin.VisualStateId == BpmnDemoPipeline.SecondSequenceFlowVisualId &&
-            item.Metadata.TryGetValue(Canvas2DRouteGestureMetadata.HandleRole, out var role) &&
-            role.Kind == PropertyValueKind.Text &&
-            StringComparer.Ordinal.Equals(
-                role.TextValue,
-                Canvas2DRouteGestureMetadata.BendRole));
-        Assert.Equal(fallbackMidpoint, Center(authoredWaypointHandle.Bounds));
-
-        await host.UndoAsync();
-        await session.WaitForIdleAsync();
-
-        var undoneFallbackAdd = session.CaptureState();
-        var undoneFallbackAddDocument = document.CaptureSnapshot();
-        var undoneFallbackAddVisual = Assert.Single(
-            undoneFallbackAddDocument.VisualModel.VisualStates,
-            visual => visual.Id == BpmnDemoPipeline.SecondSequenceFlowVisualId);
-        Assert.Empty(undoneFallbackAddVisual.Route);
-        Assert.Equal(beforeHistory.EntryCount + 2, undoneFallbackAdd.HistoryStatus.EntryCount);
-        Assert.True(undoneFallbackAdd.HistoryStatus.CanRedo);
-        Assert.Contains(noRouteEdge.Id, undoneFallbackAdd.RoutingResult!.NoRouteEdgeIds);
-        Assert.Contains(undoneFallbackAdd.CurrentScene!.Items, item => item.Id == fallbackId);
+            item.Metadata.ContainsKey(Canvas2DRouteGestureMetadata.HandleRole));
 
         Assert.NotNull(await host.OpenPropertiesAsync(BpmnDemoPipeline.SecondSequenceFlowVisualId));
         Assert.True(host.TryCaptureSelectedProperties(BpmnDemoPipeline.SecondSequenceFlowVisualId,
             out var fallbackProperties));
         Assert.NotNull(fallbackProperties);
         Assert.True(fallbackProperties.IsConnector);
+        Assert.Equal(ConnectorRoutingType.Automatic, fallbackProperties.RoutingType);
         Assert.True(Assert.Single(fallbackProperties.DataFields).CanEdit);
         Assert.True(host.CaptureState().PropertiesFormOpen);
         host.UpdatePropertiesFormState(false, null, false);
@@ -2159,21 +2130,17 @@ public sealed partial class DocumentCanvasHostTests
         var interactiveNode = Assert.Single(interactionScene.Items, item =>
             item.Layer == Canvas2DSceneLayer.Content &&
             item.Origin.VisualStateId == BpmnDemoPipeline.NotifyCustomerTaskVisualId);
-        await pointer.ClickDocumentPointAsync(
-            interactionScene,
-            Center(interactiveNode.Bounds));
+        await pointer.ClickDocumentPointAsync(interactionScene, Center(interactiveNode.Bounds));
         var afterInput = session.CaptureState();
         Assert.Equal(EditingSessionStatus.Ready, afterInput.Status);
-        Assert.Contains(BpmnDemoPipeline.NotifyCustomerTaskVisualId,
-            afterInput.EditorState.Selection);
-        Assert.Equal(undoneFallbackAddDocument, document.CaptureSnapshot());
-        Assert.Equal(undoneFallbackAdd.HistoryStatus, afterInput.HistoryStatus);
-        var afterInputHost = host.CaptureState();
-        Assert.Contains(afterInputHost.InteractionDiagnostics, diagnostic =>
+        Assert.Contains(BpmnDemoPipeline.NotifyCustomerTaskVisualId, afterInput.EditorState.Selection);
+        Assert.Equal(noRouteDocument, document.CaptureSnapshot());
+        Assert.Equal(noRoute.HistoryStatus, afterInput.HistoryStatus);
+        Assert.Contains(host.CaptureState().InteractionDiagnostics, diagnostic =>
             diagnostic.Code == BpmnAlgorithmDiagnosticCodes.NoLegalRoute &&
             diagnostic.Severity == DiagnosticSeverity.Warning &&
             diagnostic.SourceIdentity == noRouteEdge.Id.Value);
-        Assert.DoesNotContain(afterInputHost.InteractionDiagnostics, diagnostic =>
+        Assert.DoesNotContain(host.CaptureState().InteractionDiagnostics, diagnostic =>
             diagnostic.Severity == DiagnosticSeverity.Error);
 
         await host.UndoAsync();
@@ -2188,25 +2155,23 @@ public sealed partial class DocumentCanvasHostTests
         Assert.True(recovered.IsGraphicalInteractionEnabled);
         Assert.Empty(recovered.RuntimeDiagnostics);
         Assert.Empty(recoveredHost.InteractionDiagnostics);
-        Assert.Equal(undoneFallbackAdd.DocumentRevision.Increment(), recovered.DocumentRevision);
-        Assert.True(before.SemanticModel.Elements.SequenceEqual(
-            recoveredDocument.SemanticModel.Elements));
-        Assert.True(before.SemanticModel.Relationships.SequenceEqual(
-            recoveredDocument.SemanticModel.Relationships));
-        Assert.True(before.VisualModel.VisualStates.SequenceEqual(
-            recoveredDocument.VisualModel.VisualStates));
+        Assert.Equal(noRoute.DocumentRevision.Increment(), recovered.DocumentRevision);
+        Assert.Equal(before.SemanticModel.Elements.AsEnumerable(), recoveredDocument.SemanticModel.Elements);
+        Assert.Equal(before.SemanticModel.Relationships.AsEnumerable(), recoveredDocument.SemanticModel.Relationships);
+        Assert.Equal(before.VisualModel.VisualStates.AsEnumerable(), recoveredDocument.VisualModel.VisualStates);
+        Assert.Equal(before.VisualModel.RoutingScopes!.Value.SelectMany(static scope => scope.Geometry.Nodes),
+            recoveredDocument.VisualModel.RoutingScopes!.Value.SelectMany(static scope => scope.Geometry.Nodes));
         Assert.False(recovered.HistoryStatus.CanUndo);
         Assert.True(recovered.HistoryStatus.CanRedo);
-        Assert.Equal(beforeHistory.EntryCount + 2, recovered.HistoryStatus.EntryCount);
+        Assert.Equal(beforeHistory.EntryCount + 1, recovered.HistoryStatus.EntryCount);
         var recoveredGraph = Assert.IsType<ProjectedGraph>(recovered.ProjectedGraph);
         var recoveredEdge = Assert.Single(recoveredGraph.Edges, edge =>
             edge.Source.SemanticElementId == BpmnDemoPipeline.SecondSequenceFlowId);
         var recoveredRouting = Assert.IsType<RoutingResult>(recovered.RoutingResult);
         Assert.DoesNotContain(recoveredEdge.Id, recoveredRouting.NoRouteEdgeIds);
-        Assert.Equal(beforeRoute.Path.AsEnumerable(), Assert.Single(
-            recoveredRouting.Routes,
+        Assert.Equal(beforeRoute.Path.AsEnumerable(), Assert.Single(recoveredRouting.Routes,
             route => route.ProjectedEdgeId == recoveredEdge.Id).Path.AsEnumerable());
-        Assert.Contains(recovered.CurrentScene!.Items, item =>
+        Assert.Contains(recovered.CurrentScene.Items, item =>
             item.Layer == Canvas2DSceneLayer.Connector &&
             item.Origin.VisualStateId == BpmnDemoPipeline.SecondSequenceFlowVisualId);
 
@@ -2214,114 +2179,59 @@ public sealed partial class DocumentCanvasHostTests
         await session.WaitForIdleAsync();
 
         var redone = session.CaptureState();
-        var redoneGraph = Assert.IsType<ProjectedGraph>(redone.ProjectedGraph);
-        var redoneEdge = Assert.Single(redoneGraph.Edges, edge =>
-            edge.Source.SemanticElementId == BpmnDemoPipeline.SecondSequenceFlowId);
         Assert.Equal(EditingSessionStatus.Ready, redone.Status);
         Assert.NotNull(redone.CurrentScene);
-        Assert.Contains(redoneEdge.Id,
-            Assert.IsType<RoutingResult>(redone.RoutingResult).NoRouteEdgeIds);
-        var redoneFallback = Assert.Single(redone.CurrentScene.Items, item =>
-            item.Id == Canvas2DSceneObjectIdentity.ForProjected(
-                redoneEdge.Id,
-                "connector"));
-        Assert.Equal(
-            expectedFallbackPath,
-            Canvas2DConnectorPathMetadata.Resolve(redoneFallback)
-                .Select(redoneFallback.Transform.TransformPoint));
+        Assert.Contains(noRouteEdge.Id, redone.RoutingResult!.NoRouteEdgeIds);
+        var redoneFallback = Assert.Single(redone.CurrentScene.Items, item => item.Id == fallbackId);
+        Assert.Equal(expectedFallbackPath, Canvas2DConnectorPathMetadata.Resolve(redoneFallback)
+            .Select(redoneFallback.Transform.TransformPoint));
         Assert.Contains(redone.CurrentScene.Items, item =>
-            item.Id == Canvas2DSceneObjectIdentity.ForProjected(
-                redoneEdge.Id,
-                "connector-target-arrow"));
-        Assert.Equal(beforeHistory.EntryCount + 2, redone.HistoryStatus.EntryCount);
+            item.Id == Canvas2DSceneObjectIdentity.ForProjected(noRouteEdge.Id, "connector-target-arrow"));
+        Assert.Contains(redone.RuntimeDiagnostics, diagnostic =>
+            diagnostic.Code == BpmnAlgorithmDiagnosticCodes.NoLegalRoute);
+        Assert.Equal(beforeHistory.EntryCount + 1, redone.HistoryStatus.EntryCount);
         Assert.True(redone.HistoryStatus.CanUndo);
-        Assert.True(redone.HistoryStatus.CanRedo);
-
-        await host.RedoAsync();
-        await session.WaitForIdleAsync();
-
-        var redoneFallbackAdd = session.CaptureState();
-        var redoneFallbackAddVisual = Assert.Single(
-            document.CaptureSnapshot().VisualModel.VisualStates,
-            visual => visual.Id == BpmnDemoPipeline.SecondSequenceFlowVisualId);
-        Assert.Equal(
-            new[]
-            {
-                expectedFallbackPath[0],
-                fallbackMidpoint,
-                expectedFallbackPath[^1],
-            },
-            redoneFallbackAddVisual.Route.AsEnumerable());
-        Assert.Contains(noRouteEdge.Id, redoneFallbackAdd.RoutingResult!.NoRouteEdgeIds);
-        Assert.Contains(redoneFallbackAdd.CurrentScene!.Items, item => item.Id == fallbackId);
-        Assert.Equal(beforeHistory.EntryCount + 2,
-            redoneFallbackAdd.HistoryStatus.EntryCount);
-        Assert.True(redoneFallbackAdd.HistoryStatus.CanUndo);
-        Assert.False(redoneFallbackAdd.HistoryStatus.CanRedo);
+        Assert.False(redone.HistoryStatus.CanRedo);
 
         var beforeFallbackDelete = document.CaptureSnapshot();
-        var beforeFallbackDeleteVisual = Assert.Single(
-            beforeFallbackDelete.VisualModel.VisualStates,
+        var beforeFallbackDeleteVisual = Assert.Single(beforeFallbackDelete.VisualModel.VisualStates,
             visual => visual.Id == BpmnDemoPipeline.SecondSequenceFlowVisualId);
-        await pointer.ContextMenuDocumentPointAsync(
-            redoneFallbackAdd.CurrentScene,
-            fallbackMidpoint);
-        Assert.Equal(
-            DiagramDeletionTargetKind.Connection,
+        await pointer.ContextMenuDocumentPointAsync(redone.CurrentScene, fallbackMidpoint);
+        Assert.Equal(DiagramDeletionTargetKind.Connection,
             host.CaptureState().ContextMenu?.DeletionAction?.TargetKind);
+        Assert.Null(host.CaptureState().ContextMenu?.ConnectorRouteAction);
 
         var deletedFallback = await host.ExecuteDeletionContextActionAsync();
         Assert.True(deletedFallback?.IsCommitted);
         await session.WaitForIdleAsync();
 
         var afterFallbackDelete = document.CaptureSnapshot();
-        Assert.False(afterFallbackDelete.SemanticModel.TryGetRelationship(
-            BpmnDemoPipeline.SecondSequenceFlowId,
-            out _));
-        Assert.False(afterFallbackDelete.VisualModel.TryGetVisualState(
-            BpmnDemoPipeline.SecondSequenceFlowVisualId,
-            out _));
-        Assert.False(ConnectorAnchorOccupancy.IsOccupied(
-            afterFallbackDelete.VisualModel,
-            beforeFallbackDeleteVisual.SourceAnchorId!));
-        Assert.False(ConnectorAnchorOccupancy.IsOccupied(
-            afterFallbackDelete.VisualModel,
-            beforeFallbackDeleteVisual.TargetAnchorId!));
-        Assert.DoesNotContain(session.CaptureState().CurrentScene!.Items, item =>
-            item.Id == fallbackId);
+        Assert.False(afterFallbackDelete.SemanticModel.TryGetRelationship(BpmnDemoPipeline.SecondSequenceFlowId, out _));
+        Assert.False(afterFallbackDelete.VisualModel.TryGetVisualState(BpmnDemoPipeline.SecondSequenceFlowVisualId, out _));
+        Assert.False(ConnectorAnchorOccupancy.IsOccupied(afterFallbackDelete.VisualModel, beforeFallbackDeleteVisual.SourceAnchorId!));
+        Assert.False(ConnectorAnchorOccupancy.IsOccupied(afterFallbackDelete.VisualModel, beforeFallbackDeleteVisual.TargetAnchorId!));
+        Assert.DoesNotContain(session.CaptureState().CurrentScene!.Items, item => item.Id == fallbackId);
 
         await host.UndoAsync();
         await session.WaitForIdleAsync();
 
-        var restoredFallbackDelete = session.CaptureState();
-        var restoredFallbackDeleteDocument = document.CaptureSnapshot();
-        Assert.True(restoredFallbackDeleteDocument.SemanticModel.TryGetRelationship(
-            BpmnDemoPipeline.SecondSequenceFlowId,
-            out _));
-        Assert.Equal(
-            beforeFallbackDeleteVisual,
-            Assert.Single(restoredFallbackDeleteDocument.VisualModel.VisualStates, visual =>
-                visual.Id == BpmnDemoPipeline.SecondSequenceFlowVisualId));
-        Assert.Contains(noRouteEdge.Id,
-            restoredFallbackDelete.RoutingResult!.NoRouteEdgeIds);
-        var restoredFallback = Assert.Single(restoredFallbackDelete.CurrentScene!.Items,
-            item => item.Id == fallbackId);
-        Assert.Equal(
-            expectedFallbackPath,
-            Canvas2DConnectorPathMetadata.Resolve(restoredFallback)
-                .Select(restoredFallback.Transform.TransformPoint));
-        Assert.Equal(
-            new[]
-            {
-                expectedFallbackPath[0],
-                fallbackMidpoint,
-                expectedFallbackPath[^1],
-            },
-            Canvas2DConnectorPathMetadata.ResolveEditable(restoredFallback)
-                .Select(restoredFallback.Transform.TransformPoint));
-        Assert.Equal(beforeHistory.EntryCount + 3,
-            restoredFallbackDelete.HistoryStatus.EntryCount);
-        Assert.True(restoredFallbackDelete.HistoryStatus.CanRedo);
+        var restored = session.CaptureState();
+        var restoredDocument = document.CaptureSnapshot();
+        Assert.True(restoredDocument.SemanticModel.TryGetRelationship(BpmnDemoPipeline.SecondSequenceFlowId, out _));
+        Assert.Equal(beforeFallbackDeleteVisual, Assert.Single(restoredDocument.VisualModel.VisualStates,
+            visual => visual.Id == BpmnDemoPipeline.SecondSequenceFlowVisualId));
+        var restoredRecord = Assert.Single(restoredDocument.VisualModel.RoutingScopes!.Value
+            .SelectMany(static scope => scope.Connectors), record => record.VisualStateId == beforeFallbackDeleteVisual.Id);
+        Assert.Equal(ConnectorRoutingType.Automatic, restoredRecord.RoutingType);
+        Assert.Equal(ConnectorRoutingOutcome.NoRoute, restoredRecord.Outcome);
+        Assert.Contains(noRouteEdge.Id, restored.RoutingResult!.NoRouteEdgeIds);
+        var restoredFallback = Assert.Single(restored.CurrentScene!.Items, item => item.Id == fallbackId);
+        Assert.Equal(expectedFallbackPath, Canvas2DConnectorPathMetadata.Resolve(restoredFallback)
+            .Select(restoredFallback.Transform.TransformPoint));
+        Assert.Contains(restored.RuntimeDiagnostics, diagnostic =>
+            diagnostic.Code == BpmnAlgorithmDiagnosticCodes.NoLegalRoute);
+        Assert.Equal(beforeHistory.EntryCount + 2, restored.HistoryStatus.EntryCount);
+        Assert.True(restored.HistoryStatus.CanRedo);
     }
 
     [Fact]
@@ -2787,9 +2697,7 @@ public sealed partial class DocumentCanvasHostTests
         Assert.Equal(
             DiagramDeletionTargetKind.Connection,
             connectionMenu.DeletionAction?.TargetKind);
-        Assert.Equal(
-            Canvas2DConnectorRouteContextActionKind.AddPoint,
-            connectionMenu.ConnectorRouteAction?.Kind);
+        Assert.Null(connectionMenu.ConnectorRouteAction);
         var deletedConnection = await host.ExecuteDeletionContextActionAsync();
 
         Assert.True(deletedConnection?.IsCommitted);
@@ -3843,7 +3751,7 @@ public sealed partial class DocumentCanvasHostTests
 
         var after = host.CaptureState();
         Assert.Equal(DocumentCanvasPropertiesApplyStatus.ValidationFailed, result.Status);
-        Assert.Contains("one Data field or visual bounds", result.Message,
+        Assert.Contains("one Data field, routing type, or visual bounds", result.Message,
             StringComparison.Ordinal);
         Assert.Equal(before.Session!.DocumentRevision, after.Session!.DocumentRevision);
         Assert.Equal(before.Session.HistoryStatus, after.Session.HistoryStatus);
@@ -5697,23 +5605,17 @@ public sealed partial class DocumentCanvasHostTests
 
     private sealed class RevisionAdvancingPlacementFactory(
         IToolboxPlacementCommandFactory inner,
-        Document document) : IToolboxPlacementCommandFactory
+        Func<EditingSession> session) : IToolboxPlacementCommandFactory
     {
         public ToolboxPlacementPlanResult CreatePlan(ToolboxPlacementRequest request)
         {
             ArgumentNullException.ThrowIfNull(request);
             var plan = inner.CreatePlan(request);
-            var taskElementId = request.Document.SemanticModel.Elements
-                .First(element => element.TypeId == BpmnSemanticTypes.Task).Id;
-            var visual = request.Document.VisualModel.VisualStates
-                .Single(state => state.SemanticElementId == taskElementId);
-            var result = new CommandProcessor().ExecuteAsync(
-                document,
-                new MoveVisualStateCommand(
+            var result = session().ExecuteAsync(
+                new UpdateDocumentPublicationCommand(
                     request.Document.DocumentId,
                     request.Document.Revision,
-                    visual.Id,
-                    visual.Position + new VectorD(1d, 1d)))
+                    "stale-placement", "Changed during placement", null))
                 .AsTask()
                 .GetAwaiter()
                 .GetResult();
@@ -6234,6 +6136,14 @@ public sealed partial class DocumentCanvasHostTests
 
         internal Exception? MeasureTextException { get; set; }
 
+        internal bool BlockMeasureText { get; set; }
+
+        internal TaskCompletionSource TextMeasurementStarted { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        private TaskCompletionSource TextMeasurementRelease { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
         internal bool BlockResize { get; set; }
 
         internal bool BlockRender { get; set; }
@@ -6325,13 +6235,17 @@ public sealed partial class DocumentCanvasHostTests
             }
         }
 
-        public ValueTask<Canvas2DTextMeasurementInteropResult> MeasureTextAsync(
+        public async ValueTask<Canvas2DTextMeasurementInteropResult> MeasureTextAsync(
             Canvas2DTextMeasurementRequestData request)
         {
+            if (BlockMeasureText)
+            {
+                TextMeasurementStarted.TrySetResult();
+                await TextMeasurementRelease.Task.ConfigureAwait(false);
+            }
             if (MeasureTextException is not null)
             {
-                return ValueTask.FromException<Canvas2DTextMeasurementInteropResult>(
-                    MeasureTextException);
+                throw MeasureTextException;
             }
 
             var width = request.Text.Sum(character => character switch
@@ -6344,7 +6258,7 @@ public sealed partial class DocumentCanvasHostTests
             });
             var ascent = request.FontSize * 0.75d;
             var descent = request.FontSize * 0.25d;
-            return ValueTask.FromResult(new Canvas2DTextMeasurementInteropResult
+            return new Canvas2DTextMeasurementInteropResult
             {
                 Succeeded = true,
                 Width = width,
@@ -6356,7 +6270,7 @@ public sealed partial class DocumentCanvasHostTests
                 BoundingWidth = width,
                 BoundingHeight = ascent + descent,
                 ResolvedFontIdentity = $"{request.FontIdentity}@{request.FontVersion}",
-            });
+            };
         }
 
         public ValueTask DisposeAsync()
@@ -6372,6 +6286,8 @@ public sealed partial class DocumentCanvasHostTests
         internal void ReleaseResize() => ResizeRelease.TrySetResult();
 
         internal void ReleaseRender() => RenderRelease.TrySetResult();
+
+        internal void ReleaseTextMeasurement() => TextMeasurementRelease.TrySetResult();
 
         private void Enter()
         {

@@ -1,7 +1,11 @@
+using System.Collections.Immutable;
 using Inceptus.DocumentEngine.Canvas2D.EditingSession;
 using Inceptus.DocumentEngine.Canvas2D.Interaction;
 using Inceptus.DocumentEngine.Canvas2D.Rendering;
 using Inceptus.DocumentEngine.Contracts.Diagnostics;
+using Inceptus.DocumentEngine.Contracts.Documents;
+using Inceptus.DocumentEngine.Contracts.Routing;
+using Inceptus.DocumentEngine.Contracts.Visuals;
 using Inceptus.DocumentEngine.Runtime.Documents;
 
 namespace Inceptus.DocumentEngine.Bpmn.Blazor.Presentation;
@@ -16,7 +20,8 @@ internal sealed partial class DocumentCanvasHost
     private async ValueTask<DocumentSessionReplacementResult> ReplaceDocumentUnderGateAsync(
         Document candidateDocument,
         DocumentSessionReplacementMessages messages,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        BpmnModelerNativeImportOptions? nativeOptions = null)
     {
         ArgumentNullException.ThrowIfNull(candidateDocument);
         ArgumentNullException.ThrowIfNull(messages);
@@ -26,6 +31,8 @@ internal sealed partial class DocumentCanvasHost
         Canvas2DInteractionController? candidateController = null;
         ICanvasPresentationPointerObserver? candidatePointerObserver = null;
         BpmnModelerDocumentNotificationSource? candidateNotifications = null;
+        var recovered = false;
+        ImmutableArray<Diagnostic> preparationDiagnostics = [];
         try
         {
             EditingSession? oldSession;
@@ -94,6 +101,47 @@ internal sealed partial class DocumentCanvasHost
                 return FailDocumentReplacement(messages, messages.CanvasInitializationMessage);
             }
 
+            if (nativeOptions is not null)
+            {
+                var preparer = new ConnectorRoutingStatePreparer(sourceConfiguration, candidateRenderer);
+                var candidateSnapshot = candidateDocument.CaptureSnapshot();
+                var prepared = await preparer.PrepareAsync(new ConnectorRoutingStatePreparationRequest(
+                    candidateSnapshot, candidateSnapshot, [], [], null, false,
+                    ConnectorRoutingPreparationPurpose.ValidateSavedState), cancellationToken).ConfigureAwait(false);
+                if (!prepared.Succeeded && nativeOptions.ReprepareIncompatibleV2 &&
+                    prepared.Diagnostics.Any(static diagnostic => diagnostic.Code == "INCEPTUS.ROUTING.SAVED_STATE.INCOMPATIBLE"))
+                {
+                    prepared = await preparer.PrepareAsync(new ConnectorRoutingStatePreparationRequest(
+                        candidateSnapshot, candidateSnapshot, [], [], null, false,
+                        ConnectorRoutingPreparationPurpose.RecoverSavedState), cancellationToken).ConfigureAwait(false);
+                    recovered = prepared.Succeeded;
+                }
+                if (!prepared.Succeeded)
+                {
+                    await candidateRenderer.DisposeAsync().ConfigureAwait(false);
+                    candidateRenderer = null;
+                    if (prepared.Diagnostics.Any(static diagnostic => diagnostic.Code == "INCEPTUS.ROUTING.PREPARATION.UNAVAILABLE"))
+                        return FailDocumentReplacement(messages, messages.SessionReadyMessage) with { Diagnostics = prepared.Diagnostics };
+                    return DocumentSessionReplacementResult.Rejected(prepared.Diagnostics);
+                }
+                preparationDiagnostics = prepared.Diagnostics;
+                if (recovered)
+                {
+                    var visual = candidateSnapshot.VisualModel;
+                    var reconstructed = DocumentReconstructor.Reconstruct(new DocumentSnapshot(candidateSnapshot.SemanticModel,
+                        new VisualModelSnapshot(visual.DocumentId, visual.Revision, visual.VisualStates,
+                            visual.ProfileElementPresentations, prepared.RoutingScopes), candidateSnapshot.Metadata, candidateSnapshot.Publication),
+                        sourceConfiguration.ConnectorAnchorPolicyProvider);
+                    if (!reconstructed.Succeeded)
+                    {
+                        await candidateRenderer.DisposeAsync().ConfigureAwait(false);
+                        candidateRenderer = null;
+                        return DocumentSessionReplacementResult.Rejected(reconstructed.Diagnostics);
+                    }
+                    candidateDocument = reconstructed.Document!;
+                }
+            }
+
             candidateNotifications = ModelerNotifications is null ? null :
                 new BpmnModelerDocumentNotificationSource(candidateDocument.CaptureSnapshot());
             var configuration = WithVisibleDocumentRegion(
@@ -119,6 +167,9 @@ internal sealed partial class DocumentCanvasHost
 
             candidateSession = attachment.Session!;
             var candidateState = candidateSession.CaptureState();
+            var attachedSnapshot = await candidateSession.CaptureDocumentSnapshotAsync(cancellationToken).ConfigureAwait(false);
+            if (attachedSnapshot is not null)
+                candidateNotifications?.AcceptPreparedInitialSnapshot(attachedSnapshot);
             if (HasError(candidateState.PresentationDiagnostics))
             {
                 await candidateSession.DisposeAsync().ConfigureAwait(false);
@@ -171,6 +222,7 @@ internal sealed partial class DocumentCanvasHost
                 candidateNotifications = null;
                 _replacementNotificationPending = true;
                 _session = candidateSession;
+                ResetNativeSaveAttachmentUnderLock();
                 _interactionController = candidateController;
                 _toolboxPlacementController = candidateToolboxController;
                 _pointerObserver = candidatePointerObserver;
@@ -216,7 +268,12 @@ internal sealed partial class DocumentCanvasHost
                 oldController,
                 oldSession,
                 renderer: null).ConfigureAwait(false);
-            return DocumentSessionReplacementResult.Success;
+            return DocumentSessionReplacementResult.Success with
+            {
+                Snapshot = attachedSnapshot,
+                Recovered = recovered,
+                Diagnostics = preparationDiagnostics,
+            };
         }
 #pragma warning disable CA1031 // Unexpected replacement failures become bounded diagnostics.
         catch (Exception exception) when (
@@ -349,12 +406,17 @@ internal enum DocumentSessionReplacementStatus
     Succeeded = 0,
     Unavailable = 1,
     Failed = 2,
+    Rejected = 3,
 }
 
 internal sealed record DocumentSessionReplacementResult(
     DocumentSessionReplacementStatus Status,
     Diagnostic? Diagnostic)
 {
+    internal DocumentSnapshot? Snapshot { get; init; }
+    internal bool Recovered { get; init; }
+    internal ImmutableArray<Diagnostic> Diagnostics { get; init; } = [];
+
     internal bool Succeeded => Status == DocumentSessionReplacementStatus.Succeeded;
 
     internal bool ShouldNotify => Status != DocumentSessionReplacementStatus.Unavailable;
@@ -367,4 +429,7 @@ internal sealed record DocumentSessionReplacementResult(
 
     internal static DocumentSessionReplacementResult Failure(Diagnostic diagnostic) =>
         new(DocumentSessionReplacementStatus.Failed, diagnostic);
+
+    internal static DocumentSessionReplacementResult Rejected(ImmutableArray<Diagnostic> diagnostics) =>
+        new(DocumentSessionReplacementStatus.Rejected, diagnostics.FirstOrDefault()) { Diagnostics = diagnostics };
 }

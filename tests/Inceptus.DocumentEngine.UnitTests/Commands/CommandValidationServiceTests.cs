@@ -177,6 +177,8 @@ public sealed class CommandValidationServiceTests
             (CommandCategory.Visual, AuthoritativeDocumentComponent.VisualModel),
             (CommandCategory.Metadata, AuthoritativeDocumentComponent.Metadata),
             (CommandCategory.Publication, AuthoritativeDocumentComponent.Publication),
+            (CommandCategory.Compound, AuthoritativeDocumentComponent.VisualModel),
+            (CommandCategory.Compound, AuthoritativeDocumentComponent.Metadata),
             (CommandCategory.Document,
                 AuthoritativeDocumentComponent.SemanticModel |
                 AuthoritativeDocumentComponent.VisualModel),
@@ -210,7 +212,7 @@ public sealed class CommandValidationServiceTests
         [
             (CommandCategory.Visual, AuthoritativeDocumentComponent.SemanticModel),
             (CommandCategory.Document, AuthoritativeDocumentComponent.VisualModel),
-            (CommandCategory.Compound, AuthoritativeDocumentComponent.Metadata),
+            (CommandCategory.Compound, AuthoritativeDocumentComponent.None),
             (CommandCategory.Semantic, AuthoritativeDocumentComponent.None),
             (CommandCategory.Visual, (AuthoritativeDocumentComponent)16),
             ((CommandCategory)99, AuthoritativeDocumentComponent.VisualModel),

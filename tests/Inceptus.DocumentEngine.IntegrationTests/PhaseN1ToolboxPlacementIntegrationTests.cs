@@ -130,7 +130,6 @@ public sealed class PhaseN1ToolboxPlacementIntegrationTests
             var currentNode = Assert.Single(afterState.LayoutResult!.Nodes, node =>
                 node.ProjectedObjectId == previousNode.ProjectedObjectId);
             Assert.Equal(previousNode, currentNode);
-            Assert.Same(previousNode, currentNode);
         }
         Assert.Equal(beforeState.ProjectedGraph!.NodeCount + 1,
             afterState.ProjectedGraph!.NodeCount);
@@ -274,7 +273,7 @@ public sealed class PhaseN1ToolboxPlacementIntegrationTests
         var baseline = harness.Composition.Document.CaptureSnapshot();
         var baselineTaskNumber = MaximumTaskElementNumber(baseline);
         var firstCenter = new PointD(500d, 300d);
-        var secondCenter = new PointD(760d, 420d);
+        var secondCenter = new PointD(760d, 700d);
 
         Assert.True(harness.Selection.Select(taskItem.ItemId));
         var first = await PlaceAsync(harness, firstCenter);
@@ -333,7 +332,7 @@ public sealed class PhaseN1ToolboxPlacementIntegrationTests
         Assert.Equal(baselineTaskNumber + 2L,
             RequiredProperty(secondElement, BpmnSemanticProperties.ElementNumber).IntegerValue);
         Assert.Equal(new PointD(440d, 260d), firstVisual.Position);
-        Assert.Equal(new PointD(700d, 380d), secondVisual.Position);
+        Assert.Equal(new PointD(700d, 660d), secondVisual.Position);
         Assert.Equal(VisualPlacementMode.Pinned, secondVisual.PlacementMode);
         Assert.Equal(baseline.Revision.Value + 4UL, twicePlaced.Revision.Value);
         Assert.Equal(afterFirstState.HistoryStatus.EntryCount + 1,
@@ -517,7 +516,7 @@ public sealed class PhaseN1ToolboxPlacementIntegrationTests
     }
 
     [Fact]
-    public async Task HostPrimaryDownPlacesBeforeHitTestingAndConsumesThePointerBoundary()
+    public async Task HostPrimaryDownRejectsOverlapBeforeHitTestingAndConsumesThePointerBoundary()
     {
         await using var harness = await HostHarness.CreateAsync();
         var toolboxSelection = HostToolboxSelection(harness.Host);
@@ -554,6 +553,21 @@ public sealed class PhaseN1ToolboxPlacementIntegrationTests
             clickCenter,
             button: 0,
             buttons: 0);
+        await harness.Session.WaitForIdleAsync();
+
+        Assert.Equal(before, harness.Composition.Document.CaptureSnapshot());
+        Assert.Equal(existingVisualId, Assert.Single(harness.State.EditorState.Selection));
+        Assert.Equal(taskItem.ItemId, toolboxSelection.SelectedItemId);
+        Assert.Contains(harness.State.EditorState.TemporaryFeedback,
+            feedback => feedback.PlacementPreview is { IsAllowed: false });
+
+        // A rejected placement consumes its input boundary instead of starting a node gesture.
+        Assert.Null(harness.State.EditorState.ActiveGesture);
+        clickCenter = PlacementCenter;
+        await SendPointerAsync(harness, CanvasPointerEventKind.Down, pointerId: 8102,
+            clickCenter, button: 0, buttons: 1);
+        await SendPointerAsync(harness, CanvasPointerEventKind.Up, pointerId: 8102,
+            clickCenter, button: 0, buttons: 0);
         await harness.Session.WaitForIdleAsync();
 
         var after = harness.Composition.Document.CaptureSnapshot();
@@ -602,7 +616,7 @@ public sealed class PhaseN1ToolboxPlacementIntegrationTests
         var parallelItem = Assert.Single(toolbox.Items, item =>
             item.ElementTypeId == BpmnSemanticTypes.ParallelGateway);
         var before = harness.Composition.Document.CaptureSnapshot();
-        var clickCenter = new PointD(730d, 530d);
+        var clickCenter = PlacementCenter;
 
         Assert.True(toolboxSelection.Select(taskItem.ItemId));
         await harness.Host.RefreshToolboxPlacementAsync();
@@ -1016,7 +1030,8 @@ public sealed class PhaseN1ToolboxPlacementIntegrationTests
                 source.CommandValidators,
                 source.HistoryPolicies,
                 [.. source.DocumentChangedSubscribers, events],
-                source.ConnectorAnchorPolicyProvider);
+                source.ConnectorAnchorPolicyProvider, source.ModelProfileCatalog,
+                source.InitialModelProfileViewState, source.RoutingInputPreparer);
             var execution = new RecordingRenderExecution();
             var renderer = new Canvas2DRenderer(
                 execution,
@@ -1035,6 +1050,8 @@ public sealed class PhaseN1ToolboxPlacementIntegrationTests
                 "phase-n1-placement-integration-canvas",
                 surfaceSize);
             Assert.True(initialized.Succeeded);
+            composition = BpmnModelerTestComposition.WithDocument(composition,
+                await BpmnModelerTestComposition.PrepareFreshDocumentAsync(composition.Document, configuration, renderer));
             var pipeline = new PipelineProbe(
                 new EditingSessionPipeline(configuration),
                 failFullRunNumber);

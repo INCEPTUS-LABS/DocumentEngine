@@ -109,7 +109,8 @@ internal sealed class MoveVisualStatesCommandHandler : ICommandHandler
                 replacements.TryGetValue(visualState.Id, out var replacement)
                     ? replacement
                     : visualState),
-            document.VisualModel.ProfileElementPresentations);
+            document.VisualModel.ProfileElementPresentations,
+            document.VisualModel.RoutingScopes);
         var proposedDocument = new DocumentSnapshot(
             document.SemanticModel,
             proposedVisualModel,

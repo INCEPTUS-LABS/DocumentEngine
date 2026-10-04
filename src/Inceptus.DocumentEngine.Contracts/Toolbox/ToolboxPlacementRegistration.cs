@@ -11,6 +11,15 @@ public sealed class ToolboxPlacementRegistration
         ToolboxItemId toolboxItemId,
         IToolboxPlacementCommandFactory commandFactory,
         IToolboxPlacementCandidateProvider? candidateProvider = null)
+        : this(toolboxItemId, commandFactory, candidateProvider, previewProvider: null)
+    {
+    }
+
+    public ToolboxPlacementRegistration(
+        ToolboxItemId toolboxItemId,
+        IToolboxPlacementCommandFactory commandFactory,
+        IToolboxPlacementCandidateProvider? candidateProvider,
+        IToolboxPlacementPreviewProvider? previewProvider)
     {
         ArgumentNullException.ThrowIfNull(toolboxItemId);
         ArgumentNullException.ThrowIfNull(commandFactory);
@@ -18,6 +27,7 @@ public sealed class ToolboxPlacementRegistration
         ToolboxItemId = toolboxItemId;
         CommandFactory = commandFactory;
         CandidateProvider = candidateProvider;
+        PreviewProvider = previewProvider;
     }
 
     public ToolboxItemId ToolboxItemId { get; }
@@ -25,4 +35,6 @@ public sealed class ToolboxPlacementRegistration
     public IToolboxPlacementCommandFactory CommandFactory { get; }
 
     public IToolboxPlacementCandidateProvider? CandidateProvider { get; }
+
+    public IToolboxPlacementPreviewProvider? PreviewProvider { get; }
 }

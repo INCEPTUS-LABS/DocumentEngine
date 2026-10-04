@@ -180,8 +180,8 @@ public sealed partial class DocumentCanvasHostTests
                 "Publication metadata must survive a visual-only anchor edit.") : null);
     }
 
-    // Preserve the reported consumer's native identities, anchors and routes without
-    // depending on its disposable host or preparing the anchor exercised by the test.
+    // Preserve the reported consumer's authored identities and anchors. Fresh construction
+    // prepares complete saved routes through the session's supported preparation boundary.
     private static DocumentSnapshot CreateConnectedAnchorContextSnapshot()
     {
         var documentId = new DocumentId("consumer:fixture:document");
@@ -230,11 +230,9 @@ public sealed partial class DocumentCanvasHostTests
                         ConnectorAnchorRole.Target, 0)]),
                 new VisualStateSnapshot(new VisualStateId("consumer:fixture:visual:start-to-task"),
                     firstFlowId, default, default, VisualPlacementMode.Automatic,
-                    [new PointD(140d, 160d), new PointD(260d, 160d)],
                     sourceAnchorId: startSource, targetAnchorId: taskTarget),
                 new VisualStateSnapshot(new VisualStateId("consumer:fixture:visual:task-to-end"),
                     secondFlowId, default, default, VisualPlacementMode.Automatic,
-                    [new PointD(380d, 160d), new PointD(500d, 160d)],
                     sourceAnchorId: taskSource, targetAnchorId: endTarget),
             ]),
             new DocumentMetadataSnapshot(documentId, revision),

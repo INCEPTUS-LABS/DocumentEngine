@@ -85,7 +85,7 @@ public sealed record Canvas2DSpatialEditPlannerRegistration
 }
 
 /// <summary>Deterministic profile-keyed pure planning; a missing policy rejects a spatial edit.</summary>
-public sealed class Canvas2DSpatialEditPlannerCatalog
+public sealed partial class Canvas2DSpatialEditPlannerCatalog
 {
     private readonly ImmutableDictionary<ModelProfileId, ICanvas2DSpatialEditPlanner> _planners;
 

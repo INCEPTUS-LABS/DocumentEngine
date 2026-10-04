@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using Inceptus.DocumentEngine.Contracts.Commands;
 using Inceptus.DocumentEngine.Contracts.Geometry;
 using Inceptus.DocumentEngine.Contracts.Primitives;
+using Inceptus.DocumentEngine.Contracts.Routing;
 using Inceptus.DocumentEngine.Contracts.Visuals;
 using Inceptus.DocumentEngine.Bpmn.Semantics;
 
@@ -1016,6 +1017,31 @@ public sealed class CreateBpmnSequenceFlowCommand : ICommand, ICommandPipelineIn
         Description = description;
     }
 
+    public CreateBpmnSequenceFlowCommand(
+        DocumentId targetDocumentId,
+        DocumentRevision expectedRevision,
+        SemanticElementId relationshipId,
+        VisualStateId visualStateId,
+        SemanticElementId sourceId,
+        SemanticElementId targetId,
+        ConnectorAnchorId sourceAnchorId,
+        ConnectorAnchorId targetAnchorId,
+        ConnectorRoutingType routingType,
+        IEnumerable<PointD>? route = null,
+        string? name = null,
+        string? description = null)
+        : this(targetDocumentId, expectedRevision, relationshipId, visualStateId, sourceId,
+            targetId, sourceAnchorId, targetAnchorId, route, name, description)
+    {
+        if (!Enum.IsDefined(routingType)) throw new ArgumentOutOfRangeException(nameof(routingType));
+        RoutingType = routingType;
+        HasExplicitRoutingType = true;
+    }
+
+    public ConnectorRoutingType RoutingType { get; } = ConnectorRoutingType.Automatic;
+
+    internal bool HasExplicitRoutingType { get; }
+
     public CommandTypeId TypeId => KnownTypeId;
 
     public DocumentId TargetDocumentId { get; }
@@ -1105,6 +1131,35 @@ public sealed class CreateBpmnSequenceFlowWithTargetAnchorCommand :
         Name = name;
         Description = description;
     }
+
+    public CreateBpmnSequenceFlowWithTargetAnchorCommand(
+        DocumentId targetDocumentId,
+        DocumentRevision expectedRevision,
+        SemanticElementId relationshipId,
+        VisualStateId visualStateId,
+        SemanticElementId sourceId,
+        SemanticElementId targetId,
+        ConnectorAnchorId sourceAnchorId,
+        VisualStateId targetVisualStateId,
+        ConnectorAnchorId targetAnchorId,
+        ConnectorAnchorSide targetSide,
+        int targetInsertionIndex,
+        ConnectorRoutingType routingType,
+        IEnumerable<PointD>? route = null,
+        string? name = null,
+        string? description = null)
+        : this(targetDocumentId, expectedRevision, relationshipId, visualStateId, sourceId,
+            targetId, sourceAnchorId, targetVisualStateId, targetAnchorId, targetSide,
+            targetInsertionIndex, route, name, description)
+    {
+        if (!Enum.IsDefined(routingType)) throw new ArgumentOutOfRangeException(nameof(routingType));
+        RoutingType = routingType;
+        HasExplicitRoutingType = true;
+    }
+
+    public ConnectorRoutingType RoutingType { get; } = ConnectorRoutingType.Automatic;
+
+    internal bool HasExplicitRoutingType { get; }
 
     public CommandTypeId TypeId => KnownTypeId;
     public DocumentId TargetDocumentId { get; }

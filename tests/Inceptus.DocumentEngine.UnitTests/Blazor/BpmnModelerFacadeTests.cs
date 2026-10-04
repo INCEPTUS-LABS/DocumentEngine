@@ -66,7 +66,7 @@ public sealed partial class DocumentCanvasHostTests
     public async Task FacadeCaptureExportNewLoadAndImportPreserveCanonicalIdentityAndCallbacks()
     {
         await using var fixture = new FacadeTestFixture(
-            new BpmnModelerCompositionFactory([BpmnDemoStartupDocumentProvider.Instance]));
+            await BpmnModelerTestComposition.CreateFreshDemoFactoryAsync());
         await fixture.InitializeAsync();
         var originalSession = Session(fixture.Host);
         var capture = fixture.Facade.CaptureDocumentSnapshot();
@@ -211,7 +211,7 @@ public sealed partial class DocumentCanvasHostTests
     public async Task FacadePublishReturnsStandaloneZipAndLeavesDocumentAndHistoryUnchanged()
     {
         await using var fixture = new FacadeTestFixture(
-            new BpmnModelerCompositionFactory([BpmnDemoStartupDocumentProvider.Instance]));
+            await BpmnModelerTestComposition.CreateFreshDemoFactoryAsync());
         await fixture.InitializeAsync();
         var initial = fixture.Host.CaptureState();
         var saved = await fixture.Host.SavePublicationAsync(

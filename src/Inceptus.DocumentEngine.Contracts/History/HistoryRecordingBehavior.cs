@@ -7,4 +7,5 @@ public enum HistoryRecordingBehavior
 {
     NotUndoable = 0,
     Undoable = 1,
+    PreserveExistingHistory = 2,
 }

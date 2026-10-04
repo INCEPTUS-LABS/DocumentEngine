@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using Inceptus.DocumentEngine.Contracts.Geometry;
 using Inceptus.DocumentEngine.Contracts.Properties;
+using Inceptus.DocumentEngine.Contracts.Toolbox;
 
 namespace Inceptus.DocumentEngine.Contracts.EditorState;
 
@@ -9,6 +10,28 @@ namespace Inceptus.DocumentEngine.Contracts.EditorState;
 /// </summary>
 public sealed class EditorFeedbackSnapshot : IEquatable<EditorFeedbackSnapshot>
 {
+    public EditorFeedbackSnapshot(string id, Canvas2DSpatialResizeFeedback spatialResize)
+        : this(id, Canvas2DSpatialResizeFeedback.FeedbackKind,
+            presentationMode: EditorFeedbackPresentationMode.ContributorOnly)
+    {
+        ArgumentNullException.ThrowIfNull(spatialResize);
+        SpatialResize = spatialResize;
+    }
+    /// <summary>Transports an evaluated prospective node through ordinary transient feedback.</summary>
+    public EditorFeedbackSnapshot(string id, RectD bounds, ToolboxPlacementPreview placementPreview)
+        : this(id, ToolboxPlacementPreview.FeedbackKind, bounds,
+            presentationMode: EditorFeedbackPresentationMode.ContributorOnly)
+    {
+        ArgumentNullException.ThrowIfNull(placementPreview);
+        if (bounds.IsEmpty || bounds.Width != placementPreview.Bounds.Width ||
+            bounds.Height != placementPreview.Bounds.Height)
+        {
+            throw new ArgumentException("Displayed preview bounds must preserve the prospective body size.", nameof(bounds));
+        }
+
+        PlacementPreview = placementPreview;
+    }
+
     public EditorFeedbackSnapshot(
         string id,
         string kind,
@@ -48,6 +71,9 @@ public sealed class EditorFeedbackSnapshot : IEquatable<EditorFeedbackSnapshot>
 
     public EditorFeedbackPresentationMode PresentationMode { get; }
 
+    public ToolboxPlacementPreview? PlacementPreview { get; }
+    public Canvas2DSpatialResizeFeedback? SpatialResize { get; }
+
     public bool Equals(EditorFeedbackSnapshot? other) =>
         ReferenceEquals(this, other) ||
         other is not null &&
@@ -56,6 +82,8 @@ public sealed class EditorFeedbackSnapshot : IEquatable<EditorFeedbackSnapshot>
         Bounds == other.Bounds &&
         Points.AsSpan().SequenceEqual(other.Points.AsSpan()) &&
         Properties.Equals(other.Properties) &&
+        Equals(PlacementPreview, other.PlacementPreview) &&
+        Equals(SpatialResize, other.SpatialResize) &&
         PresentationMode == other.PresentationMode;
 
     public override bool Equals(object? obj) => Equals(obj as EditorFeedbackSnapshot);
@@ -73,6 +101,8 @@ public sealed class EditorFeedbackSnapshot : IEquatable<EditorFeedbackSnapshot>
 
         hash.Add(Properties);
         hash.Add(PresentationMode);
+        hash.Add(PlacementPreview);
+        hash.Add(SpatialResize);
         return hash.ToHashCode();
     }
 }

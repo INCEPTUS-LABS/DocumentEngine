@@ -12,7 +12,7 @@ namespace Inceptus.DocumentEngine.Organizational.Spatial;
 /// Pure mapping from one recognized Organizational presentation region to the ordinary
 /// command path. It owns neither a Document nor a History store.
 /// </summary>
-public sealed class OrganizationalSpatialEditPlanner : ICanvas2DSpatialEditPlanner
+public sealed partial class OrganizationalSpatialEditPlanner : ICanvas2DSpatialEditPlanner, ICanvas2DSpatialResizePlanner
 {
     private readonly IOrganizationalElementEligibilityPolicy _eligibilityPolicy;
 

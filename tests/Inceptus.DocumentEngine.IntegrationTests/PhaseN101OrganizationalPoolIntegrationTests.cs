@@ -3,6 +3,7 @@ using Inceptus.DocumentEngine.Bpmn.Blazor.Presentation;
 using Inceptus.DocumentEngine.Bpmn.Commands;
 using Inceptus.DocumentEngine.Bpmn.Semantics;
 using Inceptus.DocumentEngine.Canvas2D.EditingSession;
+using Inceptus.DocumentEngine.Canvas2D.HitTesting;
 using Inceptus.DocumentEngine.Canvas2D.Interaction;
 using Inceptus.DocumentEngine.Canvas2D.Rendering;
 using Inceptus.DocumentEngine.Canvas2D.Scene;
@@ -13,6 +14,7 @@ using Inceptus.DocumentEngine.Contracts.EditorState;
 using Inceptus.DocumentEngine.Contracts.Geometry;
 using Inceptus.DocumentEngine.Contracts.Primitives;
 using Inceptus.DocumentEngine.Contracts.Profiles;
+using Inceptus.DocumentEngine.Contracts.Routing;
 using Inceptus.DocumentEngine.Contracts.Semantics;
 using Inceptus.DocumentEngine.Contracts.Visuals;
 using Inceptus.DocumentEngine.Organizational.Commands;
@@ -42,7 +44,7 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
         Assert.Equal(EditingSessionAttachStatus.Ready, attachment.Status);
 
         var activeScopeId = session.CaptureState().ActiveScopeId;
-        var initial = document.CaptureSnapshot();
+        var initial = CaptureCurrentDocument(session);
         var initialElements = initial.SemanticModel.Elements;
         var initialRelationships = initial.SemanticModel.Relationships;
         var initialVisuals = initial.VisualModel.VisualStates;
@@ -60,7 +62,7 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
             session,
             new SetModelProfileAvailabilityCommand(
                 document.DocumentId,
-                document.Revision,
+                session.CaptureState().DocumentRevision,
                 [new ModelProfileAvailabilityChange(
                     OrganizationalModelProfile.Id,
                     isAvailable: true)]));
@@ -68,13 +70,13 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
             session,
             new CreateOrganizationalPoolCommand(
                 document.DocumentId,
-                document.Revision,
+                session.CaptureState().DocumentRevision,
                 PoolAId,
                 activeScopeId,
                 OrganizationalPoolCreationMode.AdoptEligibleUnassigned,
                 "Operations"));
 
-        var firstPool = document.CaptureSnapshot();
+        var firstPool = CaptureCurrentDocument(session);
         Assert.Equal(activeScopeId, session.CaptureState().ActiveScopeId);
         Assert.True(initialElements.AsSpan().SequenceEqual(
             firstPool.SemanticModel.Elements
@@ -96,12 +98,12 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
             session,
             new CreateOrganizationalPoolCommand(
                 document.DocumentId,
-                document.Revision,
+                session.CaptureState().DocumentRevision,
                 PoolBId,
                 activeScopeId,
                 OrganizationalPoolCreationMode.Empty,
                 "Fulfillment"));
-        var secondPool = document.CaptureSnapshot();
+        var secondPool = CaptureCurrentDocument(session);
         Assert.Empty(AssignedIds(secondPool, PoolBId));
         Assert.Equal(0, PresentationOrder(secondPool, PoolAId));
         Assert.Equal(1, PresentationOrder(secondPool, PoolBId));
@@ -111,21 +113,21 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
             session,
             new AssignOrganizationalElementCommand(
                 document.DocumentId,
-                document.Revision,
+                session.CaptureState().DocumentRevision,
                 reassignedId,
                 PoolBId));
         Assert.Equal(
             PoolBId,
-            AssignedPool(document.CaptureSnapshot(), reassignedId));
+            AssignedPool(CaptureCurrentDocument(session), reassignedId));
 
-        var beforeDelete = document.CaptureSnapshot();
+        var beforeDelete = CaptureCurrentDocument(session);
         await ExecuteAsync(
             session,
             new DeleteOrganizationalPoolCommand(
                 document.DocumentId,
-                document.Revision,
+                session.CaptureState().DocumentRevision,
                 PoolBId));
-        var deleted = document.CaptureSnapshot();
+        var deleted = CaptureCurrentDocument(session);
         Assert.False(deleted.SemanticModel.TryGetElement(PoolBId, out _));
         Assert.Null(AssignedPool(deleted, reassignedId));
         Assert.True(initialElements.AsSpan().SequenceEqual(
@@ -141,7 +143,7 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
         var undo = await session.UndoAsync();
         Assert.True(undo.IsCommitted, Diagnostics(undo.Diagnostics));
         await WaitForReadyAsync(session);
-        AssertEquivalentIgnoringRevision(beforeDelete, document.CaptureSnapshot());
+        AssertEquivalentIgnoringRevision(beforeDelete, CaptureCurrentDocument(session));
         Assert.Equal(activeScopeId, session.CaptureState().ActiveScopeId);
     }
 
@@ -240,7 +242,7 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
     }
 
     [Fact]
-    public async Task ShrinkingSourceRowReflowsLowerPoolWithoutRewritingCanonicalDropOrSiblings()
+    public async Task RemovingSourceContentRetainsAuthoredHeightAndExactLowerPoolDropAndSiblings()
     {
         await using var fixture = await DragFixture.CreateAsync();
         var id = DragFixture.TaskIds[1];
@@ -258,7 +260,7 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
             region => region.Id == destination.Id);
         var stackDelta = currentDestination.MapLocalToScene(new PointD(0d, 0d)) -
             destination.MapLocalToScene(new PointD(0d, 0d));
-        Assert.True(stackDelta.Y < 0d);
+        Assert.Equal(0d, stackDelta.Y);
         Assert.Equal(0d, stackDelta.X);
         Assert.Equal(canonicalTarget, fixture.Visual(id).Position);
         Assert.Equal(currentDestination.MapLocalToScene(canonicalTarget), fixture.Node(id).Bounds.TopLeft);
@@ -297,14 +299,15 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
             state.DocumentId, state.DocumentRevision, flowId, flowVisualId,
             fixture.Visual(sourceId).SemanticElementId, fixture.Visual(targetId).SemanticElementId,
             sourceAnchor, targetAnchor));
+        await fixture.ExecuteAsync(state => new SetConnectorRoutingTypeCommand(
+            state.DocumentId, state.DocumentRevision, flowVisualId, ConnectorRoutingType.Manual));
 
-        var source = fixture.Visual(sourceId);
-        var target = fixture.Visual(targetId);
+        var savedPath = fixture.SavedRoute(flowVisualId).Path;
         var route = new[]
         {
-            new PointD(source.Position.X + source.Size.Width, source.Position.Y + source.Size.Height / 2d),
+            savedPath[0],
             new PointD(740d, 360d),
-            new PointD(target.Position.X, target.Position.Y + target.Size.Height / 2d),
+            savedPath[^1],
         };
         await fixture.ExecuteAsync(state => new UpdateConnectionRouteCommand(
             state.DocumentId, state.DocumentRevision, flowVisualId, route));
@@ -318,18 +321,20 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
         var bendCenter = new PointD(bend.Bounds.Left + bend.Bounds.Width / 2d,
             bend.Bounds.Top + bend.Bounds.Height / 2d);
         await fixture.DragAsync(bendCenter, bendCenter + new VectorD(0d, 24d));
-        Assert.Equal(route[1] + new VectorD(0d, 24d), fixture.Visual(flowVisualId).Route[1]);
-        var editedRoute = fixture.Visual(flowVisualId).Route;
+        Assert.Equal(route[1] + new VectorD(0d, 24d), fixture.SavedRoute(flowVisualId).Path[1]);
+        var editedRoute = fixture.SavedRoute(flowVisualId).ManualDefinition!.Value;
         var relationship = fixture.Document.SemanticModel.Relationships.Single(item => item.Id == flowId);
 
         foreach (var id in new[] { sourceId, targetId })
         {
             var before = fixture.Document;
             var beforeScene = fixture.Node(id).Bounds;
-            await fixture.DragNodeAsync(id, new VectorD(28d, 16d));
+            // Literal Manual segments can cross a node body; grab away from that visible connector.
+            var start = beforeScene.TopLeft + new VectorD(18d, beforeScene.Height / 2d);
+            await fixture.DragAsync(start, start + new VectorD(28d, 16d));
             Assert.Equal(beforeScene.Translate(new VectorD(28d, 16d)), fixture.Node(id).Bounds);
             AssertOnlyVisualChanged(before, fixture.Document, id);
-            Assert.Equal(editedRoute, fixture.Visual(flowVisualId).Route);
+            Assert.Equal(editedRoute.AsEnumerable(), fixture.SavedRoute(flowVisualId).ManualDefinition!.Value);
             Assert.Equal(relationship, fixture.Document.SemanticModel.Relationships.Single(item => item.Id == flowId));
             AssertConnectorEndpoints(fixture, flowVisualId, sourceId, targetId);
             var moved = fixture.Document;
@@ -349,8 +354,9 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
         // the manual route or duplicate the existing SequenceFlow.
         var beforeTransfer = fixture.Document;
         var unassignedIdentity = UnassignedRegion(fixture).Id;
-        await MoveToRegionAsync(fixture, targetId, null, new PointD(340d, 100d), unassignedIdentity);
-        Assert.Equal(editedRoute, fixture.Visual(flowVisualId).Route);
+        await MoveToRegionAsync(fixture, targetId, null, new PointD(340d, 100d), unassignedIdentity,
+            grabOffset: new VectorD(18d, 50d));
+        Assert.Equal(editedRoute.AsEnumerable(), fixture.SavedRoute(flowVisualId).ManualDefinition!.Value);
         Assert.Equal(relationship, fixture.Document.SemanticModel.Relationships.Single(item => item.Id == flowId));
         AssertConnectorEndpoints(fixture, flowVisualId, sourceId, targetId);
         var transferred = fixture.Document;
@@ -363,7 +369,7 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
         AssertEquivalentIgnoringRevision(transferred, fixture.Document);
         AssertConnectorEndpoints(fixture, flowVisualId, sourceId, targetId);
         await PlaceInUnassignedAsync(fixture, "timer-catch-event", new PointD(80d, 40d), unassignedIdentity);
-        Assert.Equal(editedRoute, fixture.Visual(flowVisualId).Route);
+        Assert.Equal(editedRoute.AsEnumerable(), fixture.SavedRoute(flowVisualId).ManualDefinition!.Value);
         AssertConnectorEndpoints(fixture, flowVisualId, sourceId, targetId);
     }
 
@@ -379,7 +385,7 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
         Assert.Equal(new PointD(target.Left, target.Top + target.Height / 2d), path[^1]);
         var mapping = Assert.IsType<Canvas2DConnectorPresentationMapping>(connector.ConnectorPresentationMapping);
         Assert.False(mapping.IsSameRegion);
-        Assert.Equal(fixture.Visual(flowId).Route[1], mapping.CanonicalEditablePath[1]);
+        Assert.Equal(fixture.SavedRoute(flowId).Path[1], mapping.CanonicalEditablePath[1]);
         Assert.Equal(mapping.CanonicalEditablePath[1], mapping.DisplayedEditablePath[1]);
     }
 
@@ -447,6 +453,7 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
             await fixture.ExecuteAsync(state => new CreateOrganizationalPoolCommand(
                 state.DocumentId, state.DocumentRevision, PoolBId, state.ActiveScopeId,
                 OrganizationalPoolCreationMode.Empty, "Pool B"));
+            await PrepareRegionCapacitiesAsync(fixture.Session, 900d);
             var positions = new[]
             {
                 new PointD(40d, 400d), new PointD(520d, 480d),
@@ -475,6 +482,10 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
         internal VisualStateSnapshot Visual(VisualStateId id) =>
             Document.VisualModel.VisualStates.Single(visual => visual.Id == id);
 
+        internal ConnectorRoutingRecord SavedRoute(VisualStateId id) =>
+            Document.VisualModel.RoutingScopes!.Value.Single(scope => scope.ScopeId == State.ActiveScopeId)
+                .Connectors.Single(record => record.VisualStateId == id);
+
         internal Canvas2DSceneItem Node(VisualStateId id) =>
             State.CurrentScene!.Items.Single(item =>
                 item.Origin.VisualStateId == id && Canvas2DNodeBodyMetadata.IsNodeBody(item));
@@ -494,9 +505,11 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
 
         internal async Task DragAsync(PointD start, PointD finish)
         {
-            await Controller.PointerPressedAsync(new Canvas2DPointerInput(7101, Css(start), buttons: 1));
+            var pressed = await Controller.PointerPressedAsync(new Canvas2DPointerInput(7101, Css(start), buttons: 1));
             var preview = await Controller.PointerMovedAsync(new Canvas2DPointerInput(7101, Css(finish), buttons: 1));
-            Assert.Equal(Canvas2DInteractionStatus.Updated, preview.Status);
+            Assert.True(preview.Status == Canvas2DInteractionStatus.Updated,
+                $"Pointer move {preview.Status}; press {pressed.Status} at {start}: {Diagnostics(pressed.Diagnostics)}; " +
+                $"hit={new Canvas2DSceneHitTestService().HitTest(State.CurrentScene!, start)?.SceneObjectId}");
             var result = await Controller.PointerReleasedAsync(new Canvas2DPointerInput(7101, Css(finish)));
             Assert.True(result.Status == Canvas2DInteractionStatus.Committed, Diagnostics(result.Diagnostics));
             await WaitForReadyAsync(Session);
@@ -510,6 +523,27 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
             await Controller.DisposeAsync();
             await Session.DisposeAsync();
         }
+    }
+
+    internal static async Task PrepareRegionCapacitiesAsync(EditingSession session, double height)
+    {
+        Assert.True(session.TryCaptureDocumentSnapshot(out var snapshot));
+        var scopeId = session.CaptureState().ActiveScopeId;
+        var regions = snapshot!.VisualModel.RoutingScopes!.Value.Single(scope => scope.ScopeId == scopeId).Geometry.Regions;
+        var capacity = Math.Max(height, regions.Max(static region => region.ExpandedHeight));
+        foreach (var region in regions)
+        {
+            if (region.ExpandedHeight >= capacity) continue;
+            var state = session.CaptureState();
+            await ExecuteAsync(session, new SetOrganizationalRegionExpandedHeightCommand(
+                state.DocumentId, state.DocumentRevision, scopeId, region.Id, capacity));
+        }
+    }
+
+    private static DocumentSnapshot CaptureCurrentDocument(EditingSession session)
+    {
+        Assert.True(session.TryCaptureDocumentSnapshot(out var snapshot));
+        return Assert.IsType<DocumentSnapshot>(snapshot);
     }
 
     private static SemanticElementId[] AssignedIds(

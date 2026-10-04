@@ -21,7 +21,7 @@ public sealed partial class OrganizationalPoolSceneContributorBoundsTests
     private static readonly SemanticElementId PoolBId = new("test:pool-bounds:b");
 
     [Fact]
-    public void SamePoolManualRouteAndLabelExpandEqualPoolBoundsWithoutSelfGrowth()
+    public void ConnectorAndConnectorLabelOverflowNeverSizesPoolFrames()
     {
         var inputs = Canvas2DSceneTestData.CreateWithPersistentRoute()
             .WithCrossingConnector();
@@ -107,21 +107,15 @@ public sealed partial class OrganizationalPoolSceneContributorBoundsTests
             region.ContainerSemanticElementId == PoolAId);
         var poolBRegion = plan.Regions.Single(region =>
             region.ContainerSemanticElementId == PoolBId);
-        var canonicalOwnedBounds = new RectD(-300d, -120d, 1130d, 580d);
-
-        Assert.Equal(
-            canonicalOwnedBounds.Right + 64d,
-            poolARegion.Bounds.Width);
-        Assert.Equal(
-            canonicalOwnedBounds.Bottom + 64d,
-            poolARegion.Bounds.Height);
+        Assert.Equal(564d, poolARegion.Bounds.Width);
+        Assert.Equal(314d, poolARegion.Bounds.Height);
         Assert.Equal(poolARegion.Bounds.Width, poolBRegion.Bounds.Width);
         var poolAFrame = PoolBackground(contribution, PoolAId).Bounds;
-        Assert.Equal(canonicalOwnedBounds.Width + 64d + 38d, poolAFrame.Width);
-        Assert.Equal(canonicalOwnedBounds.Height + 64d, poolAFrame.Height);
-        Assert.True(poolAFrame.Contains(poolARegion.MapLocalToScene(
+        Assert.Equal(602d, poolAFrame.Width);
+        Assert.Equal(314d, poolAFrame.Height);
+        Assert.False(poolAFrame.Contains(poolARegion.MapLocalToScene(
             Canvas2DSceneGeometry.Path(manualRoute).Bounds)));
-        Assert.True(poolAFrame.Contains(poolARegion.MapLocalToScene(
+        Assert.False(poolAFrame.Contains(poolARegion.MapLocalToScene(
             samePoolLabelBounds)));
         Assert.Equal(new PointD(110d, 72d), poolARegion.MapLocalToScene(new PointD(0d, 0d)));
         Assert.True(poolARegion.Bounds.Bottom < poolBRegion.Bounds.Top);
@@ -139,8 +133,7 @@ public sealed partial class OrganizationalPoolSceneContributorBoundsTests
 
         Assert.Equal(first, second);
 
-        // Even changing signed decoration must not move the canonical origin or expand an
-        // interaction band over another row. Only the non-hittable enclosure grows.
+        // Further route overflow changes neither the frame nor the interaction partition.
         var extendedRoute = manualRoute.Prepend(new PointD(-600d, -220d)).ToArray();
         var extendedConnector = ConnectorItem(samePoolEdge, extendedRoute);
         var expanded = contributor.Contribute(Context(inputs, graph, document, registration.Descriptor,
@@ -153,10 +146,9 @@ public sealed partial class OrganizationalPoolSceneContributorBoundsTests
             Assert.Equal(region, expandedPlan.Regions.Single(candidate => candidate.Id == region.Id));
         }
         var expandedFrame = PoolBackground(expandedContribution, PoolAId).Bounds;
-        Assert.True(expandedFrame.Contains(poolARegion.MapLocalToScene(
+        Assert.False(expandedFrame.Contains(poolARegion.MapLocalToScene(
             Canvas2DSceneGeometry.Path(extendedRoute).Bounds)));
-        Assert.Equal(poolAFrame.Width + 300d, expandedFrame.Width);
-        Assert.Equal(poolAFrame.Height + 100d, expandedFrame.Height);
+        Assert.Equal(poolAFrame, expandedFrame);
         Assert.Equal(expandedFrame.Width, PoolBackground(expandedContribution, PoolBId).Bounds.Width);
     }
 

@@ -28,6 +28,7 @@ public sealed partial class DocumentCanvasHostTests
         await host.InitializeAsync("release-demo-labels", "release-demo-container");
         var session = Session(host);
         var document = AttachedDocument(session);
+        initial = document.CaptureSnapshot();
         var flowId = new SemanticElementId(relationshipId);
         var flow = document.SemanticModel.Relationships.Single(item => item.Id == flowId);
         Assert.Equal(expectedName, flow.Properties[BpmnSemanticProperties.Name].TextValue);
@@ -123,14 +124,7 @@ public sealed partial class DocumentCanvasHostTests
         Assert.Equal(flowId, menu.ConnectorLabelAction?.RelationshipId);
         Assert.Equal(manual, menu.ConnectorLabelAction?.ManualPlacement);
         Assert.Equal(DiagramDeletionTargetKind.Connection, menu.DeletionAction?.TargetKind);
-        if (!labelOrigin)
-        {
-            Assert.Equal(Canvas2DConnectorRouteContextActionKind.AddPoint, menu.ConnectorRouteAction?.Kind);
-        }
-        else
-        {
-            Assert.Null(menu.ConnectorRouteAction);
-        }
+        Assert.Null(menu.ConnectorRouteAction);
         var before = document.CaptureSnapshot();
         var history = session.CaptureState().HistoryStatus.EntryCount;
         var hoverTask = menu.SourceScene.Items.Last(item => item.Layer == Canvas2DSceneLayer.Content &&

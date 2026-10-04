@@ -145,7 +145,7 @@ public sealed partial class DocumentCanvasHostTests
         Assert.Equal(nativeEnglish.Payload.ToArray(), NativeDocumentSerializer.Export(imported.Document!).ToArray());
         using var nativeJson = JsonDocument.Parse(nativeLocalized.Payload.AsMemory());
         Assert.Equal("Inceptus.Document", nativeJson.RootElement.GetProperty("format").GetString());
-        Assert.Equal(1, nativeJson.RootElement.GetProperty("formatVersion").GetInt32());
+        Assert.Equal(2, nativeJson.RootElement.GetProperty("formatVersion").GetInt32());
         using var publishedJson = JsonDocument.Parse(ReadPublishedArchive(publishedLocalized.Payload)["process.json"]);
         Assert.Equal("Inceptus.PublishedProcess", publishedJson.RootElement.GetProperty("format").GetString());
         Assert.Equal(1, publishedJson.RootElement.GetProperty("formatVersion").GetInt32());

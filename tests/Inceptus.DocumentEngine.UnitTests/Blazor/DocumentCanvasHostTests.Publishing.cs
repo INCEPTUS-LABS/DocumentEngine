@@ -21,6 +21,7 @@ using Inceptus.DocumentEngine.Contracts.Geometry;
 using Inceptus.DocumentEngine.Contracts.Primitives;
 using Inceptus.DocumentEngine.Contracts.Profiles;
 using Inceptus.DocumentEngine.Contracts.Publishing;
+using Inceptus.DocumentEngine.Contracts.Routing;
 using Inceptus.DocumentEngine.Contracts.Visuals;
 using Inceptus.DocumentEngine.Organizational.Commands;
 using Inceptus.DocumentEngine.Organizational.Profiles;
@@ -715,7 +716,7 @@ public sealed partial class DocumentCanvasHostTests
     }
 
     [Fact]
-    public async Task PublishUsesExpandedOrganizationalGeometryWithoutDecorationsOrStateMutation()
+    public async Task PublishRejectsHiddenOrganizationalContentsAndUsesCurrentGeometryAfterExplicitExpand()
     {
         var execution = new RecordingRenderExecution();
         var observer = new RecordingSurfaceObserver(new Canvas2DSurfaceSize(1600d, 1000d, 1d));
@@ -770,6 +771,9 @@ public sealed partial class DocumentCanvasHostTests
         var bend = new PointD(
             (firstRoute[0].X + firstRoute[^1].X) / 2d,
             Math.Max(firstRoute[0].Y, firstRoute[^1].Y) + 47d);
+        await ExecutePublishCommandAsync(session, new SetConnectorRoutingTypeCommand(
+            document.DocumentId, document.Revision, BpmnDemoPipeline.FirstSequenceFlowVisualId,
+            ConnectorRoutingType.Manual));
         await ExecutePublishCommandAsync(session, new UpdateConnectionRouteCommand(
             document.DocumentId,
             document.Revision,
@@ -781,7 +785,8 @@ public sealed partial class DocumentCanvasHostTests
         Assert.True((await session.UpdateModelProfileViewStateAsync(shown)).Succeeded);
         var collapsed = session.CaptureState().ModelProfileElementViewState
             .WithCollapsed(OrganizationalModelProfile.Id, poolA, isCollapsed: true);
-        Assert.True((await session.UpdateModelProfileElementViewStateAsync(collapsed)).Succeeded);
+        var collapsedResult = await session.UpdateModelProfileElementViewStateAsync(collapsed);
+        Assert.True(collapsedResult.Succeeded, PublishDiagnostics(collapsedResult.Diagnostics));
         await session.WaitForIdleAsync();
         var before = session.CaptureState();
         var beforeDocument = document.CaptureSnapshot();
@@ -800,17 +805,25 @@ public sealed partial class DocumentCanvasHostTests
             item.Layer == Canvas2DSceneLayer.Content &&
             item.Origin.SemanticElementId == poolAElement);
 
+        var rejected = await host.PublishProcessAsync();
+        Assert.Equal(PublishedProcessHostOperationStatus.Rejected, rejected.Status);
+        Assert.Empty(rejected.Payload);
+        Assert.Contains(rejected.Diagnostics, diagnostic => diagnostic.Code == "PUBLISH_CONNECTOR_ROUTE_MISSING");
+        Assert.Same(beforeDocument, document.CaptureSnapshot());
+        Assert.Equal(before.ModelProfileElementViewState, session.CaptureState().ModelProfileElementViewState);
+        Assert.Equal(before.HistoryStatus, session.CaptureState().HistoryStatus);
+
+        Assert.True((await session.UpdateModelProfileElementViewStateAsync(
+            collapsed.WithCollapsed(OrganizationalModelProfile.Id, poolA, isCollapsed: false))).Succeeded);
+        await session.WaitForIdleAsync();
+        before = session.CaptureState();
         var published = await host.PublishProcessAsync();
 
         Assert.True(published.Succeeded, PublishDiagnostics(published.Diagnostics));
         var entries = ReadPublishedArchive(published.Payload);
         var packageJson = entries["process.json"];
-        var publishView = before.ModelProfileViewState
-            .WithPreferredVisibility(OrganizationalModelProfile.Id, isVisible: false);
-        var publishElements = new ModelProfileElementViewStateSnapshot(
-            before.ModelProfileElementViewState.CollapsedElements.Where(entry =>
-                entry.ProfileId != OrganizationalModelProfile.Id));
-        var captureResult = await session.CapturePresentationAsync(publishView, publishElements);
+        var captureResult = await session.CapturePresentationAsync(
+            before.ModelProfileViewState, before.ModelProfileElementViewState);
         Assert.True(captureResult.Succeeded, PublishDiagnostics(captureResult.Diagnostics));
         var capture = Assert.IsType<EditingSessionPresentationCapture>(captureResult.Capture);
         var directBuild = new PublishedProcessPackageBuilder(

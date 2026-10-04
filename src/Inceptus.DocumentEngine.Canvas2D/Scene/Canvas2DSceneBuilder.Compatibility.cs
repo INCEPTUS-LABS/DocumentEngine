@@ -142,7 +142,16 @@ public sealed partial class Canvas2DSceneBuilder
         var expectedEdgeIds = CopyProjectedIds(graph.Edges, diagnostics);
         var edgesById = graph.Edges.ToDictionary(static edge => edge.Id);
         var portsById = graph.Ports.ToDictionary(static port => port.Id);
-        var layoutNodesById = layout.Nodes.ToDictionary(static node => node.ProjectedObjectId);
+        var routingLayout = routing.LogicalGeometry?.Layout ?? layout;
+        if (routing.LogicalGeometry is not null)
+        {
+            ValidateLayoutCompatibility(graph, routingLayout, diagnostics);
+            if (routingLayout.AlgorithmId != layout.AlgorithmId)
+                diagnostics.Add(Error(Canvas2DSceneDiagnosticCodes.IncompatibleRoutingResult,
+                    "Expanded routing geometry must use the current node layout policy.", "RoutingLogicalGeometry"));
+            if (HasErrors(diagnostics)) return;
+        }
+        var layoutNodesById = routingLayout.Nodes.ToDictionary(static node => node.ProjectedObjectId);
         var actualEdgeIds = new HashSet<ProjectedObjectId>();
         foreach (var route in routing.Routes)
         {
@@ -178,7 +187,10 @@ public sealed partial class Canvas2DSceneBuilder
             {
                 diagnostics.Add(Error(
                     Canvas2DSceneDiagnosticCodes.IncompatibleRoutingResult,
-                    $"Routing geometry '{route.ProjectedEdgeId}' is not compatible with its projected endpoints and Layout geometry.",
+                    $"Routing geometry '{route.ProjectedEdgeId}' is not compatible with its projected endpoints and Layout geometry. " +
+                    $"Space: {(routing.LogicalGeometry is null ? "canonical" : "scope-logical")}; " +
+                    $"source {route.SourceAnchor} in {layoutNodesById.GetValueOrDefault(edge.SourceNodeId)?.Bounds}; " +
+                    $"target {route.DestinationAnchor} in {layoutNodesById.GetValueOrDefault(edge.TargetNodeId)?.Bounds}.",
                     route.ProjectedEdgeId.Value));
             }
         }

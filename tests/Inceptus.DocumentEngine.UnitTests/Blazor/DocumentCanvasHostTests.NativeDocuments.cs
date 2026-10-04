@@ -1,6 +1,8 @@
 using System.Text;
 using System.Text.Json.Nodes;
 using Inceptus.DocumentEngine.Bpmn.Blazor.Components;
+using Inceptus.DocumentEngine.Bpmn.Blazor.Composition;
+using Inceptus.DocumentEngine.Bpmn.Semantics;
 using Inceptus.DocumentEngine.Blazor.Demo;
 using Inceptus.DocumentEngine.Bpmn.Blazor.Presentation;
 using Inceptus.DocumentEngine.Canvas2D.EditingSession;
@@ -26,7 +28,7 @@ public sealed partial class DocumentCanvasHostTests
     {
         var execution = new RecordingRenderExecution();
         var observer = new RecordingSurfaceObserver(new Canvas2DSurfaceSize(900d, 600d, 1d));
-        await using var host = CreateHost(execution, observer);
+        await using var host = CreateNativeTestHost(execution, observer);
         await host.InitializeAsync("active-canvas", "standby-canvas", "container");
         var session = Session(host);
         var selectedVisualId = session.CaptureState().CurrentScene!.Items
@@ -69,7 +71,7 @@ public sealed partial class DocumentCanvasHostTests
         var execution = new RecordingRenderExecution();
         var replacementCreationCount = 0;
         var observer = new RecordingSurfaceObserver(new Canvas2DSurfaceSize(900d, 600d, 1d));
-        await using var host = CreateHost(
+        await using var host = CreateNativeTestHost(
             execution,
             observer,
             replacementRendererFactory: () =>
@@ -82,7 +84,7 @@ public sealed partial class DocumentCanvasHostTests
         var beforeState = session.CaptureState();
         Assert.True(session.TryCaptureDocumentSnapshot(out var beforeDocument));
         var payload = CorruptNativePayload(
-            NativeDocumentSerializer.Export(CreateImportedDocument(
+            NativeDocumentSerializer.Export(await CreatePreparedImportedDocumentAsync(
                 "test:n10.3:rejected",
                 31)),
             corruption);
@@ -110,7 +112,7 @@ public sealed partial class DocumentCanvasHostTests
     {
         var execution = new RecordingRenderExecution();
         var observer = new RecordingSurfaceObserver(new Canvas2DSurfaceSize(900d, 600d, 1d));
-        await using var host = CreateHost(execution, observer);
+        await using var host = CreateNativeTestHost(execution, observer);
         await host.InitializeAsync("canvas", "container");
         var session = Session(host);
         var before = session.CaptureState();
@@ -119,7 +121,7 @@ public sealed partial class DocumentCanvasHostTests
         cancellation.Cancel();
 
         var result = await host.ImportNativeDocumentAsync(
-            NativeDocumentSerializer.Export(CreateImportedDocument(
+            NativeDocumentSerializer.Export(await CreatePreparedImportedDocumentAsync(
                 "test:n10.3:cancelled",
                 39)).AsMemory(),
             cancellation.Token);
@@ -143,12 +145,12 @@ public sealed partial class DocumentCanvasHostTests
         var initialExecution = new RecordingRenderExecution();
         var replacementExecution = new RecordingRenderExecution();
         var observer = new RecordingSurfaceObserver(new Canvas2DSurfaceSize(900d, 600d, 1d));
-        await using var host = CreateHost(
+        await using var host = CreateNativeTestHost(
             initialExecution,
             observer,
             replacementRendererFactory: () => CreateRenderer(replacementExecution));
         await host.InitializeAsync("active-canvas", "standby-canvas", "container");
-        var importedDocument = CreateImportedDocument("test:n10.3:bounded-file", 40);
+        var importedDocument = await CreatePreparedImportedDocumentAsync("test:n10.3:bounded-file", 40);
         var payload = NativeDocumentSerializer.Export(importedDocument).ToArray();
         var file = new RecordingBrowserFile(payload, payload.LongLength);
 
@@ -171,7 +173,7 @@ public sealed partial class DocumentCanvasHostTests
     {
         var execution = new RecordingRenderExecution();
         var observer = new RecordingSurfaceObserver(new Canvas2DSurfaceSize(900d, 600d, 1d));
-        await using var host = CreateHost(
+        await using var host = CreateNativeTestHost(
             execution,
             observer,
             replacementRendererFactory: () =>
@@ -258,7 +260,7 @@ public sealed partial class DocumentCanvasHostTests
             ? () => throw new InvalidOperationException("Replacement creation failed.")
             : () => CreateRenderer(replacementExecution);
         var observer = new RecordingSurfaceObserver(new Canvas2DSurfaceSize(900d, 600d, 1d));
-        await using var host = CreateHost(
+        await using var host = CreateNativeTestHost(
             initialExecution,
             observer,
             replacementRendererFactory: replacementFactory);
@@ -335,7 +337,7 @@ public sealed partial class DocumentCanvasHostTests
         var replacements = new Queue<RecordingRenderExecution>(
             [firstImportExecution, secondImportExecution]);
         var observer = new RecordingSurfaceObserver(new Canvas2DSurfaceSize(900d, 600d, 1d));
-        await using var host = CreateHost(
+        await using var host = CreateNativeTestHost(
             initialExecution,
             observer,
             replacementRendererFactory: () => CreateRenderer(replacements.Dequeue()));
@@ -352,7 +354,7 @@ public sealed partial class DocumentCanvasHostTests
         await initialSession.WaitForIdleAsync();
         Assert.NotNull(await host.ValidateAsync());
         Assert.NotNull(host.CaptureState().ValidationSnapshot);
-        var documentA = CreateImportedDocument("test:n10.3:document-a", 41);
+        var documentA = await CreatePreparedImportedDocumentAsync("test:n10.3:document-a", 41);
         var bytesA = NativeDocumentSerializer.Export(documentA);
 
         var importA = await host.ImportNativeDocumentAsync(bytesA.AsMemory());
@@ -385,7 +387,7 @@ public sealed partial class DocumentCanvasHostTests
         Assert.True(exportA.Succeeded);
         Assert.True(bytesA.AsSpan().SequenceEqual(exportA.Payload.AsSpan()));
 
-        var documentB = CreateImportedDocument("test:n10.3:document-b", 77);
+        var documentB = await CreatePreparedImportedDocumentAsync("test:n10.3:document-b", 77);
         var bytesB = NativeDocumentSerializer.Export(documentB);
         var importB = await host.ImportNativeDocumentAsync(bytesB.AsMemory());
 
@@ -406,6 +408,35 @@ public sealed partial class DocumentCanvasHostTests
         Assert.True(exportB.Succeeded);
         Assert.True(bytesB.AsSpan().SequenceEqual(exportB.Payload.AsSpan()));
         Assert.Empty(replacements);
+    }
+
+    private static DocumentCanvasHost CreateNativeTestHost(RecordingRenderExecution execution,
+        RecordingSurfaceObserver observer, Func<Canvas2DRenderer>? replacementRendererFactory = null)
+    {
+        var id = new DocumentId("test:native:startup");
+        var elementId = new SemanticElementId("test:native:startup:task");
+        var snapshot = new DocumentSnapshot(
+            new SemanticModelSnapshot(id, DocumentRevision.Zero,
+                [BpmnSemanticFactory.CreateTask(elementId, "TASK", "Task", 1, "Native save fixture")]),
+            new VisualModelSnapshot(id, DocumentRevision.Zero,
+                [new VisualStateSnapshot(new VisualStateId("test:native:startup:task:visual"), elementId,
+                    new PointD(40, 40), new SizeD(120, 80), VisualPlacementMode.Manual)]),
+            new DocumentMetadataSnapshot(id, DocumentRevision.Zero));
+        return CreateHost(execution, observer,
+            compositionFactory: new BpmnModelerCompositionFactory(initialDocument: snapshot),
+            replacementRendererFactory: replacementRendererFactory);
+    }
+
+    private static async Task<Document> CreatePreparedImportedDocumentAsync(string id, ulong revision)
+    {
+        var snapshot = CreateImportedDocument(id, revision).CaptureSnapshot();
+        var observer = new RecordingSurfaceObserver(new Canvas2DSurfaceSize(900, 600, 1));
+        await using var host = CreateHost(new RecordingRenderExecution(), observer,
+            compositionFactory: new BpmnModelerCompositionFactory(initialDocument: snapshot));
+        await host.InitializeAsync("prepared-fixture", "container");
+        Assert.True(Session(host).TryCaptureDocumentSnapshot(out var prepared));
+        Assert.NotNull(prepared.VisualModel.RoutingScopes);
+        return Assert.IsType<Document>(DocumentReconstructor.Reconstruct(prepared).Document);
     }
 
     private static Document CreateImportedDocument(string id, ulong revision)

@@ -117,7 +117,8 @@ internal sealed class OrganizationalSnapshotRestoreCommandFactory : IHistoryComm
                 documentId,
                 expectedRevision,
                 _visualModel.VisualStates,
-                _visualModel.ProfileElementPresentations));
+                _visualModel.ProfileElementPresentations,
+                _visualModel.RoutingScopes));
 }
 
 internal sealed class RestoreOrganizationalSnapshotCommand : ICommand,

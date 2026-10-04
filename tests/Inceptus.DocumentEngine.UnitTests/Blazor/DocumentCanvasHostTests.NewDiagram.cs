@@ -16,6 +16,7 @@ using Inceptus.DocumentEngine.Contracts.Metadata;
 using Inceptus.DocumentEngine.Contracts.Primitives;
 using Inceptus.DocumentEngine.Contracts.Profiles;
 using Inceptus.DocumentEngine.Contracts.Properties;
+using Inceptus.DocumentEngine.Contracts.Routing;
 using Inceptus.DocumentEngine.Contracts.Toolbox;
 using Inceptus.DocumentEngine.Runtime.Documents;
 
@@ -44,6 +45,10 @@ public sealed partial class DocumentCanvasHostTests
         await EnableOrganizationalProfileAsync(oldSession);
         var firstPool = await AddOrganizationalPoolFromMenuAsync(host);
         _ = await AddOrganizationalPoolFromMenuAsync(host);
+        Assert.True((await oldSession.ExecuteAsync(new SetConnectorRoutingTypeCommand(
+            oldDocument.DocumentId, oldDocument.Revision,
+            BpmnDemoPipeline.FirstSequenceFlowVisualId, ConnectorRoutingType.Manual))).IsCommitted);
+        await oldSession.WaitForIdleAsync();
         var routed = oldSession.CaptureState();
         var firstEdge = routed.ProjectedGraph!.Edges.Single(edge =>
             edge.Source.SemanticElementId == BpmnDemoPipeline.FirstSequenceFlowId);
@@ -97,8 +102,8 @@ public sealed partial class DocumentCanvasHostTests
         Assert.NotEmpty(oldSnapshot.VisualModel.ProfileElementPresentations);
         Assert.Contains(oldSnapshot.VisualModel.VisualStates, static visual =>
             !visual.ConnectorAnchors.IsEmpty);
-        Assert.Contains(oldSnapshot.VisualModel.VisualStates, static visual =>
-            !visual.Route.IsEmpty);
+        Assert.Contains(oldSnapshot.VisualModel.RoutingScopes!.Value.SelectMany(static scope => scope.Connectors),
+            static connector => connector.RoutingType == ConnectorRoutingType.Manual && !connector.Path.IsEmpty);
         Assert.Contains(oldSnapshot.VisualModel.VisualStates, static visual =>
             visual.BoundaryAttachment is not null);
         Assert.NotEmpty(oldSnapshot.Metadata.SystemManagedProperties);

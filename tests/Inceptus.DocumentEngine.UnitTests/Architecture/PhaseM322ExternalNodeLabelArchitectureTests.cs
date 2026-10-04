@@ -104,15 +104,28 @@ public sealed class PhaseM322ExternalNodeLabelArchitectureTests
             "Inceptus.DocumentEngine.Bpmn",
             "Scene",
             "BpmnCanvas2DSceneContributor.cs");
+        var placementPolicySource = ReadProductionFile(
+            "Inceptus.DocumentEngine.Bpmn",
+            "Visuals",
+            "BpmnNodeLabelPlacementPolicy.cs");
+        var previewProviderSource = ReadProductionFile(
+            "Inceptus.DocumentEngine.Bpmn",
+            "Placement",
+            "BpmnToolboxPlacementPreviewProvider.cs");
 
         Assert.Contains(nameof(NodeLabelPlacement), projectionSource, StringComparison.Ordinal);
-        Assert.Contains("NodeLabelPlacementKind.OutsideBelow", registrationSource,
+        Assert.Contains("BpmnNodeLabelPlacementPolicy.OutsideBelow", registrationSource,
             StringComparison.Ordinal);
-        Assert.DoesNotContain("MeasureText", projectionSource + registrationSource,
+        Assert.Contains("NodeLabelPlacementKind.OutsideBelow", placementPolicySource,
             StringComparison.Ordinal);
-        Assert.DoesNotContain("Wrap", projectionSource + registrationSource,
+        Assert.Contains("BpmnNodeLabelPlacementPolicy.Resolve", previewProviderSource,
+            StringComparison.Ordinal);
+        var placementSources = projectionSource + registrationSource + placementPolicySource +
+            previewProviderSource + contributorSource;
+        Assert.DoesNotContain("MeasureText", placementSources, StringComparison.Ordinal);
+        Assert.DoesNotContain("Wrap", placementSources,
             StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("Canvas2DSceneGeometry.Text", contributorSource,
+        Assert.DoesNotContain("Canvas2DSceneGeometry.Text", placementSources,
             StringComparison.Ordinal);
         Assert.DoesNotContain("Approved?", contributorSource, StringComparison.Ordinal);
     }

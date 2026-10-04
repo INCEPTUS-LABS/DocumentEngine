@@ -165,6 +165,7 @@ class CanvasPointerObserver {
     #captureGeneration = 0;
     #nextCaptureGeneration = 1;
     #lastCapturedInput = null;
+    #lastSurfaceInput = null;
     #onPointerDown;
     #onPointerMove;
     #onPointerUp;
@@ -175,6 +176,7 @@ class CanvasPointerObserver {
     #onDoubleClick;
     #onAuxClick;
     #onWheel;
+    #onWindowBlur;
 
     constructor(canvas, dotNetReference) {
         this.#canvas = canvas;
@@ -189,6 +191,7 @@ class CanvasPointerObserver {
         this.#onDoubleClick = event => this.#captureDoubleClick(event);
         this.#onAuxClick = event => this.#captureAuxClick(event);
         this.#onWheel = event => this.#captureWheel(event);
+        this.#onWindowBlur = () => this.#captureFocusLoss();
     }
 
     start() {
@@ -210,6 +213,7 @@ class CanvasPointerObserver {
         this.#canvas.addEventListener("dblclick", this.#onDoubleClick);
         this.#canvas.addEventListener("auxclick", this.#onAuxClick);
         this.#canvas.addEventListener("wheel", this.#onWheel, { passive: false });
+        window.addEventListener("blur", this.#onWindowBlur);
     }
 
     releaseCapture(captureGeneration) {
@@ -263,7 +267,9 @@ class CanvasPointerObserver {
             this.#canvas.removeEventListener("dblclick", this.#onDoubleClick);
             this.#canvas.removeEventListener("auxclick", this.#onAuxClick);
             this.#canvas.removeEventListener("wheel", this.#onWheel);
+            window.removeEventListener("blur", this.#onWindowBlur);
         }
+        this.#lastSurfaceInput = null;
         this.#pending = [];
         this.#dotNetReference = null;
         this.#canvas = null;
@@ -305,6 +311,7 @@ class CanvasPointerObserver {
         this.#captureGeneration = captureGeneration;
         const capturedInput = { ...input, captureGeneration };
         this.#lastCapturedInput = capturedInput;
+        this.#lastSurfaceInput = capturedInput;
         this.#enqueue(capturedInput);
     }
 
@@ -338,6 +345,22 @@ class CanvasPointerObserver {
         this.#captureInput(4, event);
     }
 
+    #captureFocusLoss() {
+        if (this.#disposed || !this.#started) {
+            return;
+        }
+
+        // Losing browser focus terminates surface input, including an uncaptured hover.
+        // Managed interaction decides which transient operation to retire.
+        const last = this.#lastCapturedInput ?? this.#lastSurfaceInput;
+        this.#lastSurfaceInput = null;
+        this.#canvas.style.cursor = "default";
+        this.#releaseCapture();
+        if (last) {
+            this.#enqueue({ ...last, kind: 3, button: -1, buttons: 0 });
+        }
+    }
+
     #captureLostPointerCapture(event) {
         if (!this.#canCapture(event) ||
             event.pointerId !== this.#capturedPointerId) {
@@ -348,6 +371,7 @@ class CanvasPointerObserver {
         this.#capturedPointerId = null;
         this.#captureGeneration = 0;
         this.#lastCapturedInput = null;
+        this.#lastSurfaceInput = null;
         this.#captureInput(3, event, captureGeneration);
     }
 
@@ -458,6 +482,7 @@ class CanvasPointerObserver {
     #captureInput(kind, event, captureGeneration = this.#captureGeneration) {
         const input = this.#createInput(kind, event, captureGeneration);
         if (input) {
+            this.#lastSurfaceInput = kind === 3 || kind === 4 ? null : input;
             if (input.pointerId === this.#capturedPointerId) {
                 this.#lastCapturedInput = input;
             }

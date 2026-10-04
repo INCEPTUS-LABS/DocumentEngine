@@ -1,6 +1,11 @@
 using System.Collections;
 using System.Reflection;
 using Inceptus.DocumentEngine.Canvas2D.Scene;
+using Inceptus.DocumentEngine.Canvas2D.EditingSession;
+using Inceptus.DocumentEngine.Canvas2D.Rendering;
+using Inceptus.DocumentEngine.Contracts.Canvas2D;
+using Inceptus.DocumentEngine.Contracts.Routing;
+using Inceptus.DocumentEngine.Contracts.Text;
 using Inceptus.DocumentEngine.Contracts.Commands;
 using Inceptus.DocumentEngine.Contracts.Documents;
 using Inceptus.DocumentEngine.Contracts.EditorState;
@@ -88,10 +93,21 @@ public sealed class PhaseD2EditingSessionArchitectureTests
 
             var signatureTypes = PublicDataAndOperationSignatureTypes(type).ToArray();
             Assert.DoesNotContain(signatureTypes, IsMutableCollectionType);
-            Assert.DoesNotContain(signatureTypes, signatureType =>
+            // The approved preparation service accepts the existing text boundary and its
+            // immutable request factory; these are not new resources on EditingSession.
+            var observedTypes = type == typeof(ConnectorRoutingStatePreparer)
+                ? signatureTypes.Where(static signatureType => signatureType != typeof(Canvas2DRenderer) &&
+                    signatureType != typeof(Func<string, Canvas2DSceneStyle, double, TextMeasurementRequest>))
+                : signatureTypes;
+            Assert.DoesNotContain(observedTypes, signatureType =>
                 signatureType == typeof(IServiceProvider) ||
                 typeof(Delegate).IsAssignableFrom(signatureType) ||
                 IsForbiddenHostOrBrowserType(signatureType));
+            if (type == typeof(ConnectorRoutingStatePreparer))
+            {
+                Assert.True(typeof(IConnectorRoutingStatePreparer).IsAssignableFrom(type));
+                Assert.Equal([2, 3], type.GetConstructors().Select(static constructor => constructor.GetParameters().Length).Order());
+            }
 
             var events = type.GetEvents(
                 BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static |

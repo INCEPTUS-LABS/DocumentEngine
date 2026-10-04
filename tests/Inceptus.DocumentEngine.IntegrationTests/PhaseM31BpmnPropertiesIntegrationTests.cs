@@ -589,8 +589,9 @@ public sealed class PhaseM31BpmnPropertiesIntegrationTests
             var surface = new RecordingSurfaceObserver(
                 new Canvas2DSurfaceSize(900d, 600d, 1.25d));
             var pointer = new RecordingPointerObserver();
+            var factory = new FixedCompositionFactory(composition, renderer);
             var host = new DocumentCanvasHost(
-                new FixedCompositionFactory(composition),
+                factory,
                 renderer,
                 new RecordingSurfaceObserverFactory(surface),
                 new RecordingPointerObserverFactory(pointer));
@@ -599,7 +600,7 @@ public sealed class PhaseM31BpmnPropertiesIntegrationTests
             var state = host.CaptureState();
             Assert.True(state.IsInitialized);
             Assert.Equal(EditingSessionStatus.Ready, state.Session?.Status);
-            return new HostHarness(host, composition, pointer, execution);
+            return new HostHarness(host, factory.Composition, pointer, execution);
         }
 
         internal async Task<DocumentCanvasPropertySnapshot> OpenNodePropertiesAsync(
@@ -620,14 +621,19 @@ public sealed class PhaseM31BpmnPropertiesIntegrationTests
         public ValueTask DisposeAsync() => Host.DisposeAsync();
     }
 
-    private sealed class FixedCompositionFactory(DocumentCanvasComposition composition) :
+    private sealed class FixedCompositionFactory(DocumentCanvasComposition composition, Canvas2DRenderer renderer) :
         IDocumentCanvasCompositionFactory
     {
-        public ValueTask<DocumentCanvasComposition> CreateAsync(
+        internal DocumentCanvasComposition Composition { get; private set; } = composition;
+
+        public async ValueTask<DocumentCanvasComposition> CreateAsync(
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            return ValueTask.FromResult(composition);
+            var document = await BpmnModelerTestComposition.PrepareFreshDocumentAsync(
+                Composition.Document, Composition.Configuration, renderer);
+            Composition = BpmnModelerTestComposition.WithDocument(Composition, document);
+            return Composition;
         }
     }
 

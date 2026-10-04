@@ -162,4 +162,16 @@
   <data name="Validation_MinHeight" xml:space="preserve"><value>Die Höhe muss mindestens {0} betragen.</value></data>
   <data name="Validation_Bounds" xml:space="preserve"><value>Die angegebenen Abmessungen müssen endlich und darstellbar sein.</value></data>
   <data name="Validation_Finite" xml:space="preserve"><value>Das Feld „{0}“ muss eine endliche Zahl enthalten.</value></data>
+  <data name="Status_PlacementAllowed" xml:space="preserve"><value>Platzierung möglich. Zum Einfügen klicken; Escape zum Abbrechen.</value></data>
+  <data name="Status_PlacementRejected" xml:space="preserve"><value>Platzierung nicht möglich. Andere Position wählen oder Escape drücken.</value></data>
+  <data name="Properties_RoutingType" xml:space="preserve"><value>Linienführung</value></data>
+  <data name="RoutingType_Automatic" xml:space="preserve"><value>Automatisch</value></data>
+  <data name="RoutingType_Straight" xml:space="preserve"><value>Gerade</value></data>
+  <data name="RoutingType_Manual" xml:space="preserve"><value>Manuell</value></data>
+  <data name="Properties_RoutingApplyRule" xml:space="preserve"><value>Name und Linienführung getrennt übernehmen.</value></data>
+  <data name="Validation_RoutingType" xml:space="preserve"><value>Wählen Sie eine unterstützte Linienführung.</value></data>
+  <data name="Status_RegionHeight" xml:space="preserve"><value>Höhe</value></data>
+  <data name="Status_RegionWidth" xml:space="preserve"><value>Stapelbreite</value></data>
+  <data name="Status_RegionResizeAllowed" xml:space="preserve"><value>{0}: {1} (Minimum {2}). Zum Ändern ziehen; Escape bricht ab.</value></data>
+  <data name="Status_RegionResizeRejected" xml:space="preserve"><value>{0}: {1} abgelehnt (Minimum {2}). Alle Elementkörper müssen passen; Escape bricht ab.</value></data>
 </root>

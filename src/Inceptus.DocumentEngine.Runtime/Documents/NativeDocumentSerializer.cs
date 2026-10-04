@@ -24,7 +24,7 @@ public static class NativeDocumentSerializer
     /// <summary>
     /// Gets the only native format version supported by this implementation.
     /// </summary>
-    public static int FormatVersion => 1;
+    public static int FormatVersion => 2;
 
     /// <summary>
     /// Exports one coherent authoritative Document snapshot as deterministic UTF-8 JSON.
@@ -42,6 +42,14 @@ public static class NativeDocumentSerializer
     public static ImmutableArray<byte> Export(DocumentSnapshot snapshot)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
+        var diagnostics = DocumentInvariantValidator.ValidateRoutingState(snapshot, requirePrepared: true);
+        if (!diagnostics.IsEmpty)
+        {
+            throw new ArgumentException(
+                "Native v2 export requires complete coherent prepared routing state: " +
+                string.Join("; ", diagnostics.Select(static diagnostic => diagnostic.Message)),
+                nameof(snapshot));
+        }
         return NativeDocumentJsonCodec.Write(snapshot);
     }
 
@@ -55,6 +63,11 @@ public static class NativeDocumentSerializer
         try
         {
             var snapshot = NativeDocumentJsonCodec.Read(utf8Json);
+            var diagnostics = DocumentInvariantValidator.ValidateRoutingState(snapshot, requirePrepared: true, connectorAnchorPolicyProvider);
+            if (!diagnostics.IsEmpty)
+            {
+                return DocumentConstructionResult.Failure(diagnostics);
+            }
             return DocumentReconstructor.Reconstruct(
                 snapshot,
                 connectorAnchorPolicyProvider);

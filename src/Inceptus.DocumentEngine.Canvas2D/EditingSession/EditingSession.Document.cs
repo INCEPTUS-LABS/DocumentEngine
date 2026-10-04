@@ -65,7 +65,7 @@ public sealed partial class EditingSession
     {
         lock (_sync)
         {
-            if (_closing || _closed || _document is null)
+            if (_closing || _closed || _document is null || _commandGate.CurrentCount == 0)
             {
                 snapshot = null;
                 return false;
@@ -73,6 +73,25 @@ public sealed partial class EditingSession
 
             snapshot = _document.CaptureSnapshot();
             return true;
+        }
+    }
+
+    /// <summary>Waits for accepted mutations and captures one completely installed revision.</summary>
+    public async ValueTask<DocumentSnapshot?> CaptureDocumentSnapshotAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await _commandGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            lock (_sync)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return _closing || _closed ? null : _document?.CaptureSnapshot();
+            }
+        }
+        finally
+        {
+            _commandGate.Release();
         }
     }
 }

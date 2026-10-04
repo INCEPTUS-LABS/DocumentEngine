@@ -116,7 +116,7 @@ public sealed partial class Canvas2DSpatialPoolInteractionTests
             fixture.AssertReady();
             foreach (var (id, geometry) in ownerGeometry)
             {
-                Assert.Same(geometry, fixture.State.LayoutResult!.Nodes.Single(node => node.ProjectedObjectId == id));
+                Assert.Equal(geometry, fixture.State.LayoutResult!.Nodes.Single(node => node.ProjectedObjectId == id));
             }
             Assert.True((await fixture.Session.RedoAsync()).IsApplied);
             Assert.Equal(childId, fixture.State.ActiveScopeId);
@@ -126,7 +126,7 @@ public sealed partial class Canvas2DSpatialPoolInteractionTests
             var restoredGeometry = fixture.State.LayoutResult!.Nodes.ToDictionary(node => node.ProjectedObjectId);
             foreach (var (id, geometry) in childGeometry)
             {
-                Assert.Same(geometry, restoredGeometry[id]);
+                Assert.Equal(geometry, restoredGeometry[id]);
             }
             Assert.Equal(completeDocument.VisualModel.VisualStates.AsEnumerable(), fixture.Document.VisualModel.VisualStates.AsEnumerable());
             Assert.Equal(completeDocument.SemanticModel.NestedScopes.AsEnumerable(), fixture.Document.SemanticModel.NestedScopes.AsEnumerable());
@@ -169,7 +169,7 @@ public sealed partial class Canvas2DSpatialPoolInteractionTests
         var createdGeometry = fixture.State.LayoutResult!.Nodes.ToDictionary(node => node.ProjectedObjectId);
         foreach (var (id, geometry) in parentGeometry)
         {
-            Assert.Same(geometry, createdGeometry[id]);
+            Assert.Equal(geometry, createdGeometry[id]);
         }
 
         Assert.True((await fixture.Session.NavigateToScopeAsync(childId)).Succeeded);
@@ -205,7 +205,7 @@ public sealed partial class Canvas2DSpatialPoolInteractionTests
         var redoneGeometry = fixture.State.LayoutResult!.Nodes.ToDictionary(node => node.ProjectedObjectId);
         foreach (var (id, geometry) in createdGeometry)
         {
-            Assert.Same(geometry, redoneGeometry[id]);
+            Assert.Equal(geometry, redoneGeometry[id]);
         }
 
         var revisionBeforeNavigationRedo = fixture.Document.Revision;

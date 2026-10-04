@@ -20,6 +20,15 @@ namespace Inceptus.DocumentEngine.IntegrationTests;
 
 public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
 {
+    private static void AssertSpatialGeometryUnchanged(Canvas2DSpatialPresentationPlan expected, Canvas2DSpatialPresentationPlan actual)
+    {
+        Assert.Equal(expected.Regions.AsEnumerable(), actual.Regions.AsEnumerable());
+        Assert.Equal(expected.VisualPlacements.AsEnumerable(), actual.VisualPlacements.AsEnumerable());
+        Assert.Equal(expected.CanonicalGuidanceToSceneTransform, actual.CanonicalGuidanceToSceneTransform);
+        Assert.Equal(expected.CoordinateMap, actual.CoordinateMap);
+        Assert.Equal(expected.MovementBottomBoundaryRegionId, actual.MovementBottomBoundaryRegionId);
+    }
+
     [Theory]
     [InlineData(0.6d)]
     [InlineData(0.8d)]
@@ -60,7 +69,8 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
             Assert.Same(original.RoutingResult, current.RoutingResult);
             Assert.Same(validation, fixture.Harness.Host.CaptureState().ValidationSnapshot);
             Assert.NotNull(current.CurrentScene!.SpatialPresentationPlan);
-            Assert.Equal(plan, current.CurrentScene.SpatialPresentationPlan);
+            AssertSpatialGeometryUnchanged(plan!, current.CurrentScene.SpatialPresentationPlan!);
+            Assert.Equal(visible, !current.CurrentScene.SpatialPresentationPlan!.ResizeTargets.IsEmpty);
             Assert.True(processItems.AsSpan().SequenceEqual(VisibilityProcessItems(current.CurrentScene)));
             if (visible)
             {
@@ -81,7 +91,7 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
         await using var fixture = await VisibilityFixture.CreateAsync();
         await fixture.SetVisibleAsync(false);
         var initial = fixture.State;
-        var route = fixture.Visual(VisibilityFixture.CrossFlow).Route;
+        var route = fixture.SavedRoute(VisibilityFixture.CrossFlow).ManualDefinition!.Value;
 
         await fixture.MoveAsync(VisibilityFixture.B1, null, new PointD(340d, 100d));
         await fixture.MoveAsync(VisibilityFixture.U1, PoolAId, new PointD(500d, 100d));
@@ -95,7 +105,7 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
         Assert.Equal(PoolBId, AssignedPool(fixture.Document, fixture.Visual(VisibilityFixture.U1).SemanticElementId));
         Assert.Equal(PoolBId, AssignedPool(fixture.Document, newTask.SemanticElementId));
         Assert.Null(AssignedPool(fixture.Document, newEvent.SemanticElementId));
-        Assert.Equal(route, fixture.Visual(VisibilityFixture.CrossFlow).Route);
+        Assert.Equal(route.AsEnumerable(), fixture.SavedRoute(VisibilityFixture.CrossFlow).ManualDefinition!.Value);
         Assert.Empty(VisibilityGraphics(fixture.State.CurrentScene!));
         var editedDocument = fixture.Document;
         var editedItems = VisibilityProcessItems(fixture.State.CurrentScene!);
@@ -105,7 +115,8 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
 
         Assert.Same(editedDocument, fixture.Document);
         Assert.True(editedItems.AsSpan().SequenceEqual(VisibilityProcessItems(fixture.State.CurrentScene!)));
-        Assert.Equal(editedPlan, fixture.State.CurrentScene!.SpatialPresentationPlan);
+        AssertSpatialGeometryUnchanged(editedPlan!, fixture.State.CurrentScene!.SpatialPresentationPlan!);
+        Assert.NotEmpty(fixture.State.CurrentScene.SpatialPresentationPlan!.ResizeTargets);
         Assert.NotEmpty(VisibilityGraphics(fixture.State.CurrentScene));
     }
 
@@ -144,7 +155,13 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
         Assert.False(fixture.State.ModelProfileViewState.IsPreferredVisible(OrganizationalModelProfile.Id));
         Assert.NotNull(fixture.State.CurrentScene!.SpatialPresentationPlan);
         Assert.Empty(VisibilityGraphics(fixture.State.CurrentScene));
-        Assert.True(hiddenItems.AsSpan().SequenceEqual(VisibilityProcessItems(fixture.State.CurrentScene)));
+        Assert.Equal(hiddenItems.Where(Canvas2DNodeBodyMetadata.IsNodeBody),
+            VisibilityProcessItems(fixture.State.CurrentScene).Where(Canvas2DNodeBodyMetadata.IsNodeBody));
+        Assert.Equal(hidden.CurrentScene!.SpatialPresentationPlan, fixture.State.CurrentScene.SpatialPresentationPlan);
+        Assert.Equal(fixture.SavedRoute(VisibilityFixture.CrossFlow).Path.AsEnumerable(),
+            Canvas2DConnectorPathMetadata.Resolve(Assert.Single(fixture.State.CurrentScene.Items, item =>
+                item.Origin.VisualStateId == VisibilityFixture.CrossFlow && item.Layer == Canvas2DSceneLayer.Connector &&
+                item.Metadata.ContainsKey(Canvas2DConnectorPathMetadata.LogicalPathPointCount))));
         AssertEquivalentIgnoringRevision(original, fixture.Document);
     }
 
@@ -207,7 +224,8 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
             Assert.Equal(collapsed.ModelProfileElementViewState, fixture.State.ModelProfileElementViewState);
             Assert.Equal(collapsed.DocumentRevision, fixture.State.DocumentRevision);
             Assert.Equal(collapsed.HistoryStatus, fixture.State.HistoryStatus);
-            Assert.Equal(collapsed.CurrentScene!.SpatialPresentationPlan, fixture.State.CurrentScene!.SpatialPresentationPlan);
+            AssertSpatialGeometryUnchanged(collapsed.CurrentScene!.SpatialPresentationPlan!, fixture.State.CurrentScene!.SpatialPresentationPlan!);
+            Assert.Equal(visible, !fixture.State.CurrentScene.SpatialPresentationPlan!.ResizeTargets.IsEmpty);
             Assert.DoesNotContain(fixture.State.CurrentScene.Items, item =>
                 item.IsVisible && item.Origin.VisualStateId == owner.Id);
         }
@@ -221,12 +239,12 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
         var flowId = VisibilityFixture.CrossFlow;
         Assert.True((await fixture.Session.UpdateEditorStateAsync(new EditorStateSnapshot(selection: [flowId]))).Succeeded);
         await WaitForReadyAsync(fixture.Session);
-        var route = fixture.Visual(flowId).Route;
+        var route = fixture.SavedRoute(flowId).Path;
         var bend = fixture.State.CurrentScene!.Items.Single(item => item.Origin.VisualStateId == flowId &&
             item.Metadata.ContainsKey(Canvas2DRouteGestureMetadata.BendIndex));
         var bendCenter = VisibilityCenter(bend.Bounds);
         await fixture.DragPresentedAsync(bendCenter, bendCenter + new VectorD(0d, 24d));
-        Assert.Equal(route[1] + new VectorD(0d, 24d), fixture.Visual(flowId).Route[1]);
+        Assert.Equal(route[1] + new VectorD(0d, 24d), fixture.SavedRoute(flowId).Path[1]);
 
         var newAnchor = new ConnectorAnchorId("n101:visibility:reconnect-target");
         await fixture.ExecuteAsync(state => new AddConnectorAnchorCommand(state.DocumentId, state.DocumentRevision,
@@ -353,6 +371,7 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
                     poolId == PoolAId ? "A" : "B"));
             }
 
+            await PrepareRegionCapacitiesAsync(fixture.Session, 600d);
             foreach (var id in new[] { A1, A2, B1, B2, U1 })
             {
                 var semanticId = new SemanticElementId(id.Value.Replace(":visual", string.Empty, StringComparison.Ordinal));
@@ -389,12 +408,18 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
                     new SemanticElementId($"{flowId.Value}:semantic"), flowId,
                     fixture.Visual(source).SemanticElementId, fixture.Visual(target).SemanticElementId, sourceAnchor, anchor));
             }
+            await fixture.ExecuteAsync(state => new SetConnectorRoutingTypeCommand(state.DocumentId, state.DocumentRevision,
+                CrossFlow, Contracts.Routing.ConnectorRoutingType.Manual));
+            var path = fixture.SavedRoute(CrossFlow).Path;
             await fixture.ExecuteAsync(state => new UpdateConnectionRouteCommand(state.DocumentId, state.DocumentRevision,
-                CrossFlow, [new PointD(436d, 58d), new PointD(700d, 60d), new PointD(540d, 265d)]));
+                CrossFlow, [path[0], new PointD(700d, 60d), path[^1]]));
             return fixture;
         }
 
         internal VisualStateSnapshot Visual(VisualStateId id) => Document.VisualModel.VisualStates.Single(item => item.Id == id);
+        internal Contracts.Routing.ConnectorRoutingRecord SavedRoute(VisualStateId id) =>
+            Document.VisualModel.RoutingScopes!.Value.Single(scope => scope.ScopeId == State.ActiveScopeId)
+                .Connectors.Single(record => record.VisualStateId == id);
         internal Canvas2DSceneItem Node(VisualStateId id) => State.CurrentScene!.Items.Single(item =>
             item.Origin.VisualStateId == id && Canvas2DNodeBodyMetadata.IsNodeBody(item));
         internal Task ExecuteAsync(Func<EditingSessionState, ICommand> factory) =>
@@ -446,7 +471,7 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
             Assert.True(result.Status == Canvas2DInteractionStatus.Committed, Diagnostics(result.Diagnostics));
             await WaitForReadyAsync(Session);
             Assert.Equal(state.DocumentRevision.Increment(), State.DocumentRevision);
-            Assert.Equal(state.HistoryStatus.EntryCount + 1, State.HistoryStatus.EntryCount);
+            Assert.Equal(state.HistoryStatus.EntryCount, State.HistoryStatus.EntryCount);
             Assert.Empty(VisibilityGraphics(State.CurrentScene!));
         }
 

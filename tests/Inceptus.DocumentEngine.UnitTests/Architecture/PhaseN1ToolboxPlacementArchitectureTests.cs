@@ -161,7 +161,7 @@ public sealed class PhaseN1ToolboxPlacementArchitectureTests
     }
 
     [Fact]
-    public void N1IntroducesNoDragDropGhostOrCoreEnginePlacementMechanism()
+    public void ToolboxPlacementKeepsPersistentCreationOutOfCoreAndBrowserCode()
     {
         var razor = ReadProductionFiles(
             "Inceptus.DocumentEngine.Bpmn.Blazor",
@@ -184,7 +184,11 @@ public sealed class PhaseN1ToolboxPlacementArchitectureTests
         Assert.All(forbiddenUi, token =>
             Assert.DoesNotContain(token, razor + javascript, StringComparison.OrdinalIgnoreCase));
         Assert.DoesNotContain("ToolboxPlacement", runtime, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("ToolboxPlacement", canvas2D, StringComparison.OrdinalIgnoreCase);
+        // A1.2.14 permits immutable placement feedback in Scene composition, while
+        // authoritative placement planning remains outside the generic core.
+        Assert.DoesNotContain("IToolboxPlacementCommandFactory", canvas2D, StringComparison.Ordinal);
+        Assert.DoesNotContain("IToolboxPlacementPreviewProvider", canvas2D, StringComparison.Ordinal);
+        Assert.DoesNotContain("ToolboxPlacementPlan", canvas2D, StringComparison.Ordinal);
         Assert.DoesNotContain("PlacementGhost", razor + javascript,
             StringComparison.OrdinalIgnoreCase);
     }

@@ -2,6 +2,7 @@ using System.Reflection;
 using Inceptus.DocumentEngine.Bpmn;
 using Inceptus.DocumentEngine.Bpmn.Commands;
 using Inceptus.DocumentEngine.Contracts.Primitives;
+using Inceptus.DocumentEngine.Contracts.Routing;
 
 namespace Inceptus.DocumentEngine.UnitTests.Architecture;
 
@@ -10,15 +11,20 @@ public sealed class PhaseM321BpmnConnectorAnchorArchitectureTests
     [Fact]
     public void CurrentBpmnSequenceFlowContractStructurallyRequiresGenericAnchorIdentities()
     {
-        var constructor = Assert.Single(
-            typeof(CreateBpmnSequenceFlowCommand).GetConstructors(BindingFlags.Public |
-                BindingFlags.Instance));
-        var parameters = constructor.GetParameters().ToDictionary(
-            parameter => parameter.Name!,
-            StringComparer.Ordinal);
-
-        Assert.Equal(typeof(ConnectorAnchorId), parameters["sourceAnchorId"].ParameterType);
-        Assert.Equal(typeof(ConnectorAnchorId), parameters["targetAnchorId"].ParameterType);
+        var constructors = typeof(CreateBpmnSequenceFlowCommand).GetConstructors(BindingFlags.Public |
+            BindingFlags.Instance);
+        Assert.Equal(2, constructors.Length);
+        Assert.Single(constructors, constructor => constructor.GetParameters().Length == 11);
+        var explicitType = Assert.Single(constructors, constructor => constructor.GetParameters().Length == 12);
+        Assert.Equal(typeof(ConnectorRoutingType), explicitType.GetParameters()[8].ParameterType);
+        Assert.False(explicitType.GetParameters()[8].IsOptional);
+        foreach (var constructor in constructors)
+        {
+            var parameters = constructor.GetParameters().ToDictionary(
+                parameter => parameter.Name!, StringComparer.Ordinal);
+            Assert.Equal(typeof(ConnectorAnchorId), parameters["sourceAnchorId"].ParameterType);
+            Assert.Equal(typeof(ConnectorAnchorId), parameters["targetAnchorId"].ParameterType);
+        }
         Assert.Equal(
             typeof(ConnectorAnchorId),
             typeof(CreateBpmnSequenceFlowCommand).GetProperty("SourceAnchorId")!.PropertyType);

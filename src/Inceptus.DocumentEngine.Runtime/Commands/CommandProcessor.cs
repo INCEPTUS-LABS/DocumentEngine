@@ -3,6 +3,7 @@ using Inceptus.DocumentEngine.Contracts.Commands;
 using Inceptus.DocumentEngine.Contracts.Diagnostics;
 using Inceptus.DocumentEngine.Contracts.Documents;
 using Inceptus.DocumentEngine.Contracts.History;
+using Inceptus.DocumentEngine.Contracts.Routing;
 using Inceptus.DocumentEngine.Contracts.Visuals;
 using Inceptus.DocumentEngine.Runtime.Documents;
 using Inceptus.DocumentEngine.Runtime.History;
@@ -12,7 +13,7 @@ namespace Inceptus.DocumentEngine.Runtime.Commands;
 /// <summary>
 /// Executes immutable Commands through the single transactional modification path.
 /// </summary>
-public sealed class CommandProcessor
+public sealed partial class CommandProcessor
 {
     private const int DispatchDiagnosticRetentionLimit = 256;
 
@@ -25,6 +26,7 @@ public sealed class CommandProcessor
     private readonly ImmutableArray<IDocumentChangedSubscriber> _subscribers;
     private readonly CommandValidationService _validation;
     private readonly IElementConnectorAnchorPolicyProvider _connectorAnchorPolicyProvider;
+    private readonly IConnectorRoutingStatePreparer? _routingStatePreparer;
 
     public CommandProcessor(
         IEnumerable<CommandHandlerRegistration>? handlers = null,
@@ -80,8 +82,35 @@ public sealed class CommandProcessor
         IEnumerable<CommandHistoryPolicyRegistration>? historyPolicies,
         IElementConnectorAnchorPolicyProvider? connectorAnchorPolicyProvider,
         Action<CommandExecutionCheckpoint>? executionCheckpointObserver)
+        : this(handlers, validators, subscribers, historyPolicies, connectorAnchorPolicyProvider,
+            routingStatePreparer: null, executionCheckpointObserver)
+    {
+    }
+
+    public CommandProcessor(
+        IEnumerable<CommandHandlerRegistration>? handlers,
+        IEnumerable<CommandValidatorRegistration>? validators,
+        IEnumerable<IDocumentChangedSubscriber>? subscribers,
+        IEnumerable<CommandHistoryPolicyRegistration>? historyPolicies,
+        IElementConnectorAnchorPolicyProvider? connectorAnchorPolicyProvider,
+        IConnectorRoutingStatePreparer routingStatePreparer)
+        : this(handlers, validators, subscribers, historyPolicies, connectorAnchorPolicyProvider,
+            routingStatePreparer ?? throw new ArgumentNullException(nameof(routingStatePreparer)),
+            executionCheckpointObserver: null)
+    {
+    }
+
+    private CommandProcessor(
+        IEnumerable<CommandHandlerRegistration>? handlers,
+        IEnumerable<CommandValidatorRegistration>? validators,
+        IEnumerable<IDocumentChangedSubscriber>? subscribers,
+        IEnumerable<CommandHistoryPolicyRegistration>? historyPolicies,
+        IElementConnectorAnchorPolicyProvider? connectorAnchorPolicyProvider,
+        IConnectorRoutingStatePreparer? routingStatePreparer,
+        Action<CommandExecutionCheckpoint>? executionCheckpointObserver)
     {
         _executionCheckpointObserver = executionCheckpointObserver;
+        _routingStatePreparer = routingStatePreparer;
         _connectorAnchorPolicyProvider = connectorAnchorPolicyProvider ??
             ElementConnectorAnchorPolicyRegistry.Default;
         _validation = CreateValidationService(CreateValidatorRegistrations(validators));
@@ -368,6 +397,12 @@ public sealed class CommandProcessor
                 execution.Diagnostics);
         }
 
+        if (execution.Status == CommandExecutionStatus.NoChange)
+        {
+            return HistoryOperationResult.CreateNoChange(execution.DocumentId, execution.CommandTypeId,
+                execution.PreviousRevision, historyStatus, execution.Diagnostics);
+        }
+
         var status = execution.Status switch
         {
             CommandExecutionStatus.Cancelled => HistoryOperationStatus.Cancelled,
@@ -567,8 +602,21 @@ public sealed class CommandProcessor
                 null);
         }
 
+        if (handlerResult.IsNoChange)
+        {
+            return CompleteNoChangeUnderGate(document, command, transaction, historyStore,
+                preparedHistoryMutation, cancellationToken);
+        }
+
         transaction.SetProposedSnapshot(handlerResult.ProposedDocument!);
         var proposedStateDiagnostics = ValidateProposedState(transaction);
+        if ((!handlerResult.RoutingIntents.IsEmpty || !handlerResult.SpatialHeightIntents.IsEmpty || !handlerResult.SpatialWidthIntents.IsEmpty) &&
+            (transaction.DeclaredAffectedComponents & AuthoritativeDocumentComponent.VisualModel) == 0)
+        {
+            proposedStateDiagnostics = proposedStateDiagnostics.Add(Error(
+                CommandExecutionDiagnosticCodes.AffectedComponentViolation,
+                "Authored routing and height intents require declared Visual Model authority.", command.TypeId.Value));
+        }
         transaction.AddDiagnostics(proposedStateDiagnostics);
         if (proposedStateDiagnostics.Any(static diagnostic =>
                 diagnostic.Severity == DiagnosticSeverity.Error))
@@ -586,6 +634,17 @@ public sealed class CommandProcessor
         }
 
         cancellationToken.ThrowIfCancellationRequested();
+
+        var routingIntents = MergeReplayIntents(handlerResult.RoutingIntents, preparedHistoryMutation?.RoutingIntents ?? []);
+        var spatialHeightIntents = MergeReplayHeightIntents(handlerResult.SpatialHeightIntents,
+            preparedHistoryMutation?.SpatialHeightIntents ?? []);
+        var spatialWidthIntents = handlerResult.SpatialWidthIntents
+            .AddRange(preparedHistoryMutation?.SpatialWidthIntents ?? []);
+        if (IsRoutingNoChange(transaction.BaseSnapshot, transaction.ProposedSnapshot!, routingIntents, spatialHeightIntents, spatialWidthIntents))
+        {
+            return CompleteNoChangeUnderGate(document, command, transaction, historyStore,
+                preparedHistoryMutation, cancellationToken);
+        }
 
         DocumentSnapshot committedSnapshot;
         try
@@ -632,6 +691,44 @@ public sealed class CommandProcessor
                             ExceptionType(exception)))),
                 false,
                 null);
+        }
+
+        if (_routingStatePreparer is null && (baseSnapshot.VisualModel.RoutingScopes is not null ||
+            !routingIntents.IsEmpty || !spatialHeightIntents.IsEmpty || !spatialWidthIntents.IsEmpty))
+        {
+            return (Failure(transaction.DocumentId, command, CommandExecutionStatus.ProposedStateValidationFailed,
+                transaction.BaseRevision, Error("INCEPTUS.ROUTING.PREPARER.MISSING",
+                    "Prepared routing state requires a configured immutable routing preparer.", command.TypeId.Value)), false, null);
+        }
+        if (_routingStatePreparer is not null)
+        {
+            committedSnapshot = ApplyReplayNodeGeometrySeeds(committedSnapshot,
+                preparedHistoryMutation?.NodeGeometrySeeds ?? []);
+            var preparation = await PrepareRoutingStateAsync(transaction.BaseSnapshot, committedSnapshot,
+                routingIntents, spatialHeightIntents, spatialWidthIntents, handlerResult.NodeGeometryImpact,
+                preparedHistoryMutation is not null, cancellationToken).ConfigureAwait(false);
+            transaction.AddDiagnostics(preparation.Diagnostics);
+            if (!preparation.Succeeded)
+            {
+                transaction.MarkAborted();
+                return (Failure(transaction.DocumentId, command, CommandExecutionStatus.ProposedStateValidationFailed,
+                    transaction.BaseRevision, preparation.Diagnostics), false, null);
+            }
+            committedSnapshot = ReplaceRoutingScopes(committedSnapshot, preparation.RoutingScopes);
+            var ownershipErrors = ValidateRoutingOwnership(transaction.BaseSnapshot, committedSnapshot,
+                routingIntents, spatialHeightIntents, spatialWidthIntents);
+            if (!ownershipErrors.IsEmpty)
+            {
+                transaction.MarkAborted();
+                return (Failure(transaction.DocumentId, command, CommandExecutionStatus.ProposedStateValidationFailed,
+                    transaction.BaseRevision, ownershipErrors), false, null);
+            }
+            if ((!routingIntents.IsEmpty || !spatialHeightIntents.IsEmpty || !spatialWidthIntents.IsEmpty) &&
+                ContentEqualsIgnoringRevision(transaction.BaseSnapshot, committedSnapshot))
+            {
+                return CompleteNoChangeUnderGate(document, command, transaction, historyStore,
+                    preparedHistoryMutation, cancellationToken);
+            }
         }
 
         var preparedStateDiagnostics = DocumentInvariantValidator.Validate(
@@ -710,11 +807,22 @@ public sealed class CommandProcessor
             var pipelineInvalidation =
                 handlerResult.PipelineInvalidation ??
                 CommandPipelineInvalidation.Resolve(command);
+            var previousRouting = transaction.BaseSnapshot.VisualModel.RoutingScopes;
+            var committedRouting = committedSnapshot.VisualModel.RoutingScopes;
+            if ((previousRouting.HasValue != committedRouting.HasValue ||
+                !(previousRouting ?? []).AsSpan().SequenceEqual((committedRouting ?? []).AsSpan())) &&
+                !OnlySavedCaptionsChanged(previousRouting, committedRouting))
+            {
+                // Prepared geometry and paths belong to this installed revision. A Scene-only
+                // declared edit must restore its artifacts from that new state, not rebind old paths.
+                pipelineInvalidation |= CommandPipelineInvalidation.WithoutNodeLayout;
+            }
             committedEvent = new DocumentChangedEvent(
                 transaction.DocumentId,
                 transaction.BaseRevision,
                 committedSnapshot.Revision,
-                transaction.DeclaredAffectedComponents,
+                transaction.DeclaredAffectedComponents | GetChangedComponents(
+                    DocumentSnapshotCloner.CloneAtRevision(transaction.BaseSnapshot, committedSnapshot.Revision), committedSnapshot),
                 command.TypeId,
                 committedSnapshot,
                 pipelineInvalidation,
@@ -797,7 +905,7 @@ public sealed class CommandProcessor
         }
 
         diagnostics.AddRange(DocumentInvariantValidator.Validate(
-            proposedSnapshot,
+            WithoutRoutingScopes(proposedSnapshot),
             _connectorAnchorPolicyProvider));
 
         var actualChanges = GetChangedComponents(
@@ -984,6 +1092,10 @@ public sealed class CommandProcessor
             new UpdateConnectionRouteCommandEnvelopeValidator(),
             new UpdateConnectionRouteCommandHandler());
 
+        var routingTypeHandler = new SetConnectorRoutingTypeCommandHandler();
+        yield return new CommandHandlerRegistration(SetConnectorRoutingTypeCommand.KnownTypeId,
+            routingTypeHandler, routingTypeHandler);
+
         yield return new CommandHandlerRegistration(
             MoveLabelCommand.KnownTypeId,
             new MoveLabelCommandEnvelopeValidator(),
@@ -1054,6 +1166,7 @@ public sealed class CommandProcessor
         yield return ResizeVisualStateHistoryPolicy.Registration;
         yield return UpdateBoundaryAttachmentHistoryPolicy.Registration;
         yield return UpdateConnectionRouteHistoryPolicy.Registration;
+        yield return SetConnectorRoutingTypeHistoryPolicy.Registration;
         yield return MoveLabelHistoryPolicy.Registration;
         yield return UpdateNodeLabelVisualOverrideHistoryPolicy.Registration;
         yield return AddConnectorAnchorHistoryPolicy.Registration;

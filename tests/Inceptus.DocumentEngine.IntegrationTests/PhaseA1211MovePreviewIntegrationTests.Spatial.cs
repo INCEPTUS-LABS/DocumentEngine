@@ -32,6 +32,7 @@ public sealed partial class PhaseA1211MovePreviewIntegrationTests
         var poolC = new SemanticElementId("test:a1211:pool-c");
         await test.ExecuteAsync(new CreateOrganizationalPoolCommand(test.Snapshot.DocumentId, test.Snapshot.Revision,
             poolC, test.State.ActiveScopeId, OrganizationalPoolCreationMode.Empty, "Third Pool"));
+        await PhaseN101OrganizationalPoolIntegrationTests.PrepareRegionCapacitiesAsync(test.Session, 1000d);
         if (hidden)
         {
             Assert.True((await test.Session.UpdateModelProfileViewStateAsync(
@@ -118,6 +119,7 @@ public sealed partial class PhaseA1211MovePreviewIntegrationTests
         var poolC = new SemanticElementId("test:a1211:pool-c");
         await test.ExecuteAsync(new CreateOrganizationalPoolCommand(test.Snapshot.DocumentId, test.Snapshot.Revision,
             poolC, test.State.ActiveScopeId, OrganizationalPoolCreationMode.Empty, "Third Pool"));
+        await PhaseN101OrganizationalPoolIntegrationTests.PrepareRegionCapacitiesAsync(test.Session, 1000d);
         await test.ExecuteAsync(new AssignOrganizationalElementCommand(test.Snapshot.DocumentId, test.Snapshot.Revision,
             BpmnDemoPipeline.RejectedTaskId, poolC));
         var unassigned = new SemanticElementId("test:a1211:unassigned");

@@ -111,12 +111,23 @@ public sealed class PhaseM34BpmnInclusiveGatewayArchitectureTests
                     typeof(IRoutingAlgorithm).IsAssignableFrom(type) &&
                     type is { IsAbstract: false, IsInterface: false })
                 .ToArray());
+        var sceneContributorTypes = bpmnTypes.Where(type =>
+                typeof(ICanvas2DSceneContributor).IsAssignableFrom(type) &&
+                type is { IsAbstract: false, IsInterface: false })
+            .OrderBy(static type => type.FullName, StringComparer.Ordinal)
+            .ToArray();
+        var contributorType = typeof(BpmnCanvas2DSceneContributor);
         Assert.Equal(
-            [typeof(BpmnCanvas2DSceneContributor)],
-            bpmnTypes.Where(type =>
-                    typeof(ICanvas2DSceneContributor).IsAssignableFrom(type) &&
-                    type is { IsAbstract: false, IsInterface: false })
-                .ToArray());
+            [contributorType.FullName,
+                $"{contributorType.FullName}+NodesContributor",
+                $"{contributorType.FullName}+PlacementContributor"],
+            sceneContributorTypes.Select(static type => type.FullName));
+        Assert.Equal(contributorType, Assert.Single(sceneContributorTypes, static type => type.IsVisible));
+        Assert.All(sceneContributorTypes.Where(type => type != contributorType), type =>
+        {
+            Assert.True(type.IsNestedPrivate);
+            Assert.Equal(contributorType, type.DeclaringType);
+        });
 
         Assert.Single(BpmnPluginRegistration.M34.LayoutAlgorithms);
         Assert.Single(BpmnPluginRegistration.M34.RoutingAlgorithms);

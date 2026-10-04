@@ -16,6 +16,8 @@ public sealed class PhaseN82MixedHistoryIntegrationTests
     {
         var composition = await BpmnModelerTestComposition.DemoFactory.CreateAsync();
         var renderer = await CreateRendererAsync("phase-n82-mixed-history-basic");
+        composition = BpmnModelerTestComposition.WithDocument(composition,
+            await BpmnModelerTestComposition.PrepareFreshDocumentAsync(composition.Document, composition.Configuration, renderer));
         var attachment = await EditingSession.AttachAsync(
             composition.Document,
             renderer,
@@ -121,6 +123,8 @@ public sealed class PhaseN82MixedHistoryIntegrationTests
     {
         var composition = await BpmnModelerTestComposition.DemoFactory.CreateAsync();
         var renderer = await CreateRendererAsync("phase-n82-mixed-history-nested");
+        composition = BpmnModelerTestComposition.WithDocument(composition,
+            await BpmnModelerTestComposition.PrepareFreshDocumentAsync(composition.Document, composition.Configuration, renderer));
         var attachment = await EditingSession.AttachAsync(
             composition.Document,
             renderer,
@@ -268,6 +272,8 @@ public sealed class PhaseN82MixedHistoryIntegrationTests
     {
         var composition = await BpmnModelerTestComposition.DemoFactory.CreateAsync();
         var renderer = await CreateRendererAsync("phase-n82-mixed-history-delete");
+        composition = BpmnModelerTestComposition.WithDocument(composition,
+            await BpmnModelerTestComposition.PrepareFreshDocumentAsync(composition.Document, composition.Configuration, renderer));
         var attachment = await EditingSession.AttachAsync(
             composition.Document,
             renderer,
@@ -375,6 +381,8 @@ public sealed class PhaseN82MixedHistoryIntegrationTests
     {
         var composition = await BpmnModelerTestComposition.DemoFactory.CreateAsync();
         var renderer = await CreateRendererAsync("phase-n82-mixed-history-persistent-divergence");
+        composition = BpmnModelerTestComposition.WithDocument(composition,
+            await BpmnModelerTestComposition.PrepareFreshDocumentAsync(composition.Document, composition.Configuration, renderer));
         var attachment = await EditingSession.AttachAsync(
             composition.Document,
             renderer,
@@ -427,6 +435,8 @@ public sealed class PhaseN82MixedHistoryIntegrationTests
     {
         var composition = await BpmnModelerTestComposition.DemoFactory.CreateAsync();
         var renderer = await CreateRendererAsync("phase-n82-mixed-history-navigation-divergence");
+        composition = BpmnModelerTestComposition.WithDocument(composition,
+            await BpmnModelerTestComposition.PrepareFreshDocumentAsync(composition.Document, composition.Configuration, renderer));
         var attachment = await EditingSession.AttachAsync(
             composition.Document,
             renderer,

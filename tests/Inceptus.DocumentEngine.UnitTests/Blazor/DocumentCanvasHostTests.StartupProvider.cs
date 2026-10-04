@@ -190,8 +190,11 @@ public sealed partial class DocumentCanvasHostTests
         Assert.Equal(2, provider.InvocationCount);
         Assert.Equal(2, providerDocuments.Length);
         Assert.NotSame(providerDocuments[0], providerDocuments[1]);
-        Assert.Contains(providerDocuments, document => ReferenceEquals(document, firstDocument));
-        Assert.Contains(providerDocuments, document => ReferenceEquals(document, secondDocument));
+        Assert.DoesNotContain(providerDocuments, document => ReferenceEquals(document, firstDocument));
+        Assert.DoesNotContain(providerDocuments, document => ReferenceEquals(document, secondDocument));
+        Assert.All(providerDocuments, document => Assert.Null(document.CaptureSnapshot().VisualModel.RoutingScopes));
+        Assert.NotNull(firstDocument.CaptureSnapshot().VisualModel.RoutingScopes);
+        Assert.NotNull(secondDocument.CaptureSnapshot().VisualModel.RoutingScopes);
         Assert.NotSame(firstSession, secondSession);
         Assert.NotSame(firstDocument, secondDocument);
         Assert.Equal(firstDocument.CaptureSnapshot(), secondDocument.CaptureSnapshot());
@@ -333,8 +336,8 @@ public sealed partial class DocumentCanvasHostTests
             CancellationToken cancellationToken = default)
         {
             Interlocked.Increment(ref _invocationCount);
-            var document = await BpmnDemoStartupDocumentProvider.Instance
-                .GetInitialDocumentAsync(cancellationToken);
+            var document = Assert.IsType<Document>(DocumentReconstructor.Reconstruct(
+                await BpmnModelerTestComposition.CreateFreshDemoSnapshotAsync(cancellationToken)).Document);
             Documents.Enqueue(document);
             return document;
         }

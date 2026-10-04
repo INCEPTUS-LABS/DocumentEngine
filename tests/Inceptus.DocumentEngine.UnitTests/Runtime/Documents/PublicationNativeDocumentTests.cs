@@ -21,6 +21,7 @@ public sealed class PublicationNativeDocumentTests
             "kompletacja-zamowienia",
             "Proces kompletacji zamówienia",
             HostileText);
+        source = PrepareCodecDocument(source);
 
         var first = NativeDocumentSerializer.Export(source);
         var second = NativeDocumentSerializer.Export(source);
@@ -50,12 +51,12 @@ public sealed class PublicationNativeDocumentTests
     }
 
     [Fact]
-    public void LegacyVersionOneWithoutPublicationImportsAsAbsent()
+    public void VersionTwoWithoutPublicationImportsAsAbsent()
     {
-        var source = CreateDocument("legacy");
+        var source = PrepareCodecDocument(CreateDocument("without-publication"));
         var payload = NativeDocumentSerializer.Export(source);
         using var json = JsonDocument.Parse(payload.AsMemory());
-        Assert.Equal(1, json.RootElement.GetProperty("formatVersion").GetInt32());
+        Assert.Equal(2, json.RootElement.GetProperty("formatVersion").GetInt32());
         Assert.False(json.RootElement.GetProperty("document").TryGetProperty(
             "publication",
             out _));
@@ -86,4 +87,8 @@ public sealed class PublicationNativeDocumentTests
     private static Document CreateDocument(string suffix) =>
         Assert.IsType<Document>(DocumentFactory.CreateEmpty(
             new DocumentId($"test:n10.6:native:{suffix}")).Document);
+
+    private static Document PrepareCodecDocument(Document source) =>
+        Assert.IsType<Document>(DocumentReconstructor.Reconstruct(
+            NativeDocumentSerializationTests.PrepareCodecSnapshot(source.CaptureSnapshot())).Document);
 }

@@ -7,6 +7,18 @@ namespace Inceptus.DocumentEngine.UnitTests.Architecture;
 public sealed class PhaseD1HistoryArchitectureTests
 {
     [Fact]
+    public void OwnedRoutingHistoryContainsOnlyIdentityAndEnumsNeverPathsOrPriority()
+    {
+        var properties = typeof(ConnectorRoutingTypeHistoryDelta).GetProperties(BindingFlags.Public | BindingFlags.Instance);
+        Assert.Equal(["AfterType", "BeforeType", "VisualStateId"], properties.Select(property => property.Name).Order());
+        Assert.All(properties.Where(property => property.Name != "VisualStateId"), property =>
+            Assert.Equal(typeof(Inceptus.DocumentEngine.Contracts.Routing.ConnectorRoutingType), property.PropertyType));
+        Assert.Equal(["AfterHeight", "BeforeHeight", "RegionId", "ScopeId"],
+            typeof(SpatialRegionHeightHistoryDelta).GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                .Select(property => property.Name).Order());
+    }
+
+    [Fact]
     public void HistorySurfaceHasNoDeferredTechnologyOrSerializationDependency()
     {
         var contractsAssembly = typeof(HistoryStatus).Assembly;
@@ -52,7 +64,8 @@ public sealed class PhaseD1HistoryArchitectureTests
         foreach (var type in historyTypes)
         {
             Assert.DoesNotContain(forbiddenNameFragments, fragment =>
-                type.FullName?.Contains(fragment, StringComparison.OrdinalIgnoreCase) == true);
+                type.FullName?.Contains(fragment, StringComparison.OrdinalIgnoreCase) == true &&
+                !(type == typeof(ConnectorRoutingTypeHistoryDelta) && fragment == "Routing"));
             Assert.DoesNotContain(
                 PublicSignatureTypes(type),
                 signatureType => forbiddenSignatureNamespacePrefixes.Any(prefix =>

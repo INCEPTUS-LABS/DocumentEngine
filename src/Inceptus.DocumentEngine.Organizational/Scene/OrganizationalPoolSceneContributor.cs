@@ -10,12 +10,13 @@ using Inceptus.DocumentEngine.Organizational.Semantics;
 namespace Inceptus.DocumentEngine.Organizational.Scene;
 
 /// <summary>
-/// Derives one single-scope Pool partition and its connector presentation policy. Process and
-/// Visual State identities are retained exactly once; Pool geometry is transient.
+/// Prepares one expanded Pool partition and derives its transient compact presentation.
+/// Process and Visual State identities are retained exactly once.
 /// </summary>
-public sealed class OrganizationalPoolSceneContributor :
+public sealed partial class OrganizationalPoolSceneContributor :
     ICanvas2DSceneContributor,
-    ICanvas2DConnectorPresentationRouter
+    ICanvas2DConnectorPresentationRouter,
+    ICanvas2DScopeGeometryContributor
 {
     internal const double ContentPadding = 32d;
     internal const double HeaderWidth = 38d;
@@ -24,7 +25,6 @@ public sealed class OrganizationalPoolSceneContributor :
     internal const double StackTop = 40d;
     internal const double MinimumPoolWidth = 520d;
     internal const double MinimumPoolHeight = 144d;
-    internal const double CollapsedPoolHeight = 72d;
 
     private const double ConnectorObstacleClearance = 16d;
     private const double DefaultContentX = 80d;
@@ -34,9 +34,13 @@ public sealed class OrganizationalPoolSceneContributor :
 
     private static readonly Canvas2DSceneContributorDescriptor Descriptor = new(
         new Canvas2DSceneContributorId("inceptus:organizational/scene/pools"),
-        "1",
+        "3",
         Canvas2DScenePanDependency.Invariant,
         Canvas2DSceneMoveGestureDependency.Invariant,
+        Canvas2DSceneTransientDependency.Invariant,
+        Canvas2DSceneTransientDependency.Invariant,
+        Canvas2DScenePlacementDependency.Invariant,
+        Canvas2DSceneTransientDependency.Invariant,
         Canvas2DSceneTransientDependency.Invariant,
         Canvas2DSceneTransientDependency.Invariant);
 
@@ -81,6 +85,18 @@ public sealed class OrganizationalPoolSceneContributor :
             return Empty();
         }
 
+        var savedGeometry = presentation.Document.VisualModel.RoutingScopes?
+            .FirstOrDefault(scope => scope.ScopeId == presentation.ActiveScopeId)?.Geometry;
+        if (savedGeometry is not null)
+        {
+            return ContributeSavedGeometry(context, savedGeometry, pools, decorationVisible);
+        }
+        if (pools.Any(pool => presentation.ModelProfileElementViewState.IsCollapsed(
+                OrganizationalModelProfile.Id, pool.Id)))
+        {
+            return SavedGeometryFailure("Compact Pool presentation requires accepted measured geometry.");
+        }
+
         var poolIds = pools.Select(static pool => pool.Id).ToHashSet();
         var nodes = context.ProjectedGraph.Nodes
             .Where(static node => node.Source.VisualStateId is not null)
@@ -101,21 +117,15 @@ public sealed class OrganizationalPoolSceneContributor :
         var canonicalBoundsByVisual = ResolveCanonicalBoundsByVisual(
             nodes,
             presentation.BaseSceneItems);
-        var canonicalConnectorBounds = ResolveCanonicalConnectorBounds(
-            context.ProjectedGraph,
-            assignmentByVisual,
-            presentation.BaseSceneItems);
         var contentByPool = pools.ToDictionary(
             static pool => pool.Id,
             pool => ResolveContentBounds(
                 assignmentByVisual,
                 canonicalBoundsByVisual,
-                canonicalConnectorBounds,
                 pool.Id));
         var unassignedBounds = ResolveContentBounds(
             assignmentByVisual,
             canonicalBoundsByVisual,
-            canonicalConnectorBounds,
             poolId: null);
         var commonPoolWidth = pools.Max(pool => Math.Max(
             MinimumPoolWidth,
@@ -132,11 +142,9 @@ public sealed class OrganizationalPoolSceneContributor :
             var isCollapsed = presentation.ModelProfileElementViewState.IsCollapsed(
                 OrganizationalModelProfile.Id,
                 pool.Id);
-            var poolHeight = isCollapsed
-                ? CollapsedPoolHeight
-                : Math.Max(
-                    MinimumPoolHeight,
-                    DestinationContentBottom(contentBounds) + (ContentPadding * 2d));
+            var poolHeight = Math.Max(
+                MinimumPoolHeight,
+                DestinationContentBottom(contentBounds) + (ContentPadding * 2d));
             var poolBounds = new RectD(
                 StackLeft,
                 cursorY,
@@ -313,69 +321,14 @@ public sealed class OrganizationalPoolSceneContributor :
         return result;
     }
 
-    private static ImmutableArray<RegionConnectorBounds> ResolveCanonicalConnectorBounds(
-        ProjectedGraph graph,
-        Dictionary<VisualStateId, SemanticElementId?> assignments,
-        IEnumerable<Canvas2DSceneItem> baseSceneItems)
-    {
-        var nodesById = graph.Nodes
-            .Where(static node => node.Source.VisualStateId is not null)
-            .ToDictionary(static node => node.Id);
-        var canonicalItems = baseSceneItems
-            .Where(static item =>
-                item.IsVisible &&
-                (item.Origin.Categories & Canvas2DSceneOriginCategory.EditorState) == 0)
-            .ToArray();
-        var result = ImmutableArray.CreateBuilder<RegionConnectorBounds>();
-        foreach (var edge in graph.Edges)
-        {
-            if (!nodesById.TryGetValue(edge.SourceNodeId, out var source) ||
-                !nodesById.TryGetValue(edge.TargetNodeId, out var target) ||
-                !assignments.TryGetValue(source.Source.VisualStateId!, out var sourcePoolId) ||
-                !assignments.TryGetValue(target.Source.VisualStateId!, out var targetPoolId) ||
-                sourcePoolId != targetPoolId)
-            {
-                continue;
-            }
-
-            var connectorId = Canvas2DSceneObjectIdentity.ForProjected(
-                edge.Id,
-                "connector");
-            foreach (var item in canonicalItems.Where(item =>
-                item.Layer == Canvas2DSceneLayer.Connector &&
-                item.Id == connectorId))
-            {
-                result.Add(new RegionConnectorBounds(sourcePoolId, item.Bounds));
-            }
-
-            var labelIds = graph.Labels
-                .Where(label => label.OwnerId == edge.Id)
-                .Select(static label => label.Id)
-                .ToHashSet();
-            foreach (var item in canonicalItems.Where(item =>
-                item.Layer == Canvas2DSceneLayer.Label &&
-                item.Origin.ProjectedObjectId is not null &&
-                labelIds.Contains(item.Origin.ProjectedObjectId)))
-            {
-                result.Add(new RegionConnectorBounds(sourcePoolId, item.Bounds));
-            }
-        }
-
-        return result.ToImmutable();
-    }
-
     private static RectD ResolveContentBounds(
         IReadOnlyDictionary<VisualStateId, SemanticElementId?> assignments,
         Dictionary<VisualStateId, RectD> canonicalBounds,
-        ImmutableArray<RegionConnectorBounds> canonicalConnectorBounds,
         SemanticElementId? poolId)
     {
         var bounds = assignments
             .Where(entry => entry.Value == poolId && canonicalBounds.ContainsKey(entry.Key))
             .Select(entry => canonicalBounds[entry.Key])
-            .Concat(canonicalConnectorBounds
-                .Where(entry => entry.PoolId == poolId)
-                .Select(static entry => entry.Bounds))
             .ToArray();
         return bounds.Length == 0
             ? new RectD(
@@ -402,7 +355,7 @@ public sealed class OrganizationalPoolSceneContributor :
             bounds.Max(static item => item.Right) - bounds.Min(static item => item.Left),
             bounds.Max(static item => item.Bottom) - bounds.Min(static item => item.Top));
 
-    // Signed labels/manual routes may overflow the legal Process quadrant. Enclose them in
+    // Signed node captions may overflow the legal Process quadrant. Enclose them in
     // non-hittable decoration only; neither the canonical origin nor the disjoint destination
     // bands/header hit targets follow that overflow. Rendering does not clip content to a band.
     private static RectD ExpandDecorationBounds(RectD bounds, double leftOverflow, double topOverflow) =>
@@ -507,7 +460,8 @@ public sealed class OrganizationalPoolSceneContributor :
                 Canvas2DSceneOriginCategory.RegisteredExtension,
                 stableSourceKey: stableKey),
             hitTestPolicy: Canvas2DHitTestPolicy.None,
-            metadata: [Canvas2DSemanticSceneInteractionMetadata.PlacementBlockedEntry]);
+            metadata: [Canvas2DSemanticSceneInteractionMetadata.PlacementBlockedEntry],
+            bounds: bounds);
     }
 
     private static Canvas2DSceneItem CreateUnassignedRegionItem(
@@ -528,7 +482,8 @@ public sealed class OrganizationalPoolSceneContributor :
                 stroke: "#94a3b8",
                 dashPattern: [6d, 4d],
                 opacity: 0.55d),
-            hitTestPolicy: Canvas2DHitTestPolicy.None);
+            hitTestPolicy: Canvas2DHitTestPolicy.None,
+            bounds: bounds);
     }
 
     private static Canvas2DSceneItem Item(
@@ -556,7 +511,8 @@ public sealed class OrganizationalPoolSceneContributor :
             transform,
             style: style,
             hitTestPolicy: hitTestPolicy,
-            metadata: metadata);
+            metadata: metadata,
+            bounds: transform is null || transform == Matrix2D.Identity ? geometry.Bounds : null);
     }
 
     private static ImmutableArray<PointD> CreateCrossRegionPath(
@@ -826,10 +782,6 @@ public sealed class OrganizationalPoolSceneContributor :
         !string.IsNullOrWhiteSpace(name.TextValue)
             ? name.TextValue
             : null;
-
-    private readonly record struct RegionConnectorBounds(
-        SemanticElementId? PoolId,
-        RectD Bounds);
 
     private static Canvas2DSceneContributionResult Empty() =>
         Canvas2DSceneContributionResult.Success(new Canvas2DSceneContribution());

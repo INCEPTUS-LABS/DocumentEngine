@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using Inceptus.DocumentEngine.Blazor.Demo;
+using Inceptus.DocumentEngine.Bpmn.Blazor.Composition;
+using Inceptus.DocumentEngine.Bpmn.Semantics;
 using Inceptus.DocumentEngine.Canvas2D.EditingSession;
 using Inceptus.DocumentEngine.Canvas2D.Interaction;
 using Inceptus.DocumentEngine.Canvas2D.Rendering;
@@ -12,9 +14,13 @@ using Inceptus.DocumentEngine.Contracts.Documents;
 using Inceptus.DocumentEngine.Contracts.EditorState;
 using Inceptus.DocumentEngine.Contracts.Geometry;
 using Inceptus.DocumentEngine.Contracts.History;
+using Inceptus.DocumentEngine.Contracts.Metadata;
 using Inceptus.DocumentEngine.Contracts.Primitives;
+using Inceptus.DocumentEngine.Contracts.Routing;
+using Inceptus.DocumentEngine.Contracts.Semantics;
 using Inceptus.DocumentEngine.Contracts.Text;
 using Inceptus.DocumentEngine.Contracts.Visuals;
+using Inceptus.DocumentEngine.Runtime.Documents;
 
 using static Inceptus.DocumentEngine.IntegrationTests.EditingSessionTestSynchronization;
 
@@ -22,6 +28,119 @@ namespace Inceptus.DocumentEngine.IntegrationTests;
 
 public sealed class PhaseLRouteGestureIntegrationTests
 {
+    [Fact]
+    public async Task SavedManualBendCommitsOncePreservesBothHistoryBranchesAndUsesCurrentEndpoints()
+    {
+        var context = await AttachPreparedAsync();
+        await using var session = context.Session;
+        await using var interaction = new Canvas2DInteractionController(session);
+        var document = context.Document;
+        var routeVisual = FindRouteVisual(document.CaptureSnapshot());
+        Assert.True((await session.ExecuteAsync(new SetConnectorRoutingTypeCommand(document.DocumentId,
+            document.Revision, routeVisual.Id, ConnectorRoutingType.Manual))).IsCommitted);
+        await WaitForCommittedEventAndSessionIdleAsync(document, session);
+        var initial = SavedRoute(document);
+        Assert.True((await session.ExecuteAsync(new UpdateConnectionRouteCommand(document.DocumentId,
+            document.Revision, routeVisual.Id, [initial.Path[0], new PointD(300, 220), initial.Path[^1]]))).IsCommitted);
+        await WaitForCommittedEventAndSessionIdleAsync(document, session);
+        var sourceVisual = document.CaptureSnapshot().VisualModel.VisualStates.Single(visual =>
+            visual.SemanticElementId.Value == "demo:beta");
+        foreach (var x in new[] { 110d, 120d })
+        {
+            Assert.True((await session.ExecuteAsync(new MoveVisualStateCommand(document.DocumentId,
+                document.Revision, sourceVisual.Id, new PointD(x, 100), VisualPlacementMode.Pinned))).IsCommitted);
+            await WaitForCommittedEventAndSessionIdleAsync(document, session);
+        }
+        Assert.True((await session.UndoAsync()).IsCommitted);
+        await WaitForCommittedEventAndSessionIdleAsync(document, session);
+        context.Events.Events.Clear();
+        var before = document.CaptureSnapshot();
+        var branches = session.CaptureState().HistoryStatus;
+        Assert.True(branches.CanUndo && branches.CanRedo);
+        var current = SavedRoute(document);
+        var scene = session.CaptureState().CurrentScene!;
+        var connector = FindConnector(scene, routeVisual.Id);
+        var selected = await interaction.PointerActivatedAsync(Css(scene, current.Path[1]));
+        var handle = FindBendHandle(selected.SessionState.CurrentScene!, routeVisual.Id, connector.Id);
+        var start = Center(handle.Bounds);
+        var pressed = await interaction.PointerPressedAsync(Pointer(701, selected.SessionState.CurrentScene!, start, 0, 1));
+        var endpoint = start + new VectorD(30, -10);
+        var moved = await interaction.PointerMovedAsync(Pointer(701, pressed.SessionState.CurrentScene!, endpoint, buttons: 1));
+        Assert.Equal(Canvas2DInteractionStatus.Updated, moved.Status);
+        Assert.Same(before, document.CaptureSnapshot());
+        Assert.Equal(branches, moved.SessionState.HistoryStatus);
+        Assert.Empty(context.Events.Events);
+        AssertRouteEqual([current.Path[0], endpoint, current.Path[^1]],
+            FindRoutePreview(moved.SessionState.CurrentScene!, routeVisual.Id, connector.Id).Geometry.Points);
+
+        var released = await interaction.PointerReleasedAsync(Pointer(701, moved.SessionState.CurrentScene!, endpoint, 0));
+        await WaitForCommittedEventAndSessionIdleAsync(document, session);
+        Assert.Equal(Canvas2DInteractionStatus.Committed, released.Status);
+        Assert.Equal(before.Revision.Value + 1, document.Revision.Value);
+        Assert.Equal(branches, session.CaptureState().HistoryStatus);
+        Assert.Single(context.Events.Events);
+        AssertRouteEqual([current.Path[0], endpoint, current.Path[^1]], SavedRoute(document).Path);
+        Assert.Empty(FindRouteVisual(document.CaptureSnapshot()).Route);
+        AssertRelationshipUnchanged(Assert.Single(before.SemanticModel.Relationships), document.CaptureSnapshot());
+
+        Assert.True((await session.RedoAsync()).IsCommitted);
+        await WaitForCommittedEventAndSessionIdleAsync(document, session);
+        AssertRouteEqual([endpoint], SavedRoute(document).ManualDefinition!.Value);
+        AssertPointEqual(new PointD(240, 140), SavedRoute(document).Path[0]);
+        Assert.True((await session.UndoAsync()).IsCommitted);
+        await WaitForCommittedEventAndSessionIdleAsync(document, session);
+        AssertRouteEqual([endpoint], SavedRoute(document).ManualDefinition!.Value);
+        AssertPointEqual(current.Path[0], SavedRoute(document).Path[0]);
+        Assert.Null(session.CaptureState().EditorState.ActiveGesture);
+    }
+
+    private static ConnectorRoutingRecord SavedRoute(Document document) => document.CaptureSnapshot()
+        .VisualModel.RoutingScopes!.Value.SelectMany(static scope => scope.Connectors)
+        .Single(record => record.VisualStateId == FindRouteVisual(document.CaptureSnapshot()).Id);
+
+    private static async Task<(Document Document, EditingSession Session, RecordingSubscriber Events)> AttachPreparedAsync()
+    {
+        var id = new DocumentId("phase-l:saved-manual");
+        var sourceId = new SemanticElementId("demo:beta");
+        var targetId = new SemanticElementId("demo:gamma");
+        var flowId = new SemanticElementId("demo:beta-gamma");
+        var sourceAnchor = new ConnectorAnchorId("phase-l:source");
+        var targetAnchor = new ConnectorAnchorId("phase-l:target");
+        var snapshot = new DocumentSnapshot(new SemanticModelSnapshot(id, DocumentRevision.Zero,
+            [BpmnSemanticFactory.CreateTask(sourceId, "SOURCE", "Source", 1),
+                BpmnSemanticFactory.CreateTask(targetId, "TARGET", "Target", 2)],
+            [BpmnSemanticFactory.CreateSequenceFlow(flowId, sourceId, targetId)]),
+            new VisualModelSnapshot(id, DocumentRevision.Zero,
+            [new VisualStateSnapshot(new VisualStateId("phase-l:source-visual"), sourceId,
+                new PointD(100, 100), new SizeD(120, 80), VisualPlacementMode.Pinned,
+                connectorAnchors: [new ConnectorAnchor(sourceAnchor, ConnectorAnchorSide.Right, ConnectorAnchorRole.Source, 0)]),
+                new VisualStateSnapshot(new VisualStateId("phase-l:target-visual"), targetId,
+                    new PointD(400, 100), new SizeD(120, 80), VisualPlacementMode.Pinned,
+                    connectorAnchors: [new ConnectorAnchor(targetAnchor, ConnectorAnchorSide.Left, ConnectorAnchorRole.Target, 0)]),
+                new VisualStateSnapshot(new VisualStateId("phase-l:connector-visual"), flowId, default, default,
+                    VisualPlacementMode.Automatic, sourceAnchorId: sourceAnchor, targetAnchorId: targetAnchor)]),
+            new DocumentMetadataSnapshot(id, DocumentRevision.Zero));
+        var construction = DocumentReconstructor.Reconstruct(snapshot);
+        Assert.True(construction.Succeeded);
+        var document = construction.Document!;
+        var composition = BpmnModelerComposition.Create(document);
+        var events = new RecordingSubscriber();
+        var source = composition.Configuration;
+        var configuration = new EditingSessionConfiguration(source.ProjectionEngine, source.LayoutEngine,
+            source.LayoutAlgorithmId, source.RoutingEngine, source.RoutingAlgorithmId, source.SceneBuilder,
+            source.ProjectionContext, source.LayoutContext, source.RoutingContext, EditorStateSnapshot.Empty,
+            source.CommandHandlers, source.CommandValidators, source.HistoryPolicies, [events],
+            source.ConnectorAnchorPolicyProvider, source.ModelProfileCatalog, source.InitialModelProfileViewState,
+            source.RoutingInputPreparer);
+        var renderer = new Canvas2DRenderer(new RecordingRenderExecution(), RendererConfiguration());
+        Assert.True((await renderer.InitializeAsync("phase-l:saved", new Canvas2DSurfaceSize(960, 640, 1))).Succeeded);
+        document = await BpmnModelerTestComposition.PrepareFreshDocumentAsync(document, configuration, renderer);
+        var attached = await EditingSession.AttachAsync(document, renderer, configuration);
+        Assert.Equal(EditingSessionAttachStatus.Ready, attached.Status);
+        return (document, attached.Session!, events);
+    }
+
+    // The following neutral tests intentionally retain the standalone, unprepared Route compatibility path.
     [Fact]
     public async Task NeutralBendPreviewsCommitOnceThenUndoAndRedoExactRoute()
     {
@@ -64,7 +183,9 @@ public sealed class PhaseLRouteGestureIntegrationTests
             pressed.SessionState.CurrentScene!,
             firstPoint,
             buttons: 1));
-        var finalPoint = start + new VectorD(47d, -29d);
+        // Keep this legacy History scenario outside endpoint snap radii; magnetic
+        // candidates and mixed solid/dashed runs have dedicated interaction coverage.
+        var finalPoint = start + new VectorD(35d, -15d);
         var secondMove = await interaction.PointerMovedAsync(Pointer(
             pointerId,
             firstMove.SessionState.CurrentScene!,

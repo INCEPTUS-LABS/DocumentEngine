@@ -37,7 +37,7 @@ public sealed class PhaseN102NativeDocumentSerializationArchitectureTests
             Assert.Null(property.SetMethod);
         });
         Assert.Equal("Inceptus.Document", NativeDocumentSerializer.FormatIdentifier);
-        Assert.Equal(1, NativeDocumentSerializer.FormatVersion);
+        Assert.Equal(2, NativeDocumentSerializer.FormatVersion);
 
         var methods = serializer.GetMethods(DeclaredPublicMembers)
             .Where(static method => !method.IsSpecialName)

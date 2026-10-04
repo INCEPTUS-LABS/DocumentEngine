@@ -157,7 +157,7 @@ public sealed class PhaseN103NativeDocumentPresentationArchitectureTests
     }
 
     [Fact]
-    public void NativeEnvelopeVersionRemainsTheN102Authority()
+    public void NativeEnvelopeVersionUsesTheApprovedV2Authority()
     {
         var serializer = ReadProductionFile(
             "Inceptus.DocumentEngine.Runtime",
@@ -171,9 +171,9 @@ public sealed class PhaseN103NativeDocumentPresentationArchitectureTests
         Assert.Contains("public static string FormatIdentifier => \"Inceptus.Document\";",
             serializer,
             StringComparison.Ordinal);
-        Assert.Contains("public static int FormatVersion => 1;", serializer,
+        Assert.Contains("public static int FormatVersion => 2;", serializer,
             StringComparison.Ordinal);
-        Assert.DoesNotContain("FormatVersion = 2", serializer + codec,
+        Assert.DoesNotContain("FormatVersion = 1", serializer + codec,
             StringComparison.Ordinal);
     }
 

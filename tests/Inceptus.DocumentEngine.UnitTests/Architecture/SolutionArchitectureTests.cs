@@ -109,7 +109,7 @@ public sealed class SolutionArchitectureTests
     {
         var buildProperties = XDocument.Load(Path.Combine(RepositoryRoot, "Directory.Build.props"));
 
-        Assert.Equal("0.1.6", ReadElementValue(buildProperties, "Version"));
+        Assert.Equal("0.1.7", ReadElementValue(buildProperties, "Version"));
         Assert.Equal("Robert Prokopczuk", ReadElementValue(buildProperties, "Authors"));
 
         var releaseTargets = XDocument.Load(Path.Combine(RepositoryRoot, "Directory.Build.targets"));
@@ -476,6 +476,53 @@ public sealed class SolutionArchitectureTests
         string[] expectedTypeNames =
         [
             "Inceptus.DocumentEngine.Contracts.Canvas2D.Canvas2DCanonicalSceneItemVisualOverride",
+            "Inceptus.DocumentEngine.Contracts.Canvas2D.Canvas2DConnectorPresentationSourceSpace",
+            "Inceptus.DocumentEngine.Contracts.Canvas2D.Canvas2DScopeGeometryBaseContext",
+            "Inceptus.DocumentEngine.Contracts.Canvas2D.Canvas2DScopeGeometryBaseResult",
+            "Inceptus.DocumentEngine.Contracts.Canvas2D.Canvas2DScopeGeometryNodeBounds",
+            "Inceptus.DocumentEngine.Contracts.Canvas2D.Canvas2DScopeGeometryPresentationContext",
+            "Inceptus.DocumentEngine.Contracts.Canvas2D.Canvas2DScopeGeometryPresentationResult",
+            "Inceptus.DocumentEngine.Contracts.Canvas2D.Canvas2DSpatialCoordinateBand",
+            "Inceptus.DocumentEngine.Contracts.Canvas2D.Canvas2DSpatialCoordinateMap",
+            "Inceptus.DocumentEngine.Contracts.Canvas2D.ICanvas2DScopeGeometryContributor",
+            "Inceptus.DocumentEngine.Contracts.Commands.ConnectorRoutingIntent",
+            "Inceptus.DocumentEngine.Contracts.Commands.ConnectorRoutingIntentKind",
+            "Inceptus.DocumentEngine.Contracts.Commands.SetConnectorRoutingTypeCommand",
+            "Inceptus.DocumentEngine.Contracts.Commands.SpatialRegionHeightIntent",
+            "Inceptus.DocumentEngine.Contracts.Commands.SpatialScopeWidthIntent",
+            "Inceptus.DocumentEngine.Contracts.History.SpatialScopeWidthHistoryDelta",
+            "Inceptus.DocumentEngine.Contracts.Routing.SpatialScopeWidthSnapshot",
+            "Inceptus.DocumentEngine.Contracts.Canvas2D.Canvas2DSpatialDimensionConstraints",
+            "Inceptus.DocumentEngine.Contracts.Canvas2D.Canvas2DSpatialResizeEdge",
+            "Inceptus.DocumentEngine.Contracts.Canvas2D.Canvas2DSpatialResizeTarget",
+            "Inceptus.DocumentEngine.Contracts.Canvas2D.Canvas2DSpatialResizeRequest",
+            "Inceptus.DocumentEngine.Contracts.Canvas2D.ICanvas2DSpatialResizePlanner",
+            "Inceptus.DocumentEngine.Contracts.EditorState.Canvas2DSpatialResizeFeedback",
+            "Inceptus.DocumentEngine.Contracts.EditorState.Canvas2DSpatialResizePhase",
+            "Inceptus.DocumentEngine.Contracts.History.ConnectorRoutingTypeHistoryDelta",
+            "Inceptus.DocumentEngine.Contracts.History.SpatialRegionHeightHistoryDelta",
+            "Inceptus.DocumentEngine.Contracts.Routing.ConnectorAutomaticRouteProof",
+            "Inceptus.DocumentEngine.Contracts.Routing.ConnectorRoutingEndpointObservation",
+            "Inceptus.DocumentEngine.Contracts.Routing.ConnectorRoutingRecord",
+            "Inceptus.DocumentEngine.Contracts.Routing.ConnectorRoutingType",
+            "Inceptus.DocumentEngine.Contracts.Routing.ConnectorRoutingOutcome",
+            "Inceptus.DocumentEngine.Contracts.Routing.ConnectorNoRouteReason",
+            "Inceptus.DocumentEngine.Contracts.Routing.ConnectorRoutingPreparationPurpose",
+            "Inceptus.DocumentEngine.Contracts.Routing.IConnectorRoutingStatePreparer",
+            "Inceptus.DocumentEngine.Contracts.Routing.ConnectorRoutingStatePreparationRequest",
+            "Inceptus.DocumentEngine.Contracts.Routing.ConnectorRoutingStatePreparationResult",
+            "Inceptus.DocumentEngine.Contracts.Routing.IStableConnectorRoutingPolicy",
+            "Inceptus.DocumentEngine.Contracts.Routing.ConnectorRoutingAssessment",
+            "Inceptus.DocumentEngine.Contracts.Routing.ConnectorRoutingWorkResult",
+            "Inceptus.DocumentEngine.Contracts.Routing.RoutingLogicalGeometry",
+            "Inceptus.DocumentEngine.Contracts.Routing.ScopeGeometryInputs",
+            "Inceptus.DocumentEngine.Contracts.Routing.ScopeGeometryContributorSnapshot",
+            "Inceptus.DocumentEngine.Contracts.Routing.ScopeGeometrySnapshot",
+            "Inceptus.DocumentEngine.Contracts.Routing.ScopeTextMeasurementSnapshot",
+            "Inceptus.DocumentEngine.Contracts.Routing.ScopeNodeCaptionSnapshot",
+            "Inceptus.DocumentEngine.Contracts.Routing.ScopeNodeGeometrySnapshot",
+            "Inceptus.DocumentEngine.Contracts.Routing.SpatialRegionGeometrySnapshot",
+            "Inceptus.DocumentEngine.Contracts.Routing.ScopeRoutingSnapshot",
             "Inceptus.DocumentEngine.Contracts.Canvas2D.Canvas2DHitTestMode",
             "Inceptus.DocumentEngine.Contracts.Canvas2D.Canvas2DHitTestPolicy",
             "Inceptus.DocumentEngine.Contracts.Canvas2D.Canvas2DSceneConfiguration",
@@ -487,6 +534,7 @@ public sealed class SolutionArchitectureTests
             "Inceptus.DocumentEngine.Contracts.Canvas2D.Canvas2DScenePanDependency",
             "Inceptus.DocumentEngine.Contracts.Canvas2D.Canvas2DSceneMoveGestureDependency",
             "Inceptus.DocumentEngine.Contracts.Canvas2D.Canvas2DSceneTransientDependency",
+            "Inceptus.DocumentEngine.Contracts.Canvas2D.Canvas2DScenePlacementDependency",
             "Inceptus.DocumentEngine.Contracts.Canvas2D.Canvas2DTransientInteractionMetadata",
             "Inceptus.DocumentEngine.Contracts.Canvas2D.Canvas2DSceneContributorId",
             "Inceptus.DocumentEngine.Contracts.Canvas2D.Canvas2DSceneContributorRegistration",
@@ -747,6 +795,7 @@ public sealed class SolutionArchitectureTests
             "Inceptus.DocumentEngine.Contracts.Text.TextWritingMode",
             "Inceptus.DocumentEngine.Contracts.Toolbox.IToolboxPlacementCommandFactory",
             "Inceptus.DocumentEngine.Contracts.Toolbox.IToolboxPlacementCandidateProvider",
+            "Inceptus.DocumentEngine.Contracts.Toolbox.IToolboxPlacementPreviewProvider",
             "Inceptus.DocumentEngine.Contracts.Creation.DocumentCreationIdentity",
             "Inceptus.DocumentEngine.Contracts.Creation.IDocumentCreationIdentityProvider",
             "Inceptus.DocumentEngine.Contracts.Toolbox.ToolboxCatalog",
@@ -762,6 +811,8 @@ public sealed class SolutionArchitectureTests
             "Inceptus.DocumentEngine.Contracts.Toolbox.ToolboxPlacementRegistration",
             "Inceptus.DocumentEngine.Contracts.Toolbox.ToolboxPlacementRequest",
             "Inceptus.DocumentEngine.Contracts.Toolbox.ToolboxPlacementTarget",
+            "Inceptus.DocumentEngine.Contracts.Toolbox.ToolboxPlacementPreview",
+            "Inceptus.DocumentEngine.Contracts.Toolbox.ToolboxPlacementPreviewRequest",
             "Inceptus.DocumentEngine.Contracts.Validation.IModelValidationRule",
             "Inceptus.DocumentEngine.Contracts.Validation.ModelValidationCatalog",
             "Inceptus.DocumentEngine.Contracts.Validation.ModelValidationContext",
@@ -816,6 +867,7 @@ public sealed class SolutionArchitectureTests
         string[] expectedTypeNames =
         [
             "Inceptus.DocumentEngine.Canvas2D.EditingSession.EditingSession",
+            "Inceptus.DocumentEngine.Canvas2D.EditingSession.ConnectorRoutingStatePreparer",
             "Inceptus.DocumentEngine.Canvas2D.EditingSession.EditingSessionAttachResult",
             "Inceptus.DocumentEngine.Canvas2D.EditingSession.EditingSessionAttachStatus",
             "Inceptus.DocumentEngine.Canvas2D.EditingSession.EditingSessionConfiguration",
@@ -899,6 +951,9 @@ public sealed class SolutionArchitectureTests
             "Inceptus.DocumentEngine.Bpmn.Blazor.BpmnModelerDocumentResult",
             "Inceptus.DocumentEngine.Bpmn.Blazor.BpmnModelerFileArtifact",
             "Inceptus.DocumentEngine.Bpmn.Blazor.BpmnModelerFileResult",
+            "Inceptus.DocumentEngine.Bpmn.Blazor.BpmnModelerNativeImportOptions",
+            "Inceptus.DocumentEngine.Bpmn.Blazor.BpmnModelerNativeSaveStatus",
+            "Inceptus.DocumentEngine.Bpmn.Blazor.BpmnModelerSaveCheckpoint",
             "Microsoft.Extensions.DependencyInjection.BpmnModelerServiceCollectionExtensions",
         ];
         var assembly = LoadProductionAssembly(BpmnBlazor);

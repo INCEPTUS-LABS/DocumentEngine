@@ -147,7 +147,7 @@ public sealed class PhaseKCanvas2DInteractionArchitectureTests
             "LayoutEngine",
             "ProjectionEngine",
             "RoutingEngine",
-            "SemanticModel",
+            "new SemanticModelSnapshot",
             "SelectElementCommand",
             "HoverElementCommand",
             "ClearSelectionCommand",
@@ -156,6 +156,9 @@ public sealed class PhaseKCanvas2DInteractionArchitectureTests
 
         Assert.DoesNotContain(forbidden, fragment =>
             source.Contains(fragment, StringComparison.Ordinal));
+        // A1.2.16 reads immutable attachment authority to include followers in the body cap.
+        Assert.Contains("document.SemanticModel.TryGetElement", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("SemanticModel =", source, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -33,6 +33,15 @@ public sealed partial class Canvas2DSceneBuilder
         var visualsById = visualModel.VisualStates.ToDictionary(static visual => visual.Id);
 
         ValidateSpatialPlan(graph, plan, projectedObjects, diagnostics);
+        foreach (var target in plan.ResizeTargets)
+        {
+            var border = items.FirstOrDefault(item => item.Id == target.BorderSceneObjectId);
+            if (border is null || !border.IsVisible || border.Bounds != target.PaintedBounds ||
+                border.Style.Stroke is null || border.Style.StrokeWidth <= 0d ||
+                (border.Origin.Categories & Canvas2DSceneOriginCategory.EditorState) != 0)
+                diagnostics.Add(Error(Canvas2DSceneDiagnosticCodes.InvalidContribution,
+                    "A spatial resize target must identify its actual visible painted border.", target.BorderSceneObjectId.Value));
+        }
         if (HasErrors(diagnostics))
         {
             return;
@@ -86,6 +95,32 @@ public sealed partial class Canvas2DSceneBuilder
             var sourceRegion = ResolveRegion(sourcePlacement, plan);
             var targetRegion = ResolveRegion(targetPlacement, plan);
             var canonicalLogicalPath = Canvas2DConnectorPathMetadata.Resolve(connector);
+            if (routing.LogicalGeometry is { } logical)
+            {
+                var saved = visualModel.RoutingScopes?.FirstOrDefault(scope => scope.ScopeId == logical.ScopeId)
+                    ?.Connectors.FirstOrDefault(record => record.VisualStateId == edge.Source.VisualStateId);
+                if (saved is null || (saved.Outcome == ConnectorRoutingOutcome.Path &&
+                        !saved.Path.AsSpan().SequenceEqual(canonicalLogicalPath.AsSpan())))
+                {
+                    diagnostics.Add(Error(Canvas2DSceneDiagnosticCodes.InvalidContribution,
+                        $"Saved expanded connector geometry is missing or incompatible for '{edge.Id}'.", edge.Id.Value));
+                    continue;
+                }
+                var logicalEditable = saved.RoutingType == ConnectorRoutingType.Manual
+                    ? saved.Path
+                    : ImmutableArray.Create(canonicalLogicalPath[0], canonicalLogicalPath[^1]);
+                var displayedEditable = logicalEditable.Select(plan.MapLogicalToScene).ToImmutableArray();
+                var displayedPath = saved.Outcome == ConnectorRoutingOutcome.NoRoute ||
+                    saved.RoutingType != ConnectorRoutingType.Automatic
+                        ? canonicalLogicalPath.Select(plan.MapLogicalToScene).ToImmutableArray()
+                        : plan.CoordinateMap.MapPath(saved.Path);
+                var mapping = new Canvas2DConnectorPresentationMapping(logicalEditable, displayedEditable,
+                    plan.CoordinateMap, sourceRegion?.Id, targetRegion?.Id);
+                finalRoutes.Add(edge.Id, new PresentedConnector(connector,
+                    new Canvas2DConnectorPresentationRoute(displayedPath, mapping), isVisible,
+                    saved.Outcome == ConnectorRoutingOutcome.NoRoute));
+                continue;
+            }
             var canonicalEditablePath = edge.PersistentRoute.Length >= 2
                 ? CreateEditableConnectorPath(
                     edge.PersistentRoute,
@@ -149,9 +184,9 @@ public sealed partial class Canvas2DSceneBuilder
                 edge.Id,
                 new PresentedConnector(
                     connector,
-                    request,
                     presentedRoute!,
-                    isVisible));
+                    isVisible,
+                    request.IsNoRouteFallback));
         }
 
         if (HasErrors(diagnostics))
@@ -165,6 +200,7 @@ public sealed partial class Canvas2DSceneBuilder
             labelsById,
             items,
             finalRoutes);
+        HideCompleteConnectorFamilies(graph, items, finalRoutes);
     }
 
     private static void ValidateSpatialPlan(
@@ -229,6 +265,8 @@ public sealed partial class Canvas2DSceneBuilder
                 nodesById.TryGetValue(ownerPort.OwnerNodeId, out var portOwnerNode) =>
                 portOwnerNode.Source.VisualStateId,
             ProjectedLabel => null,
+            ProjectedPort port when nodesById.TryGetValue(port.OwnerNodeId, out var ownerNode) =>
+                ownerNode.Source.VisualStateId,
             _ => projectedObject.Source.VisualStateId,
         };
         return ownerVisualStateId is not null &&
@@ -333,7 +371,8 @@ public sealed partial class Canvas2DSceneBuilder
                 (relatedRegions.Length == 1 ? relatedRegions[0] : null);
             var mapping = overlay.ConnectorPresentationMapping ??
                 (relatedMappings.Length == 1 ? relatedMappings[0] : null);
-            if (region is null && mapping is null)
+            var isVisible = overlay.IsVisible && (related.Length == 0 || related.Any(static item => item.IsVisible));
+            if (region is null && mapping is null && isVisible == overlay.IsVisible)
             {
                 continue;
             }
@@ -347,8 +386,8 @@ public sealed partial class Canvas2DSceneBuilder
                 overlay.Transform,
                 overlay.Clip,
                 overlay.Style,
-                overlay.IsVisible,
-                overlay.HitTestPolicy,
+                isVisible,
+                isVisible ? overlay.HitTestPolicy : Canvas2DHitTestPolicy.None,
                 overlay.PersistentAppearance,
                 overlay.Metadata,
                 overlay.Bounds,
@@ -425,7 +464,7 @@ public sealed partial class Canvas2DSceneBuilder
                     candidate.Value.IsVisible)
                 .Select(static candidate =>
                     (IReadOnlyList<PointD>)candidate.Value.Route.DisplayedLogicalPath);
-            var lineJumps = presented.IsVisible && !presented.Request.IsNoRouteFallback
+            var lineJumps = presented.IsVisible && !presented.IsNoRouteFallback
                 ? Canvas2DConnectorLineJumpGeometry.CreatePresentation(
                     route.DisplayedLogicalPath,
                     crossingPaths)
@@ -483,7 +522,7 @@ public sealed partial class Canvas2DSceneBuilder
                         connector.Metadata,
                         route.DisplayedLogicalPath,
                         route.Mapping.DisplayedEditablePath,
-                        presented.Request.IsNoRouteFallback),
+                        presented.IsNoRouteFallback),
                     connectorPresentationMapping: route.Mapping));
 
             var targetArrow = Canvas2DConnectorArrowGeometry.Create(
@@ -562,20 +601,30 @@ public sealed partial class Canvas2DSceneBuilder
                 continue;
             }
 
+            var transform = label.Transform.Then(Matrix2D.CreateTranslation(translation));
+            var translatedBounds = label.Bounds.Translate(translation);
+            if (TryCalculateTransformedBounds(label.Geometry.Bounds, transform, out var geometryBounds))
+            {
+                var left = Math.Min(translatedBounds.Left, geometryBounds.Left);
+                var top = Math.Min(translatedBounds.Top, geometryBounds.Top);
+                translatedBounds = new RectD(left, top,
+                    Math.Max(translatedBounds.Right, geometryBounds.Right) - left,
+                    Math.Max(translatedBounds.Bottom, geometryBounds.Bottom) - top);
+            }
             items[index] = new Canvas2DSceneItem(
                 label.Id,
                 label.Layer,
                 label.ZIndex,
                 label.Geometry,
                 label.Origin,
-                label.Transform.Then(Matrix2D.CreateTranslation(translation)),
+                transform,
                 label.Clip?.Translate(translation),
                 label.Style,
                 label.IsVisible && presented.IsVisible,
                 label.HitTestPolicy,
                 label.PersistentAppearance,
                 label.Metadata,
-                label.Bounds.Translate(translation),
+                translatedBounds,
                 connectorPresentationMapping: presented.Route.Mapping);
         }
     }
@@ -637,7 +686,38 @@ public sealed partial class Canvas2DSceneBuilder
 
     private sealed record PresentedConnector(
         Canvas2DSceneItem CanonicalItem,
-        Canvas2DConnectorPresentationRoutingRequest Request,
         Canvas2DConnectorPresentationRoute Route,
-        bool IsVisible);
+        bool IsVisible,
+        bool IsNoRouteFallback);
+
+    private static void HideCompleteConnectorFamilies(
+        ProjectedGraph graph,
+        List<Canvas2DSceneItem> items,
+        IReadOnlyDictionary<ProjectedObjectId, PresentedConnector> routes)
+    {
+        var hiddenEdges = routes.Where(static entry => !entry.Value.IsVisible)
+            .Select(static entry => entry.Key).ToHashSet();
+        var hiddenProjected = graph.Labels.Where(label => hiddenEdges.Contains(label.OwnerId))
+            .Select(static label => label.Id).Concat(hiddenEdges).ToHashSet();
+        var hiddenItems = items.Where(item => item.Origin.ProjectedObjectId is { } id && hiddenProjected.Contains(id))
+            .Select(static item => item.Id).ToHashSet();
+        bool added;
+        do
+        {
+            added = false;
+            foreach (var item in items)
+                if (item.Origin.RelatedSceneObjectIds.Any(hiddenItems.Contains))
+                    added |= hiddenItems.Add(item.Id);
+        }
+        while (added);
+        for (var index = 0; index < items.Count; index++)
+        {
+            var item = items[index];
+            if (!hiddenItems.Contains(item.Id)) continue;
+            items[index] = new Canvas2DSceneItem(item.Id, item.Layer, item.ZIndex, item.Geometry,
+                item.Origin, item.Transform, item.Clip, item.Style, isVisible: false,
+                Canvas2DHitTestPolicy.None, item.PersistentAppearance, item.Metadata, item.Bounds,
+                item.SpatialRegion, item.ConnectorPresentationMapping);
+        }
+    }
 }

@@ -5,12 +5,15 @@ using System.Text.Json.Nodes;
 using Inceptus.DocumentEngine.Bpmn;
 using Inceptus.DocumentEngine.Bpmn.Semantics;
 using Inceptus.DocumentEngine.Bpmn.Validation;
+using Inceptus.DocumentEngine.Contracts.Canvas2D;
 using Inceptus.DocumentEngine.Contracts.Documents;
 using Inceptus.DocumentEngine.Contracts.Geometry;
 using Inceptus.DocumentEngine.Contracts.Metadata;
 using Inceptus.DocumentEngine.Contracts.Primitives;
 using Inceptus.DocumentEngine.Contracts.Properties;
+using Inceptus.DocumentEngine.Contracts.Routing;
 using Inceptus.DocumentEngine.Contracts.Semantics;
+using Inceptus.DocumentEngine.Contracts.Text;
 using Inceptus.DocumentEngine.Contracts.Validation;
 using Inceptus.DocumentEngine.Contracts.Visuals;
 using Inceptus.DocumentEngine.Runtime.Documents;
@@ -37,14 +40,15 @@ public sealed class NativeDocumentSerializationTests
     [Fact]
     public void MinimalDocumentRoundTripsThroughStableUtf8Envelope()
     {
-        var source = RequireSuccess(DocumentFactory.CreateEmpty(
-            new DocumentId("test:native:minimal")));
+        var source = RequireSuccess(DocumentReconstructor.Reconstruct(PrepareCodecSnapshot(
+            RequireSuccess(DocumentFactory.CreateEmpty(
+                new DocumentId("test:native:minimal"))).CaptureSnapshot())));
         var sourceSnapshot = source.CaptureSnapshot();
 
         var payload = NativeDocumentSerializer.Export(source);
 
         Assert.Equal("Inceptus.Document", NativeDocumentSerializer.FormatIdentifier);
-        Assert.Equal(1, NativeDocumentSerializer.FormatVersion);
+        Assert.Equal(2, NativeDocumentSerializer.FormatVersion);
         Assert.NotEmpty(payload);
         Assert.False(HasUtf8Bom(payload));
         var json = new UTF8Encoding(
@@ -107,7 +111,7 @@ public sealed class NativeDocumentSerializationTests
         Assert.Equal(123.5d, sourceElement.Properties["test:number"].NumberValue);
 
         Assert.Equal(
-            "native-v1",
+            "native-v2",
             actual.Metadata.SystemManagedProperties["test:schema"].TextValue);
         Assert.Equal(
             17L,
@@ -121,7 +125,8 @@ public sealed class NativeDocumentSerializationTests
             static visual => visual.Id == RelationshipVisualId);
         Assert.Equal(SourceAnchorId, connector.SourceAnchorId);
         Assert.Equal(TargetAnchorId, connector.TargetAnchorId);
-        Assert.True(connector.Route.AsSpan().SequenceEqual(
+        Assert.Empty(connector.Route);
+        Assert.True(Assert.Single(Assert.Single(actual.VisualModel.RoutingScopes!.Value).Connectors).Path.AsSpan().SequenceEqual(
         [
             new PointD(130d, 50d),
             new PointD(200d, 50d),
@@ -153,6 +158,7 @@ public sealed class NativeDocumentSerializationTests
                     [new(illFormedText, PropertyValue.FromText(illFormedText))])]),
             new VisualModelSnapshot(documentId, DocumentRevision.Zero),
             new DocumentMetadataSnapshot(documentId, DocumentRevision.Zero));
+        snapshot = PrepareCodecSnapshot(snapshot);
         var source = RequireSuccess(DocumentReconstructor.Reconstruct(snapshot));
 
         var payload = NativeDocumentSerializer.Export(source);
@@ -352,6 +358,7 @@ public sealed class NativeDocumentSerializationTests
                     new SizeD(120d, 80d),
                     VisualPlacementMode.Pinned)]),
             new DocumentMetadataSnapshot(documentId, revision));
+        candidate = PrepareCodecSnapshot(candidate);
         var policyProvider = new ElementConnectorAnchorPolicyRegistry(
             BpmnPluginRegistration.N100.ConnectorAnchorPolicies);
         var source = RequireSuccess(DocumentReconstructor.Reconstruct(candidate, policyProvider));
@@ -439,12 +446,7 @@ public sealed class NativeDocumentSerializationTests
                     default,
                     default,
                     VisualPlacementMode.Automatic,
-                    [
-                        new PointD(130d, 50d),
-                        new PointD(200d, 50d),
-                        new PointD(200d, 110d),
-                    ],
-                    connectorLabel,
+                    properties: connectorLabel,
                     sourceAnchorId: SourceAnchorId,
                     targetAnchorId: TargetAnchorId),
             ]);
@@ -452,7 +454,7 @@ public sealed class NativeDocumentSerializationTests
             CompleteDocumentId,
             CompleteRevision,
             [
-                new("test:schema", PropertyValue.FromText("native-v1")),
+                new("test:schema", PropertyValue.FromText("native-v2")),
                 new("test:sequence", PropertyValue.FromInteger(17)),
             ],
             [
@@ -460,8 +462,34 @@ public sealed class NativeDocumentSerializationTests
                 new("test:scale", PropertyValue.FromNumber(0.125d)),
             ]);
 
-        return RequireSuccess(DocumentReconstructor.Reconstruct(
-            new DocumentSnapshot(semanticModel, visualModel, metadata)));
+        return RequireSuccess(DocumentReconstructor.Reconstruct(PrepareCodecSnapshot(
+            new DocumentSnapshot(semanticModel, visualModel, metadata),
+            [new ConnectorRoutingRecord(RelationshipVisualId, ConnectorRoutingType.Manual,
+                ConnectorRoutingOutcome.Path,
+                [new PointD(130d, 50d), new PointD(200d, 50d), new PointD(200d, 110d)],
+                [new PointD(200d, 50d)])])));
+    }
+
+    // These codec-only fixtures declare their synthetic saved basis explicitly. Production
+    // saved documents are prepared by the installed geometry and routing providers.
+    internal static DocumentSnapshot PrepareCodecSnapshot(DocumentSnapshot snapshot,
+        IEnumerable<ConnectorRoutingRecord>? connectors = null)
+    {
+        var request = new TextMeasurementRequest(string.Empty, "Test Sans", "test-font", "1",
+            12, 16, 400, TextFontStyle.Normal, "en", TextDirection.LeftToRight,
+            TextWritingMode.HorizontalTopToBottom, 1, "test-codec", "1");
+        var nodeIds = snapshot.SemanticModel.Elements.Select(static node => node.Id).ToHashSet();
+        var geometry = new ScopeGeometrySnapshot("test-codec-geometry", "1", new AlgorithmId("test-codec-layout"),
+            Canvas2DSceneConfiguration.Default, request, [],
+            snapshot.VisualModel.VisualStates.Where(visual => nodeIds.Contains(visual.SemanticElementId))
+                .Select(static visual => new ScopeNodeGeometrySnapshot(visual.Id,
+                    new RectD(0, 0, visual.Size.Width, visual.Size.Height),
+                    new Matrix2D(1, 0, 0, 1, visual.Position.X, visual.Position.Y), null)), [], []);
+        return new DocumentSnapshot(snapshot.SemanticModel,
+            new VisualModelSnapshot(snapshot.DocumentId, snapshot.Revision, snapshot.VisualModel.VisualStates,
+                snapshot.VisualModel.ProfileElementPresentations,
+                [new ScopeRoutingSnapshot(snapshot.SemanticModel.RootScopeId, geometry, connectors ?? [])]),
+            snapshot.Metadata, snapshot.Publication);
     }
 
     private static Document RequireSuccess(DocumentConstructionResult result)

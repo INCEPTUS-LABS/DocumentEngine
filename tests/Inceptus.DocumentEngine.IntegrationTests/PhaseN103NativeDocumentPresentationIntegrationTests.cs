@@ -149,6 +149,7 @@ public sealed class PhaseN103NativeDocumentPresentationIntegrationTests
             "phase-n103-source",
             new Canvas2DSurfaceSize(1600d, 1000d, 1d));
         Assert.True(initialization.Succeeded, Diagnostics(initialization.Diagnostics));
+        document = await BpmnModelerTestComposition.PrepareFreshDocumentAsync(document, composition.Configuration, renderer);
         var attachment = await EditingSession.AttachAsync(
             document,
             renderer,
@@ -190,6 +191,13 @@ public sealed class PhaseN103NativeDocumentPresentationIntegrationTests
             .Take(2)
             .ToArray();
         Assert.Equal(2, assigned.Length);
+        var scope = document.CaptureSnapshot().VisualModel.RoutingScopes!.Value
+            .Single(candidate => candidate.ScopeId == rootScopeId);
+        var authoredCapacity = scope.Geometry.Regions.Single(region => region.ContainerSemanticElementId == PoolAId).ExpandedHeight;
+        foreach (var region in scope.Geometry.Regions.Where(region => region.ContainerSemanticElementId != PoolAId &&
+                     region.ExpandedHeight < authoredCapacity))
+            await ExecuteCommittedAsync(session, new SetOrganizationalRegionExpandedHeightCommand(
+                document.DocumentId, document.Revision, rootScopeId, region.Id, authoredCapacity));
         await ExecuteCommittedAsync(
             session,
             new AssignOrganizationalElementCommand(
@@ -214,7 +222,8 @@ public sealed class PhaseN103NativeDocumentPresentationIntegrationTests
         var result = await session.ExecuteAsync(command);
         Assert.True(result.IsCommitted, Diagnostics(result.Diagnostics));
         await session.WaitForIdleAsync();
-        Assert.Equal(EditingSessionStatus.Ready, session.CaptureState().Status);
+        var state = session.CaptureState();
+        Assert.True(state.Status == EditingSessionStatus.Ready, Diagnostics(state.RuntimeDiagnostics.Concat(state.PresentationDiagnostics)));
     }
 
     private static Canvas2DRenderer CreateRenderer(

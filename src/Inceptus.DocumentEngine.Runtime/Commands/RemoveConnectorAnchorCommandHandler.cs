@@ -116,7 +116,8 @@ internal sealed class RemoveConnectorAnchorCommandHandler : ICommandHandler
             document.Revision,
             document.VisualModel.VisualStates.Select(visualState =>
                 visualState.Id == replacement.Id ? replacement : visualState),
-            document.VisualModel.ProfileElementPresentations);
+            document.VisualModel.ProfileElementPresentations,
+            document.VisualModel.RoutingScopes);
         return ValueTask.FromResult(CommandHandlerResult.Success(new DocumentSnapshot(
             document.SemanticModel,
             proposedVisualModel,

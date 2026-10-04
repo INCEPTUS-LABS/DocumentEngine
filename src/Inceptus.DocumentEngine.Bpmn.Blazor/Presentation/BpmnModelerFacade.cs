@@ -29,6 +29,14 @@ internal sealed class BpmnModelerFacade : IDisposable
 
     internal BpmnModelerNotifications Notifications { get; }
 
+    internal BpmnModelerNativeSaveStatus? NativeSaveStatus => CaptureHost()?.CaptureNativeSaveStatus();
+
+    internal bool AcknowledgeNativeSave(BpmnModelerSaveCheckpoint checkpoint)
+    {
+        ArgumentNullException.ThrowIfNull(checkpoint);
+        return CaptureHost()?.AcknowledgeNativeSave(checkpoint) == true;
+    }
+
     internal void Attach(DocumentCanvasHost host)
     {
         ArgumentNullException.ThrowIfNull(host);
@@ -89,10 +97,16 @@ internal sealed class BpmnModelerFacade : IDisposable
 
     internal ValueTask<BpmnModelerDocumentResult> ImportNativeDocumentAsync(
         ReadOnlyMemory<byte> utf8Json,
+        CancellationToken cancellationToken = default) => ImportNativeDocumentAsync(utf8Json, new BpmnModelerNativeImportOptions(), cancellationToken);
+
+    internal ValueTask<BpmnModelerDocumentResult> ImportNativeDocumentAsync(
+        ReadOnlyMemory<byte> utf8Json,
+        BpmnModelerNativeImportOptions options,
         CancellationToken cancellationToken = default) =>
         ExecuteDocumentOperationAsync(BpmnModelerOperation.Import, async (host, token) =>
         {
-            var result = await host.ImportNativeDocumentAsync(utf8Json, token).ConfigureAwait(false);
+            ArgumentNullException.ThrowIfNull(options);
+            var result = await host.ImportNativeDocumentAsync(utf8Json, options, token).ConfigureAwait(false);
             return new BpmnModelerDocumentResult(
                 Map(result.Status), result.Snapshot, result.Diagnostics);
         }, cancellationToken);
@@ -110,7 +124,7 @@ internal sealed class BpmnModelerFacade : IDisposable
                         DocumentCanvas.NativeDocumentContentType,
                         result.Payload)
                     : null,
-                result.Diagnostics);
+                result.Diagnostics, result.SaveCheckpoint);
         }, cancellationToken);
 
     internal ValueTask<BpmnModelerFileResult> PublishAsync(

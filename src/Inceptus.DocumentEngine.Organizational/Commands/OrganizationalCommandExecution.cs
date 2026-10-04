@@ -621,7 +621,8 @@ internal static class OrganizationalCommandSupport
             document.DocumentId,
             document.Revision,
             document.VisualModel.VisualStates,
-            presentations ?? document.VisualModel.ProfileElementPresentations);
+            presentations ?? document.VisualModel.ProfileElementPresentations,
+            document.VisualModel.RoutingScopes);
         return new DocumentSnapshot(
             semanticModel,
             visualModel,

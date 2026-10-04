@@ -20,9 +20,33 @@ public sealed class Canvas2DSpatialPresentationPlan : IEquatable<Canvas2DSpatial
         IEnumerable<Canvas2DSpatialRegion> regions,
         IEnumerable<Canvas2DSpatialVisualPlacement> visualPlacements,
         Matrix2D canonicalGuidanceToSceneTransform)
+        : this(regions, visualPlacements, canonicalGuidanceToSceneTransform,
+            Canvas2DSpatialCoordinateMap.Identity, movementBottomBoundaryRegionId: null)
+    {
+    }
+
+    public Canvas2DSpatialPresentationPlan(
+        IEnumerable<Canvas2DSpatialRegion> regions,
+        IEnumerable<Canvas2DSpatialVisualPlacement> visualPlacements,
+        Matrix2D canonicalGuidanceToSceneTransform,
+        Canvas2DSpatialCoordinateMap coordinateMap,
+        Canvas2DSpatialRegionId? movementBottomBoundaryRegionId)
+        : this(regions, visualPlacements, canonicalGuidanceToSceneTransform, coordinateMap,
+            movementBottomBoundaryRegionId, [])
+    {
+    }
+
+    public Canvas2DSpatialPresentationPlan(
+        IEnumerable<Canvas2DSpatialRegion> regions,
+        IEnumerable<Canvas2DSpatialVisualPlacement> visualPlacements,
+        Matrix2D canonicalGuidanceToSceneTransform,
+        Canvas2DSpatialCoordinateMap coordinateMap,
+        Canvas2DSpatialRegionId? movementBottomBoundaryRegionId,
+        IEnumerable<Canvas2DSpatialResizeTarget> resizeTargets)
     {
         ArgumentNullException.ThrowIfNull(regions);
         ArgumentNullException.ThrowIfNull(visualPlacements);
+        ArgumentNullException.ThrowIfNull(coordinateMap);
         if (!IsTranslation(canonicalGuidanceToSceneTransform) ||
             !canonicalGuidanceToSceneTransform.TryInvert(
                 out _sceneToCanonicalGuidanceTransform))
@@ -91,11 +115,46 @@ public sealed class Canvas2DSpatialPresentationPlan : IEquatable<Canvas2DSpatial
         _regionsById = Regions.ToDictionary(static region => region.Id);
         _placementsByVisualStateId = VisualPlacements.ToDictionary(
             static placement => placement.VisualStateId);
+        if (movementBottomBoundaryRegionId is not null &&
+            (!_regionsById.TryGetValue(movementBottomBoundaryRegionId, out var boundary) ||
+             boundary.ContainerSemanticElementId is not null))
+        {
+            throw new ArgumentException(
+                "The movement bottom boundary must identify a declared region without a semantic container.",
+                nameof(movementBottomBoundaryRegionId));
+        }
+        if (!coordinateMap.Bands.IsEmpty &&
+            (coordinateMap.Bands.Length != Regions.Length ||
+             coordinateMap.Bands.Any(band =>
+                 !_regionsById.TryGetValue(band.RegionId, out var region) ||
+                 band.DisplayedTop != region.Bounds.Top || band.DisplayedBottom != region.Bounds.Bottom)))
+        {
+            throw new ArgumentException(
+                "Coordinate bands must cover the exact current displayed regions.", nameof(coordinateMap));
+        }
+        CoordinateMap = coordinateMap;
+        MovementBottomBoundaryRegionId = movementBottomBoundaryRegionId;
+        ArgumentNullException.ThrowIfNull(resizeTargets);
+        var copiedResizeTargets = resizeTargets.ToImmutableArray();
+        if (copiedResizeTargets.Any(static target => target is null))
+            throw new ArgumentException("Resize targets cannot contain null entries.", nameof(resizeTargets));
+        ResizeTargets = copiedResizeTargets.OrderBy(static target => target.AcquiredRegionId.Value, StringComparer.Ordinal)
+            .ThenBy(static target => target.Edge).ToImmutableArray();
+        if (ResizeTargets.Any(target => !_regionsById.TryGetValue(target.AcquiredRegionId, out var region) ||
+                region.ModelProfileId != target.ProfileId || target.AffectedRegionIds.Any(id =>
+                    !_regionsById.TryGetValue(id, out var affected) || affected.ModelProfileId != target.ProfileId)) ||
+            ResizeTargets.Select(static target => (target.AcquiredRegionId, target.Edge)).Distinct().Count() != ResizeTargets.Length)
+            throw new ArgumentException("Resize targets require unique current region edges of the owning profile.", nameof(resizeTargets));
     }
 
     public ImmutableArray<Canvas2DSpatialRegion> Regions { get; }
 
     public ImmutableArray<Canvas2DSpatialVisualPlacement> VisualPlacements { get; }
+
+    public Canvas2DSpatialCoordinateMap CoordinateMap { get; }
+
+    public Canvas2DSpatialRegionId? MovementBottomBoundaryRegionId { get; }
+    public ImmutableArray<Canvas2DSpatialResizeTarget> ResizeTargets { get; }
 
     /// <summary>
     /// Gets the one reversible translation used for relationship-owned manual guidance.
@@ -108,6 +167,10 @@ public sealed class Canvas2DSpatialPresentationPlan : IEquatable<Canvas2DSpatial
 
     public PointD MapSceneGuidanceToCanonical(PointD point) =>
         _sceneToCanonicalGuidanceTransform.TransformPoint(point);
+
+    public PointD MapLogicalToScene(PointD point) => CoordinateMap.MapLogicalToScene(point);
+
+    public PointD MapSceneToLogical(PointD point) => CoordinateMap.MapSceneToLogical(point);
 
     public bool TryGetRegion(
         Canvas2DSpatialRegionId regionId,
@@ -138,7 +201,10 @@ public sealed class Canvas2DSpatialPresentationPlan : IEquatable<Canvas2DSpatial
         ReferenceEquals(this, other) ||
         other is not null &&
         CanonicalGuidanceToSceneTransform == other.CanonicalGuidanceToSceneTransform &&
+        CoordinateMap.Equals(other.CoordinateMap) &&
+        MovementBottomBoundaryRegionId == other.MovementBottomBoundaryRegionId &&
         Regions.AsSpan().SequenceEqual(other.Regions.AsSpan()) &&
+        ResizeTargets.AsSpan().SequenceEqual(other.ResizeTargets.AsSpan()) &&
         VisualPlacements.AsSpan().SequenceEqual(other.VisualPlacements.AsSpan());
 
     public override bool Equals(object? obj) => Equals(obj as Canvas2DSpatialPresentationPlan);
@@ -147,6 +213,9 @@ public sealed class Canvas2DSpatialPresentationPlan : IEquatable<Canvas2DSpatial
     {
         var hash = new HashCode();
         hash.Add(CanonicalGuidanceToSceneTransform);
+        hash.Add(CoordinateMap);
+        hash.Add(MovementBottomBoundaryRegionId);
+        foreach (var target in ResizeTargets) hash.Add(target);
         foreach (var region in Regions)
         {
             hash.Add(region);

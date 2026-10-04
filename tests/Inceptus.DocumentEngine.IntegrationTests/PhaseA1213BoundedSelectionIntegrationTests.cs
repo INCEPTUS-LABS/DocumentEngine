@@ -39,7 +39,7 @@ public sealed class PhaseA1213BoundedSelectionIntegrationTests
         var uploads = test.Execution.FullUploadCount;
         var reuse = test.Pipeline.SelectionReuses;
         var events = test.Events.Count;
-        var visual = await test.PlaceActivityAsync(type, new PointD(650, 550));
+        var visual = await test.PlaceActivityAsync(type, FreePlacementCenter(test));
         Assert.Equal(full + 1, test.Pipeline.FullRuns);
         Assert.Equal(rebuilds, test.Pipeline.Rebuilds);
         Assert.Equal(uploads + 1, test.Execution.FullUploadCount);
@@ -119,7 +119,7 @@ public sealed class PhaseA1213BoundedSelectionIntegrationTests
     public async Task ExternalActivityNameDoesNotCreateInvisibleOwnerHoverButKeepsClickAndContext(string type)
     {
         await using var test = await PhaseA122PanSceneReuseIntegrationTests.Fixture.CreateAsync();
-        var visual = await test.PlaceActivityAsync(type, new(650, 550));
+        var visual = await test.PlaceActivityAsync(type, FreePlacementCenter(test));
         await test.ExecuteAsync(new UpdateNodeLabelVisualOverrideCommand(test.Snapshot.DocumentId, test.Snapshot.Revision,
             visual.Id, new NodeLabelVisualOverride(0, 170, 200, 50)));
         await ClearAsync(test);
@@ -151,6 +151,7 @@ public sealed class PhaseA1213BoundedSelectionIntegrationTests
         var third = new SemanticElementId("test:a1213:pool-c");
         await test.ExecuteAsync(new CreateOrganizationalPoolCommand(test.Snapshot.DocumentId, test.Snapshot.Revision,
             third, test.State.ActiveScopeId, OrganizationalPoolCreationMode.Empty, "Third"));
+        await PhaseN101OrganizationalPoolIntegrationTests.PrepareRegionCapacitiesAsync(test.Session, 1000d);
         var pools = new SemanticElementId?[] { new("test:a122:pool-a"), new("test:a122:pool-b"), third, null };
         var ids = new List<VisualStateId>();
         for (var index = 0; index < pools.Length; index++)
@@ -178,7 +179,7 @@ public sealed class PhaseA1213BoundedSelectionIntegrationTests
     public async Task FastSelectedResizeAndAuthoredAnchorHandlesAreImmediatelyAuthoritative()
     {
         await using var test = await PhaseA122PanSceneReuseIntegrationTests.Fixture.CreateAsync();
-        var visual = await test.PlaceActivityAsync("task", new(650, 550));
+        var visual = await test.PlaceActivityAsync("task", FreePlacementCenter(test));
         await test.ExecuteAsync(new AddConnectorAnchorCommand(test.Snapshot.DocumentId, test.Snapshot.Revision,
             visual.Id, new("test:a1213:source"), ConnectorAnchorSide.Right, ConnectorAnchorRole.Source, 0));
         await test.ExecuteAsync(new AddConnectorAnchorCommand(test.Snapshot.DocumentId, test.Snapshot.Revision,
@@ -325,6 +326,10 @@ public sealed class PhaseA1213BoundedSelectionIntegrationTests
 
     private static PointD Center(Canvas2DSceneItem item) => new(item.Bounds.X + item.Bounds.Width / 2,
         item.Bounds.Y + item.Bounds.Height / 2);
+
+    private static PointD FreePlacementCenter(PhaseA122PanSceneReuseIntegrationTests.Fixture test) =>
+        new(test.State.CurrentScene!.Items.Where(Canvas2DNodeBodyMetadata.IsNodeBody)
+            .Max(static item => item.Bounds.Right) + 200, 550);
 
     private static async Task ClearAsync(PhaseA122PanSceneReuseIntegrationTests.Fixture test) =>
         Assert.True((await test.Session.UpdateEditorStateAsync(new EditorStateSnapshot(viewport: test.State.EditorState.Viewport))).Succeeded);

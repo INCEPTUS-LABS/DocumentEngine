@@ -964,7 +964,10 @@ public sealed partial class Canvas2DSceneBuilder
             gestureBendIndex > 0 &&
             gestureBendIndex < points.Length - 1)
         {
-            points[gestureBendIndex] += activeGesture.Current - activeGesture.Origin;
+            points = Canvas2DRouteBendGeometry.DisplayedCandidate(target, gestureBendIndex,
+                activeGesture.Current - activeGesture.Origin,
+                Canvas2DRouteGestureMetadata.IsControlPressed(activeGesture.Properties),
+                Canvas2DRouteGestureMetadata.SnapState(activeGesture.Properties, gestureBendIndex)).ToArray();
         }
 
         var halfExtent = Canvas2DRouteGestureMetadata.HandleExtent / 2d;
@@ -1282,29 +1285,45 @@ public sealed partial class Canvas2DSceneBuilder
             return true;
         }
 
-        points[bendIndex] += gesture.Current - gesture.Origin;
-        var stableKey = $"route-preview:{gesture.Id}:{target.Id.Value}";
+        var original = points;
+        points = Canvas2DRouteBendGeometry.DisplayedCandidate(target, bendIndex,
+            gesture.Current - gesture.Origin,
+            Canvas2DRouteGestureMetadata.IsControlPressed(gesture.Properties),
+            Canvas2DRouteGestureMetadata.SnapState(gesture.Properties, bendIndex)).ToArray();
         var categories = target.Origin.Categories | Canvas2DSceneOriginCategory.EditorState;
-        items.Add(new Canvas2DSceneItem(
-            Canvas2DSceneObjectIdentity.ForEditorState(stableKey),
-            Canvas2DSceneLayer.Overlay,
-            3600,
-            Canvas2DSceneGeometry.Path(points, target.Geometry.IsClosed),
-            new Canvas2DSceneOriginTrace(
-                categories,
-                target.Origin.SemanticElementId,
-                visualStateId,
-                target.Origin.ProjectedObjectId,
-                stableKey,
-                target.Origin.RelatedProjectedObjectIds,
-                [target.Id]),
-            target.Transform,
-            target.Clip,
-            CreateMovePreviewStyle(target.Style),
-            target.IsVisible,
-            Canvas2DHitTestPolicy.None,
-            target.PersistentAppearance,
-            WithEditorKind(gesture.Kind, target.Metadata)));
+        for (var segment = 0; segment < points.Length - 1; segment++)
+        {
+            var first = segment;
+            var diagonal = IsChangedDiagonal(segment);
+            while (segment + 1 < points.Length - 1 && IsChangedDiagonal(segment + 1) == diagonal) segment++;
+            var style = CreateMovePreviewStyle(target.Style);
+            var stableKey = $"route-preview:{gesture.Id}:{target.Id.Value}:{first}";
+            items.Add(new Canvas2DSceneItem(
+                Canvas2DSceneObjectIdentity.ForEditorState(stableKey),
+                Canvas2DSceneLayer.Overlay,
+                3600,
+                Canvas2DSceneGeometry.Path(points[first..(segment + 2)]),
+                new Canvas2DSceneOriginTrace(
+                    categories,
+                    target.Origin.SemanticElementId,
+                    visualStateId,
+                    target.Origin.ProjectedObjectId,
+                    stableKey,
+                    target.Origin.RelatedProjectedObjectIds,
+                    [target.Id]),
+                target.Transform,
+                target.Clip,
+                diagonal ? new Canvas2DSceneStyle(stroke: style.Stroke, strokeWidth: style.StrokeWidth,
+                    dashPattern: [4d, 2d], opacity: style.Opacity) : style,
+                target.IsVisible,
+                Canvas2DHitTestPolicy.None,
+                target.PersistentAppearance,
+                WithEditorKind(gesture.Kind, target.Metadata)));
+        }
+
+        bool IsChangedDiagonal(int segment) =>
+            (points[segment] != original[segment] || points[segment + 1] != original[segment + 1]) &&
+            Canvas2DSegmentGeometry.Orientation(points[segment], points[segment + 1]) == Canvas2DSegmentOrientation.Diagonal;
 
         if (target.Origin.ProjectedObjectId is { } connectorId &&
             measuredConnectorLabels is not null)

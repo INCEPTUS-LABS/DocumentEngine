@@ -8,6 +8,7 @@ using Inceptus.DocumentEngine.Contracts.Layout;
 using Inceptus.DocumentEngine.Contracts.Primitives;
 using Inceptus.DocumentEngine.Contracts.Projection;
 using Inceptus.DocumentEngine.Contracts.Profiles;
+using Inceptus.DocumentEngine.Contracts.Properties;
 using Inceptus.DocumentEngine.Contracts.Routing;
 using Inceptus.DocumentEngine.Contracts.Visuals;
 
@@ -35,11 +36,14 @@ public sealed partial class Canvas2DSceneBuilder
         VisualModelSnapshot visualModel, EditorStateSnapshot editorState,
         ScenePresentationInput? presentation, Canvas2DSceneItem[] baseItems,
         Canvas2DSceneItem[] overlays, Canvas2DEditorOverlayInputs overlayInputs,
-        List<Diagnostic> diagnostics)
+        List<Diagnostic> diagnostics,
+        ImmutableArray<Canvas2DPlacementLabelLayout> placementLabelLayouts,
+        ImmutableArray<Canvas2DSceneItem> placementItems,
+        IReadOnlyDictionary<ProjectedObjectId, Canvas2DMeasuredNodeLabel>? measuredLabels,
+        IReadOnlyDictionary<ProjectedObjectId, Canvas2DMeasuredConnectorLabel>? measuredConnectorLabels)
     {
         if (presentation is null || !ReferenceEquals(visualModel, presentation.Document.VisualModel) ||
-            diagnostics.Count != 0 || overlays.Length > Canvas2DBoundedPresentation.MaximumItems ||
-            overlays.Any(static item => item.Layer != Canvas2DSceneLayer.Overlay))
+            diagnostics.Count != 0 || overlays.Length > Canvas2DBoundedPresentation.MaximumItems)
         {
             return null;
         }
@@ -56,6 +60,7 @@ public sealed partial class Canvas2DSceneBuilder
                 !attachedOwners.Contains(node.Source.SemanticElementId))
             .Select(static node => node.Source.VisualStateId!).ToImmutableHashSet();
         var orderedBase = baseItems.ToArray();
+        SuppressInstalledMovingLabel(editorState, orderedBase);
         Array.Sort(orderedBase, CompareItems);
         var source = new Canvas2DBoundedPresentationSource(
             new(this, presentation.Document, presentation.ActiveScopeId,
@@ -70,13 +75,37 @@ public sealed partial class Canvas2DSceneBuilder
             descriptor.HoverDependency == Canvas2DSceneTransientDependency.Invariant ||
             descriptor.VisualSelectionDependency == Canvas2DSceneTransientDependency.Invariant) &&
             IsSupportedSelectionEditorState(source, editorState);
-        if (!supportsMove && !supportsSelection)
+        var supportsPlacement = SupportsPlacementContributors() && IsSupportedPlacementEditorState(editorState);
+        var supportsResize = SupportsSpatialResizeContributors() && IsSupportedSpatialResizeState(editorState);
+        var labelMove = PrepareBoundedNodeLabelMove(source, editorState, measuredLabels);
+        var routeBend = PrepareBoundedRouteBend(source, editorState, overlays, measuredConnectorLabels);
+        if (routeBend is { FixedHighlights.IsEmpty: false })
+        {
+            // Selected connector/jump highlights keep their canonical Connector layer.
+            // They are fixed during a bend drag; the renderer's bounded family stays Overlay-only.
+            var stableItems = source.Items.Concat(routeBend.FixedHighlights.Values).ToArray();
+            Array.Sort(stableItems, CompareItems);
+            source = source with
+            {
+                Items = stableItems.ToImmutableArray(),
+                ItemsById = source.ItemsById.AddRange(routeBend.FixedHighlights),
+            };
+            overlays = overlays.Where(item => !routeBend.FixedHighlights.ContainsKey(item.Id)).ToArray();
+        }
+        if ((!supportsMove && !supportsSelection && !supportsPlacement && !supportsResize && labelMove is null && routeBend is null) ||
+            overlays.Any(static item => item.Layer != Canvas2DSceneLayer.Overlay))
         {
             return null;
         }
 
         Array.Sort(overlays, CompareItems);
-        return CreateMovePresentation(source, editorState, overlays.ToImmutableArray());
+        return CreateMovePresentation(source, editorState, overlays.ToImmutableArray()) with
+        {
+            PlacementLabelLayouts = placementLabelLayouts,
+            PlacementItems = placementItems,
+            NodeLabelMove = labelMove,
+            RouteBend = routeBend,
+        };
     }
 
     internal Canvas2DScene? TryReuseForMovePreview(
@@ -127,16 +156,26 @@ public sealed partial class Canvas2DSceneBuilder
         {
             input.AddRange(source.Families[editorState.Selection[0]]);
         }
-        if (editorState.HoveredObjectId is { } hover && input.All(item => item.Id != hover))
+        if (prior.RouteBend is null && editorState.HoveredObjectId is { } hover && input.All(item => item.Id != hover))
         {
             input.AddRange(source.Families[source.ItemsById[hover].Origin.VisualStateId!]);
         }
         var start = input.Count;
         var diagnostics = new List<Diagnostic>();
         ComposeEditorOverlays(editorState, graph, document.VisualModel, input, diagnostics,
-            measuredLabels: null, measuredConnectorLabels: null, source.OverlayInputs);
+            measuredLabels: null, prior.RouteBend?.Labels, source.OverlayInputs, prior.RouteBend?.HasLineJumps);
         AssociateEditorOverlaysWithSpatialPresentation(input, start);
         var overlays = input.Skip(start).Where(static item => !IsDocumentBoundaryGuide(item)).ToList();
+        if (prior.RouteBend is { } bend)
+        {
+            foreach (var highlight in bend.FixedHighlights.Values)
+            {
+                // Validate the fixed contribution instead of assuming its invariance.
+                var index = overlays.FindIndex(item => item.Id == highlight.Id);
+                if (index < 0 || !overlays[index].Equals(highlight)) return null;
+                overlays.RemoveAt(index);
+            }
+        }
         if (diagnostics.Count != 0 || overlays.Count > Canvas2DBoundedPresentation.MaximumItems ||
             overlays.Any(static item => item.Layer != Canvas2DSceneLayer.Overlay))
         {
@@ -167,12 +206,23 @@ public sealed partial class Canvas2DSceneBuilder
             }
         }
         cancellationToken.ThrowIfCancellationRequested();
-        var presentation = CreateMovePresentation(source, editorState, overlays.ToImmutableArray());
-        var complete = ImmutableArray.CreateBuilder<Canvas2DSceneItem>(source.Items.Length + overlays.Count);
+        var presentation = CreateMovePresentation(source, editorState, overlays.ToImmutableArray()) with { RouteBend = prior.RouteBend };
+        var complete = MergeBoundedItems(source, presentation);
+        cancellationToken.ThrowIfCancellationRequested();
+        return previous.WithBoundedPresentation(presentation, complete,
+            CreatePanReuseSource(graph, layout, routing, document.VisualModel, editorState,
+                new ScenePresentationInput(document, scopeId, profileViewState, profileElementViewState)));
+    }
+
+    private static ImmutableArray<Canvas2DSceneItem> MergeBoundedItems(
+        Canvas2DBoundedPresentationSource source, Canvas2DBoundedPresentation presentation)
+    {
+        var overlays = presentation.Items;
+        var complete = ImmutableArray.CreateBuilder<Canvas2DSceneItem>(source.Items.Length + overlays.Length);
         var boundedIndex = 0;
         for (var index = 0; index <= source.Items.Length; index++)
         {
-            while (boundedIndex < overlays.Count && presentation.BeforeContentIndices[boundedIndex] == index)
+            while (boundedIndex < overlays.Length && presentation.BeforeContentIndices[boundedIndex] == index)
             {
                 complete.Add(overlays[boundedIndex++]);
             }
@@ -181,10 +231,7 @@ public sealed partial class Canvas2DSceneBuilder
                 complete.Add(source.Items[index]);
             }
         }
-        cancellationToken.ThrowIfCancellationRequested();
-        return previous.WithBoundedPresentation(presentation, complete.MoveToImmutable(),
-            CreatePanReuseSource(graph, layout, routing, document.VisualModel, editorState,
-                new ScenePresentationInput(document, scopeId, profileViewState, profileElementViewState)));
+        return complete.MoveToImmutable();
     }
 
     private static Canvas2DBoundedPresentation CreateMovePresentation(
@@ -269,6 +316,10 @@ public sealed partial class Canvas2DSceneBuilder
         return current.ActiveGesture is not { } gesture ||
             (StringComparer.Ordinal.Equals(oldGesture.Id, gesture.Id) &&
              StringComparer.Ordinal.Equals(oldGesture.Kind, gesture.Kind) &&
-             oldGesture.Origin == gesture.Origin && oldGesture.Properties.Equals(gesture.Properties));
+             oldGesture.Origin == gesture.Origin &&
+             (oldGesture.Properties.Equals(gesture.Properties) ||
+              (gesture.Kind == Canvas2DRouteGestureMetadata.Kind &&
+               new PropertyMap(oldGesture.Properties.Where(pair => !Canvas2DRouteGestureMetadata.IsCandidateProperty(pair.Key)))
+                   .Equals(new PropertyMap(gesture.Properties.Where(pair => !Canvas2DRouteGestureMetadata.IsCandidateProperty(pair.Key)))))));
     }
 }

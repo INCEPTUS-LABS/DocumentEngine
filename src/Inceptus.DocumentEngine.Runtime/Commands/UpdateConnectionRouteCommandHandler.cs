@@ -54,6 +54,23 @@ internal sealed class UpdateConnectionRouteCommandHandler : ICommandHandler
         }
 
         var targetIsCompleteRoute = update.TargetRoute.Length >= 2;
+        if (document.VisualModel.RoutingScopes is not null)
+        {
+            if (targetIsCompleteRoute && !VisualCommandGeometry.HasRenderableRoute(update.TargetRoute))
+            {
+                return ValueTask.FromResult(CommandHandlerResult.Failure([
+                    Error(CommandExecutionDiagnosticCodes.VisualStateGeometryInvalid,
+                        "Manual route geometry must be finite and renderable.", update.TargetVisualStateId.Value)]));
+            }
+            // Mode checks are sequential within finalization, so preceding compound type changes apply.
+            var intent = targetIsCompleteRoute
+                ? ConnectorRoutingIntent.ReplaceManualDefinition(update.TargetVisualStateId,
+                    update.TargetRoute.Skip(1).Take(update.TargetRoute.Length - 2),
+                    update.TargetRoute[0], update.TargetRoute[^1])
+                : ConnectorRoutingIntent.Recalculate(update.TargetVisualStateId);
+            return ValueTask.FromResult(CommandHandlerResult.SuccessWithPreparation(document, [intent], [],
+                pipelineInvalidation: CommandPipelineInvalidation.ConnectorOnly));
+        }
         var existingIsCompleteRoute = existing.Route.Length >= 2;
         if ((targetIsCompleteRoute &&
              !VisualCommandGeometry.HasRenderableRoute(update.TargetRoute)) ||
@@ -88,7 +105,8 @@ internal sealed class UpdateConnectionRouteCommandHandler : ICommandHandler
             document.Revision,
             document.VisualModel.VisualStates.Select(visualState =>
                 visualState.Id == replacement.Id ? replacement : visualState),
-            document.VisualModel.ProfileElementPresentations);
+            document.VisualModel.ProfileElementPresentations,
+            document.VisualModel.RoutingScopes);
         var proposedDocument = new DocumentSnapshot(
             document.SemanticModel,
             proposedVisualModel,

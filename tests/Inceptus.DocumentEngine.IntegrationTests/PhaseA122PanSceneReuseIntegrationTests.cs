@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Diagnostics;
 using Inceptus.DocumentEngine.Blazor.Demo;
 using Inceptus.DocumentEngine.Bpmn;
 using Inceptus.DocumentEngine.Bpmn.Blazor.Presentation;
@@ -10,6 +11,7 @@ using Inceptus.DocumentEngine.Canvas2D.Rendering;
 using Inceptus.DocumentEngine.Canvas2D.Scene;
 using Inceptus.DocumentEngine.Contracts.Canvas2D;
 using Inceptus.DocumentEngine.Contracts.Commands;
+using Inceptus.DocumentEngine.Contracts.Routing;
 using Inceptus.DocumentEngine.Contracts.Documents;
 using Inceptus.DocumentEngine.Contracts.EditorState;
 using Inceptus.DocumentEngine.Contracts.Geometry;
@@ -288,6 +290,7 @@ public sealed class PhaseA122PanSceneReuseIntegrationTests
         var visual = test.Snapshot.VisualModel.VisualStates.Single(item => item.SemanticElementId == semanticId);
         if (bend)
         {
+            await BpmnModelerTestComposition.SetRoutingTypeAsync(test.Session, visual.Id, ConnectorRoutingType.Manual);
             var edge = test.State.ProjectedGraph!.Edges.Single(item => item.Source.SemanticElementId == semanticId);
             var route = test.State.RoutingResult!.Routes.Single(item => item.ProjectedEdgeId == edge.Id).Path;
             await test.ExecuteAsync(new UpdateConnectionRouteCommand(test.Snapshot.DocumentId, test.Snapshot.Revision,
@@ -318,14 +321,23 @@ public sealed class PhaseA122PanSceneReuseIntegrationTests
         await test.Session.WaitForIdleAsync();
         var changed = test.Snapshot.VisualModel.VisualStates.Single(item => item.Id == visual.Id);
         var original = before.VisualModel.VisualStates.Single(item => item.Id == visual.Id);
-        Assert.NotEqual(original, changed);
-        Assert.Equal(history + 1, test.State.HistoryStatus.EntryCount);
+        var changedRoute = bend ? BpmnModelerTestComposition.SavedRoute(test.Snapshot, visual.Id) : null;
+        if (bend)
+        {
+            Assert.Equal(original, changed);
+            Assert.NotEqual(BpmnModelerTestComposition.SavedRoute(before, visual.Id), changedRoute);
+        }
+        else Assert.NotEqual(original, changed);
+        Assert.Equal(history + (bend ? 0 : 1), test.State.HistoryStatus.EntryCount);
         Assert.True((await test.Session.UndoAsync()).IsCommitted);
         await test.Session.WaitForIdleAsync();
-        Assert.Equal(original, test.Snapshot.VisualModel.VisualStates.Single(item => item.Id == visual.Id));
+        if (bend)
+            Assert.Equal(ConnectorRoutingType.Automatic, BpmnModelerTestComposition.SavedRoute(test.Snapshot, visual.Id).RoutingType);
+        else Assert.Equal(original, test.Snapshot.VisualModel.VisualStates.Single(item => item.Id == visual.Id));
         Assert.True((await test.Session.RedoAsync()).IsCommitted);
         await test.Session.WaitForIdleAsync();
         Assert.Equal(changed, test.Snapshot.VisualModel.VisualStates.Single(item => item.Id == visual.Id));
+        if (bend) Assert.Equal(changedRoute, BpmnModelerTestComposition.SavedRoute(test.Snapshot, visual.Id));
     }
 
     private static bool IsGuide(Canvas2DSceneItem item) =>
@@ -338,7 +350,8 @@ public sealed class PhaseA122PanSceneReuseIntegrationTests
         internal EditingSession Session => session;
         internal Canvas2DRenderer Renderer => renderer;
         internal EditingSessionState State => session.CaptureState();
-        internal DocumentSnapshot Snapshot => composition.Document.CaptureSnapshot();
+        internal DocumentSnapshot Snapshot => session.TryCaptureDocumentSnapshot(out var snapshot)
+            ? snapshot : throw new InvalidOperationException("The test session is no longer attached.");
         internal PipelineProbe Pipeline => pipeline;
         internal ContributionProbe[] Contributions => contributions;
         internal EventProbe Events => events;
@@ -394,7 +407,8 @@ public sealed class PhaseA122PanSceneReuseIntegrationTests
             var result = await session.ExecuteAsync(command);
             Assert.True(result.IsCommitted, string.Join("; ", result.Diagnostics.Select(item => item.Message)));
             await session.WaitForIdleAsync();
-            Assert.Equal(EditingSessionStatus.Ready, State.Status);
+            Assert.True(State.Status == EditingSessionStatus.Ready,
+                string.Join("; ", State.RuntimeDiagnostics.Concat(State.PresentationDiagnostics).Select(static diagnostic => $"{diagnostic.Code}: {diagnostic.Message}")));
         }
 
         internal async Task EnablePoolsAsync()
@@ -405,6 +419,11 @@ public sealed class PhaseA122PanSceneReuseIntegrationTests
                 PoolA, State.ActiveScopeId, OrganizationalPoolCreationMode.AdoptEligibleUnassigned, "Operations"));
             await ExecuteAsync(new CreateOrganizationalPoolCommand(Snapshot.DocumentId, Snapshot.Revision,
                 PoolB, State.ActiveScopeId, OrganizationalPoolCreationMode.Empty, "Fulfillment"));
+            var regions = Snapshot.VisualModel.RoutingScopes!.Value.Single(scope => scope.ScopeId == State.ActiveScopeId).Geometry.Regions;
+            var capacity = regions.Single(region => region.ContainerSemanticElementId == PoolA).ExpandedHeight;
+            foreach (var region in regions.Where(region => region.ContainerSemanticElementId != PoolA && region.ExpandedHeight < capacity))
+                await ExecuteAsync(new SetOrganizationalRegionExpandedHeightCommand(Snapshot.DocumentId,
+                    Snapshot.Revision, State.ActiveScopeId, region.Id, capacity));
             var flow = Snapshot.SemanticModel.Relationships.Single(item => item.Id == BpmnDemoPipeline.ThirdSequenceFlowId);
             await ExecuteAsync(new AssignOrganizationalElementCommand(Snapshot.DocumentId, Snapshot.Revision, flow.TargetId, PoolB));
             var unassigned = Snapshot.SemanticModel.Elements.First(item => item.Id != flow.SourceId &&
@@ -413,15 +432,17 @@ public sealed class PhaseA122PanSceneReuseIntegrationTests
             await ExecuteAsync(new UnassignOrganizationalElementCommand(Snapshot.DocumentId, Snapshot.Revision, unassigned.Id));
         }
 
-        internal static async Task<Fixture> CreateAsync()
+        internal static async Task<Fixture> CreateAsync(DocumentCanvasComposition? suppliedComposition = null)
         {
-            var composition = await BpmnModelerTestComposition.CreateDemoAsync();
+            var composition = suppliedComposition ?? await BpmnModelerTestComposition.CreateDemoAsync();
             var source = composition.Configuration;
             var eligibility = new OrganizationalElementEligibilityPolicy(BpmnSemanticTypes.IsFlowNode);
             var registrations = BpmnPluginRegistration.N100.SceneContributors.AddRange(
                 OrganizationalPluginRegistration.Create(eligibility,
                     OrganizationalPoolSceneContributor.CreateRegistration(eligibility)).SceneContributors);
-            var contributions = registrations.Select(item => new ContributionProbe(item.Contributor)).ToArray();
+            var contributions = registrations.Select(item => item.Contributor is ICanvas2DScopeGeometryContributor geometry
+                ? new GeometryContributionProbe(item.Contributor, geometry, item.Descriptor.PlacementDependency)
+                : new ContributionProbe(item.Contributor, item.Descriptor.PlacementDependency)).ToArray();
             var events = new EventProbe();
             var configuration = new EditingSessionConfiguration(source.ProjectionEngine, source.LayoutEngine,
                 source.LayoutAlgorithmId, source.RoutingEngine, source.RoutingAlgorithmId,
@@ -464,8 +485,10 @@ public sealed class PhaseA122PanSceneReuseIntegrationTests
         }
     }
 
-    internal sealed class ContributionProbe(ICanvas2DSceneContributor inner) : ICanvas2DSceneContributor, ICanvas2DConnectorPresentationRouter
+    internal class ContributionProbe(ICanvas2DSceneContributor inner,
+        Canvas2DScenePlacementDependency placementDependency = Canvas2DScenePlacementDependency.Unknown) : ICanvas2DSceneContributor, ICanvas2DConnectorPresentationRouter
     {
+        internal Canvas2DScenePlacementDependency PlacementDependency => placementDependency;
         internal int Calls { get; private set; }
         internal int Routes { get; private set; }
         public Canvas2DSceneContributionResult Contribute(Canvas2DSceneContributionContext context)
@@ -480,11 +503,25 @@ public sealed class PhaseA122PanSceneReuseIntegrationTests
         }
     }
 
+    internal sealed class GeometryContributionProbe(ICanvas2DSceneContributor inner,
+        ICanvas2DScopeGeometryContributor geometry, Canvas2DScenePlacementDependency placementDependency)
+        : ContributionProbe(inner, placementDependency), ICanvas2DScopeGeometryContributor
+    {
+        public Canvas2DScopeGeometryBaseResult PrepareBase(Canvas2DScopeGeometryBaseContext context) =>
+            geometry.PrepareBase(context);
+
+        public Canvas2DScopeGeometryPresentationResult PreparePresentation(Canvas2DScopeGeometryPresentationContext context) =>
+            geometry.PreparePresentation(context);
+    }
+
     internal sealed class PipelineProbe(ISessionPipelineProcessing inner) : ISessionPipelineProcessing
     {
         internal int Reuses { get; private set; }
         internal int MoveReuses { get; private set; }
         internal int SelectionReuses { get; private set; }
+        internal int PlacementReuses { get; private set; }
+        internal int SpatialResizeReuses { get; private set; }
+        internal TimeSpan PlacementCompositionElapsed { get; private set; }
         internal int Rebuilds { get; private set; }
         internal int FullRuns { get; private set; }
         internal bool BlockPan { get; set; }
@@ -499,9 +536,16 @@ public sealed class PhaseA122PanSceneReuseIntegrationTests
             DocumentSnapshot document, EditingSessionPipelineArtifacts artifacts, EditorStateSnapshot editorState,
             ModelProfileViewStateSnapshot view, ModelProfileElementViewStateSnapshot elements, CancellationToken cancellationToken)
         {
+            var started = Stopwatch.GetTimestamp();
             var result = await inner.RebuildSceneForTransientPresentationAsync(previousScene, document, artifacts, editorState, view, elements, cancellationToken);
             if (result.ReusedMoveContent) { MoveReuses++; }
             else if (result.ReusedSelectionContent) { SelectionReuses++; }
+            else if (result.ReusedSpatialResizeContent) { SpatialResizeReuses++; }
+            else if (result.ReusedPlacementContent)
+            {
+                PlacementReuses++;
+                PlacementCompositionElapsed += Stopwatch.GetElapsedTime(started);
+            }
             else { Rebuilds++; }
             if (BlockMove)
             {

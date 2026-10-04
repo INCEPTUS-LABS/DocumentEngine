@@ -162,4 +162,16 @@
   <data name="Validation_MinHeight" xml:space="preserve"><value>Height must be at least {0}.</value></data>
   <data name="Validation_Bounds" xml:space="preserve"><value>The requested bounds must be finite and renderable.</value></data>
   <data name="Validation_Finite" xml:space="preserve"><value>{0} must be a finite number.</value></data>
+  <data name="Status_PlacementAllowed" xml:space="preserve"><value>Placement allowed. Click to insert; Escape to cancel.</value></data>
+  <data name="Status_PlacementRejected" xml:space="preserve"><value>Placement rejected. Choose another position or press Escape.</value></data>
+  <data name="Properties_RoutingType" xml:space="preserve"><value>Routing type</value></data>
+  <data name="RoutingType_Automatic" xml:space="preserve"><value>Automatic</value></data>
+  <data name="RoutingType_Straight" xml:space="preserve"><value>Straight</value></data>
+  <data name="RoutingType_Manual" xml:space="preserve"><value>Manual</value></data>
+  <data name="Properties_RoutingApplyRule" xml:space="preserve"><value>Apply Name and Routing type separately.</value></data>
+  <data name="Validation_RoutingType" xml:space="preserve"><value>Select a supported routing type.</value></data>
+  <data name="Status_RegionHeight" xml:space="preserve"><value>Height</value></data>
+  <data name="Status_RegionWidth" xml:space="preserve"><value>Stack width</value></data>
+  <data name="Status_RegionResizeAllowed" xml:space="preserve"><value>{0}: {1} (minimum {2}). Drag to resize; Escape cancels.</value></data>
+  <data name="Status_RegionResizeRejected" xml:space="preserve"><value>{0}: {1} rejected (minimum {2}). Complete child bodies must fit; Escape cancels.</value></data>
 </root>

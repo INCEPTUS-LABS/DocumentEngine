@@ -41,7 +41,8 @@ internal sealed class BpmnSequenceFlowDeletionCommandHandler : ICommandHandler
             document.Revision,
             document.VisualModel.VisualStates.Where(visual =>
                 visual.Id != deletion.ConnectorVisualStateId),
-            document.VisualModel.ProfileElementPresentations);
+            document.VisualModel.ProfileElementPresentations,
+            document.VisualModel.RoutingScopes);
         return ValueTask.FromResult(CommandHandlerResult.Success(
             BpmnDocumentReplacement.Replace(document, semanticModel, visualModel),
             pipelineInvalidation: CommandPipelineInvalidation.WithoutNodeLayout,
@@ -112,7 +113,8 @@ internal sealed class BpmnFlowNodeDeletionCommandHandler : ICommandHandler
             document.VisualModel.VisualStates.Where(visual =>
                 !deletionPlan.RemovedSemanticIds.Contains(visual.SemanticElementId)),
             document.VisualModel.ProfileElementPresentations.Where(presentation =>
-                !deletionPlan.RemovedElementIds.Contains(presentation.SemanticElementId)));
+                !deletionPlan.RemovedElementIds.Contains(presentation.SemanticElementId)),
+            document.VisualModel.RoutingScopes);
         return ValueTask.FromResult(CommandHandlerResult.Success(
             BpmnDocumentReplacement.Replace(document, semanticModel, visualModel),
             pipelineInvalidation: CommandPipelineInvalidation.WithoutNodeLayout,

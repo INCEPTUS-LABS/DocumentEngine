@@ -77,7 +77,7 @@ public sealed class CommandExecutionResult : IEquatable<CommandExecutionResult>
         AuthoritativeDocumentComponent affectedComponents,
         IEnumerable<Diagnostic>? diagnostics = null)
     {
-        if (status == CommandExecutionStatus.Committed)
+        if (status is CommandExecutionStatus.Committed or CommandExecutionStatus.NoChange)
         {
             throw new ArgumentException(
                 "A failure result cannot use the committed status.",
@@ -93,6 +93,12 @@ public sealed class CommandExecutionResult : IEquatable<CommandExecutionResult>
             null,
             diagnostics);
     }
+
+    public static CommandExecutionResult CreateNoChange(
+        DocumentId documentId, CommandTypeId commandTypeId, DocumentRevision currentRevision,
+        IEnumerable<Diagnostic>? diagnostics = null) =>
+        new(documentId, commandTypeId, CommandExecutionStatus.NoChange, currentRevision,
+            AuthoritativeDocumentComponent.None, null, diagnostics);
 
     public bool Equals(CommandExecutionResult? other) =>
         ReferenceEquals(this, other) ||

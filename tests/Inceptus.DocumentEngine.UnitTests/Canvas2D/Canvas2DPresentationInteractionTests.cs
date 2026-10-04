@@ -108,6 +108,37 @@ public sealed class Canvas2DPresentationInteractionTests
     }
 
     [Fact]
+    public async Task SpatialMoveUsesIdenticalBottomClampForPreviewReleaseAndSessionAcceptance()
+    {
+        var attached = await AttachPresentedNodeAsync(hasMovementBottom: true);
+        await using var session = attached.Session;
+        await using var controller = new Canvas2DInteractionController(session, spatialEditPlanners: SpatialEditPlanners);
+        var before = session.CaptureState();
+        var start = Center(attached.PresentedNode.Bounds);
+        var expectedDelta = attached.Instance.Bounds.Bottom - attached.PresentedNode.Bounds.Bottom;
+        attached.Pipeline.EnqueueScene(EditingSessionPipelineResult.Success(attached.Artifacts, attached.Scene));
+        attached.Pipeline.EnqueueFull((snapshot, editorState, _) => ValueTask.FromResult(
+            ControlledEditingSessionPipeline.Success(EditingSessionTestHarness.CreateArtifacts(attached.Inputs, snapshot.Revision),
+                snapshot.VisualModel, editorState)));
+
+        await controller.PointerPressedAsync(new Canvas2DPointerInput(4420, start, buttons: 1));
+        var preview = await controller.PointerMovedAsync(new Canvas2DPointerInput(4420, start + new VectorD(0, 1000), buttons: 1));
+        Assert.Equal(Canvas2DInteractionStatus.Updated, preview.Status);
+        Assert.Equal(start + new VectorD(0, expectedDelta), preview.SessionState.EditorState.ActiveGesture!.Current);
+        Assert.Equal("grabbing", preview.CssCursor);
+        var result = await controller.PointerReleasedAsync(new Canvas2DPointerInput(4420, start + new VectorD(0, 2000)));
+
+        Assert.Equal(Canvas2DInteractionStatus.Committed, result.Status);
+        var visual = attached.Document.CaptureSnapshot().VisualModel.VisualStates.Single(
+            item => item.Id == attached.PresentedNode.Origin.VisualStateId);
+        var displayed = attached.Instance.MapLocalToScene(new RectD(visual.Position.X, visual.Position.Y,
+            visual.Size.Width, visual.Size.Height));
+        Assert.Equal(attached.Instance.Bounds.Bottom, displayed.Bottom);
+        Assert.Equal(before.DocumentRevision.Increment(), attached.Document.Revision);
+        Assert.Equal(before.HistoryStatus.EntryCount + 1, result.SessionState.HistoryStatus.EntryCount);
+    }
+
+    [Fact]
     public async Task TranslatedSpatialRouteContextAddPersistsOnlyProcessLocalPoints()
     {
         var attached = await AttachPresentedConnectorAsync([]);
@@ -221,7 +252,66 @@ public sealed class Canvas2DPresentationInteractionTests
             visual => visual.Id == attached.VisualStateId).Route);
     }
 
-    private static async ValueTask<PresentedNodeTestContext> AttachPresentedNodeAsync()
+    [Fact]
+    public async Task NonuniformManualBendDragUsesPointInverseAcrossACollapsedBand()
+    {
+        PointD[] authored = [new(110, 45), new(160, 180), new(210, 45)];
+        var map = new Canvas2DSpatialCoordinateMap([
+            new(new Canvas2DSpatialRegionId("test:connector-presentation"), 0, 400, 0, 40),
+        ]);
+        var attached = await AttachPresentedConnectorAsync(authored, includeBendHandle: true, coordinateMap: map);
+        await using var session = attached.Session;
+        await using var controller = new Canvas2DInteractionController(session, spatialEditPlanners: SpatialEditPlanners);
+        var artifacts = EditingSessionTestHarness.CreateArtifacts(attached.Inputs);
+        attached.Pipeline.EnqueueScene(EditingSessionPipelineResult.Success(artifacts, attached.Scene));
+        attached.Pipeline.EnqueueFull((snapshot, editorState, _) => ValueTask.FromResult(
+            ControlledEditingSessionPipeline.Success(EditingSessionTestHarness.CreateArtifacts(attached.Inputs, snapshot.Revision),
+                snapshot.VisualModel, editorState)));
+        var start = Center(attached.BendHandle!.Bounds);
+        var end = start + new VectorD(15, 30);
+        var expected = map.MapSceneToLogical(end);
+
+        var pressed = await controller.PointerPressedAsync(new Canvas2DPointerInput(4481, start, buttons: 1));
+        Assert.Equal("inceptus.canvas2d:route-bend", pressed.SessionState.EditorState.ActiveGesture?.Kind);
+        var moved = await controller.PointerMovedAsync(new Canvas2DPointerInput(4481, end, buttons: 1));
+        Assert.Equal(Canvas2DInteractionStatus.Updated, moved.Status);
+        var released = await controller.PointerReleasedAsync(new Canvas2DPointerInput(4481, end));
+
+        Assert.Equal(Canvas2DInteractionStatus.Committed, released.Status);
+        var actual = attached.Document.CaptureSnapshot().VisualModel.VisualStates.Single(
+            visual => visual.Id == attached.VisualStateId).Route;
+        AssertPoint(expected, actual[1]);
+        Assert.Equal(authored[0], actual[0]);
+        Assert.Equal(authored[^1], actual[^1]);
+        Assert.NotEqual(authored[1] + new VectorD(15, 30), actual[1]);
+    }
+
+    [Fact]
+    public async Task NonuniformManualContextAddRevalidatesTheDisplayedSegmentThroughPointMapping()
+    {
+        PointD[] authored = [new(110, 45), new(160, 180), new(210, 45)];
+        var map = new Canvas2DSpatialCoordinateMap([
+            new(new Canvas2DSpatialRegionId("test:connector-presentation"), 0, 400, 0, 40),
+        ]);
+        var attached = await AttachPresentedConnectorAsync(authored, coordinateMap: map);
+        await using var session = attached.Session;
+        await using var controller = new Canvas2DInteractionController(session, spatialEditPlanners: SpatialEditPlanners);
+        var logicalPoint = new PointD(135, 112.5);
+        var displayedPoint = map.MapLogicalToScene(logicalPoint);
+
+        var context = await controller.PointerContextMenuAsync(displayedPoint);
+        var action = Assert.IsType<Canvas2DConnectorRouteContextAction>(context.ConnectorRouteContextAction);
+        Assert.Equal(Canvas2DConnectorRouteContextActionKind.AddPoint, action.Kind);
+        AssertPoint(logicalPoint, action.RoutePoint);
+        Assert.True(action.TryResolveTargetRoute(attached.Scene, authored, out var target));
+        Assert.Equal(4, target.Length);
+        AssertPoint(logicalPoint, target[1]);
+        Assert.Equal(authored[1], target[2]);
+        Assert.Equal(authored[0], target[0]);
+        Assert.Equal(authored[^1], target[^1]);
+    }
+
+    private static async ValueTask<PresentedNodeTestContext> AttachPresentedNodeAsync(bool hasMovementBottom = false)
     {
         var inputs = Canvas2DSceneTestData.Create();
         var artifacts = EditingSessionTestHarness.CreateArtifacts(inputs);
@@ -268,7 +358,10 @@ public sealed class Canvas2DPresentationInteractionTests
             canonicalScene.ContributorMetadata,
             [presentedNode],
             canonicalScene.Diagnostics,
-            new Canvas2DSpatialPresentationPlan([instance], [], instance.LocalToSceneTransform));
+            hasMovementBottom
+                ? new Canvas2DSpatialPresentationPlan([instance], [], instance.LocalToSceneTransform,
+                    Canvas2DSpatialCoordinateMap.Identity, instance.Id)
+                : new Canvas2DSpatialPresentationPlan([instance], [], instance.LocalToSceneTransform));
         var pipeline = new ControlledEditingSessionPipeline();
         pipeline.EnqueueFull(EditingSessionPipelineResult.Success(artifacts, scene));
         var document = EditingSessionTestHarness.CreateDocument(inputs);
@@ -292,7 +385,8 @@ public sealed class Canvas2DPresentationInteractionTests
 
     private static async ValueTask<PresentedConnectorTestContext> AttachPresentedConnectorAsync(
         IEnumerable<PointD> route,
-        bool includeBendHandle = false)
+        bool includeBendHandle = false,
+        Canvas2DSpatialCoordinateMap? coordinateMap = null)
     {
         var inputs = Canvas2DSceneTestData.Create();
         var visualStateId = inputs.Graph.Edges.Single().Source.VisualStateId!;
@@ -333,9 +427,10 @@ public sealed class Canvas2DPresentationInteractionTests
             new Canvas2DSpatialRegionId("test:connector-presentation"),
             TestProfileId,
             null,
-            Matrix2D.CreateTranslation(300d, 400d),
-            new RectD(300d, 400d, 800d, 600d));
-        var presentedConnector = Present(canonicalConnector, instance);
+            coordinateMap is null ? Matrix2D.CreateTranslation(300d, 400d) : Matrix2D.Identity,
+            coordinateMap is null ? new RectD(300d, 400d, 800d, 600d) : new RectD(0d, 0d, 800d, 600d));
+        var presentedConnector = coordinateMap is null ? Present(canonicalConnector, instance) :
+            PresentMappedConnector(canonicalConnector, instance, route.ToArray(), coordinateMap);
         Canvas2DSceneItem? bendHandle = null;
         if (includeBendHandle)
         {
@@ -439,6 +534,22 @@ public sealed class Canvas2DPresentationInteractionTests
                 Canvas2DConnectorPathMetadata.ResolveEditable(source),
                 Canvas2DConnectorPathMetadata.ResolveEditable(source).Select(instance.MapLocalToScene),
                 instance.LocalToSceneTransform, instance.Id, instance.Id));
+
+    private static Canvas2DSceneItem PresentMappedConnector(Canvas2DSceneItem source,
+        Canvas2DSpatialRegion instance, PointD[] authored, Canvas2DSpatialCoordinateMap coordinateMap)
+    {
+        var displayed = authored.Select(coordinateMap.MapLogicalToScene).ToArray();
+        var geometry = Canvas2DSceneGeometry.Path(displayed);
+        var metadata = source.Metadata.Where(static entry => !Canvas2DConnectorPathMetadata.IsReservedKey(entry.Key) &&
+                entry.Key != Canvas2DRouteGestureMetadata.RouteEditable)
+            .Concat(Canvas2DConnectorPathMetadata.CreateProperties(displayed, displayed))
+            .Append(KeyValuePair.Create(Canvas2DRouteGestureMetadata.RouteEditable, PropertyValue.FromBoolean(true)));
+        return new Canvas2DSceneItem(source.Id, source.Layer, source.ZIndex, geometry, source.Origin,
+            style: source.Style, hitTestPolicy: source.HitTestPolicy, persistentAppearance: source.PersistentAppearance,
+            metadata: metadata, spatialRegion: instance,
+            connectorPresentationMapping: new Canvas2DConnectorPresentationMapping(authored, displayed,
+                coordinateMap, instance.Id, instance.Id));
+    }
 
     private static PointD Center(RectD bounds) =>
         new(bounds.Left + (bounds.Width / 2d), bounds.Top + (bounds.Height / 2d));

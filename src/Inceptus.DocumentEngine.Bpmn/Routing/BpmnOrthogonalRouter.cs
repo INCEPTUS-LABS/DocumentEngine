@@ -42,11 +42,27 @@ internal static partial class BpmnOrthogonalRouter
         CancellationToken cancellationToken,
         out ImmutableArray<PointD> path,
         out string failureReason)
+        => TryRoute(source, target, operation, mandatoryWaypoints, allowPolicyRelaxation, cancellationToken,
+            out path, out failureReason, out _, out _);
+
+    internal static BpmnRoutingOutcome TryRoute(
+        BpmnRoutingEndpoint source,
+        BpmnRoutingEndpoint target,
+        OperationContext operation,
+        IReadOnlyList<PointD> mandatoryWaypoints,
+        bool allowPolicyRelaxation,
+        CancellationToken cancellationToken,
+        out ImmutableArray<PointD> path,
+        out string failureReason,
+        out double? acceptedClearance,
+        out double? acceptedLead)
     {
         ArgumentNullException.ThrowIfNull(operation);
         ArgumentNullException.ThrowIfNull(mandatoryWaypoints);
         var actualObstacles = operation.ActualObstacles;
         path = [];
+        acceptedClearance = null;
+        acceptedLead = null;
         failureReason = "No legal orthogonal route satisfies the endpoint constraints.";
 
         if (source.Point == target.Point)
@@ -114,6 +130,11 @@ internal static partial class BpmnOrthogonalRouter
                         return BpmnRoutingOutcome.InvalidOutput;
                     }
 
+                    if (outcome == BpmnRoutingOutcome.Routed)
+                    {
+                        acceptedClearance = clearance;
+                        acceptedLead = leadDistance;
+                    }
                     return outcome;
                 }
             }

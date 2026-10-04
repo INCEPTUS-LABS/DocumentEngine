@@ -1,4 +1,5 @@
 using Inceptus.DocumentEngine.Contracts.Commands;
+using System.Collections.Immutable;
 
 namespace Inceptus.DocumentEngine.Runtime.History;
 
@@ -9,7 +10,11 @@ internal sealed class PreparedHistoryMutation
         HistoryState proposedState,
         HistoryMutationKind kind,
         ICommand? restorationCommand = null,
-        ScopeNavigationHistoryEntry? scopeNavigation = null)
+        ScopeNavigationHistoryEntry? scopeNavigation = null,
+        ImmutableArray<ConnectorRoutingIntent> routingIntents = default,
+        ImmutableArray<SpatialRegionHeightIntent> spatialHeightIntents = default,
+        ImmutableArray<NodeGeometryHistorySeed> nodeGeometrySeeds = default,
+        ImmutableArray<SpatialScopeWidthIntent> spatialWidthIntents = default)
     {
         ArgumentNullException.ThrowIfNull(baseState);
         ArgumentNullException.ThrowIfNull(proposedState);
@@ -18,6 +23,10 @@ internal sealed class PreparedHistoryMutation
         Kind = kind;
         RestorationCommand = restorationCommand;
         ScopeNavigation = scopeNavigation;
+        RoutingIntents = routingIntents.IsDefault ? [] : routingIntents;
+        SpatialHeightIntents = spatialHeightIntents.IsDefault ? [] : spatialHeightIntents;
+        SpatialWidthIntents = spatialWidthIntents.IsDefault ? [] : spatialWidthIntents;
+        NodeGeometrySeeds = nodeGeometrySeeds.IsDefault ? [] : nodeGeometrySeeds;
     }
 
     internal HistoryState BaseState { get; }
@@ -29,6 +38,13 @@ internal sealed class PreparedHistoryMutation
     internal ICommand? RestorationCommand { get; }
 
     internal ScopeNavigationHistoryEntry? ScopeNavigation { get; }
+
+    internal ImmutableArray<ConnectorRoutingIntent> RoutingIntents { get; }
+
+    internal ImmutableArray<SpatialRegionHeightIntent> SpatialHeightIntents { get; }
+    internal ImmutableArray<SpatialScopeWidthIntent> SpatialWidthIntents { get; }
+
+    internal ImmutableArray<NodeGeometryHistorySeed> NodeGeometrySeeds { get; }
 }
 
 internal enum HistoryMutationKind

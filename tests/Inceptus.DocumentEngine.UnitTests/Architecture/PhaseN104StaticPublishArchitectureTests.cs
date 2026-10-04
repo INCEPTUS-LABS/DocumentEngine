@@ -104,7 +104,7 @@ public sealed class PhaseN104StaticPublishArchitectureTests
     }
 
     [Fact]
-    public void PublishCaptureIsOneReadOnlyCurrentTupleAndOrganizationalPolicyLivesAtHost()
+    public void PublishCaptureIsOneReadOnlyCurrentTupleWithoutExpandingHiddenContent()
     {
         var capture = ReadProductionFile(
             "Inceptus.DocumentEngine.Canvas2D",
@@ -133,10 +133,10 @@ public sealed class PhaseN104StaticPublishArchitectureTests
         Assert.DoesNotContain("UpdateModelProfileElementViewStateAsync", capture,
             StringComparison.Ordinal);
 
-        Assert.Contains("WithPreferredVisibility", host, StringComparison.Ordinal);
-        Assert.Contains("OrganizationalModelProfile.Id", host, StringComparison.Ordinal);
-        Assert.Contains("entry.ProfileId != OrganizationalModelProfile.Id", host,
-            StringComparison.Ordinal);
+        Assert.Contains("editorState.ModelProfileViewState", host, StringComparison.Ordinal);
+        Assert.Contains("editorState.ModelProfileElementViewState", host, StringComparison.Ordinal);
+        Assert.DoesNotContain("WithPreferredVisibility", host, StringComparison.Ordinal);
+        Assert.DoesNotContain("CollapsedElements.Where", host, StringComparison.Ordinal);
         Assert.Contains("BpmnPublishedTokenRoleClassifier", host, StringComparison.Ordinal);
         Assert.Contains("BpmnSemanticTypes", policy, StringComparison.Ordinal);
         Assert.Contains("BpmnSemanticTypes.ParallelGateway", policy, StringComparison.Ordinal);

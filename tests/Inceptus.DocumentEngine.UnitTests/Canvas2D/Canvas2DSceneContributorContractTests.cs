@@ -18,6 +18,48 @@ namespace Inceptus.DocumentEngine.UnitTests.Canvas2D;
 public sealed class Canvas2DSceneContributorContractTests
 {
     [Fact]
+    public void ExistingDescriptorOverloadsKeepPlacementConservative()
+    {
+        var id = new Canvas2DSceneContributorId("test:placement");
+        Canvas2DSceneContributorDescriptor[] legacy =
+        [
+            new(id, "1"),
+            new(id, "1", Canvas2DScenePanDependency.Invariant),
+            new(id, "1", Canvas2DScenePanDependency.Invariant,
+                Canvas2DSceneMoveGestureDependency.Invariant),
+            new(id, "1", Canvas2DScenePanDependency.Invariant,
+                Canvas2DSceneMoveGestureDependency.Invariant,
+                Canvas2DSceneTransientDependency.Invariant,
+                Canvas2DSceneTransientDependency.Invariant),
+        ];
+
+        Assert.All(legacy, descriptor =>
+            Assert.Equal(Canvas2DScenePlacementDependency.Unknown, descriptor.PlacementDependency));
+        var explicitlyUnknown = PlacementDescriptor(Canvas2DScenePlacementDependency.Unknown);
+        Assert.Equal(legacy[^1], explicitlyUnknown);
+        Assert.Equal(legacy[^1].GetHashCode(), explicitlyUnknown.GetHashCode());
+        Assert.Null(typeof(Canvas2DSceneContributorDescriptor)
+            .GetProperty(nameof(Canvas2DSceneContributorDescriptor.PlacementDependency))!.SetMethod);
+    }
+
+    [Fact]
+    public void PlacementProofParticipatesInDescriptorIdentityAndRejectsUndefinedValues()
+    {
+        var values = Enum.GetValues<Canvas2DScenePlacementDependency>();
+        var descriptors = values.Select(PlacementDescriptor).ToArray();
+
+        Assert.Equal(4, descriptors.Distinct().Count());
+        foreach (var descriptor in descriptors)
+        {
+            var copy = PlacementDescriptor(descriptor.PlacementDependency);
+            Assert.Equal(descriptor, copy);
+            Assert.Equal(descriptor.GetHashCode(), copy.GetHashCode());
+        }
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            PlacementDescriptor((Canvas2DScenePlacementDependency)int.MaxValue));
+    }
+
+    [Fact]
     public void ContributorIdentityAndDescriptorAreExplicitStableValues()
     {
         var first = new Canvas2DSceneContributorId("test:scene-contributor");
@@ -250,6 +292,15 @@ public sealed class Canvas2DSceneContributorContractTests
             new SceneObjectId(targetId),
             Canvas2DSceneGeometry.Ellipse(new RectD(0d, 0d, 1d, 1d)),
             Canvas2DSceneStyle.Default);
+
+    private static Canvas2DSceneContributorDescriptor PlacementDescriptor(
+        Canvas2DScenePlacementDependency dependency) => new(
+            new Canvas2DSceneContributorId("test:placement"), "1",
+            Canvas2DScenePanDependency.Invariant,
+            Canvas2DSceneMoveGestureDependency.Invariant,
+            Canvas2DSceneTransientDependency.Invariant,
+            Canvas2DSceneTransientDependency.Invariant,
+            dependency);
 
     private sealed class EmptyContributor : ICanvas2DSceneContributor
     {

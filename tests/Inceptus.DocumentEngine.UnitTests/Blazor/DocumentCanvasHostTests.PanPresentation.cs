@@ -135,7 +135,7 @@ public sealed partial class DocumentCanvasHostTests
                     selection: [visualId], viewport: before.EditorState.Viewport)).AsTask());
             before = session.CaptureState();
         }
-        var imported = NativeDocumentSerializer.Export(CreateImportedDocument("test:a125:queued-import", 31));
+        var imported = NativeDocumentSerializer.Export(await CreatePreparedImportedDocumentAsync("test:a125:queued-import", 31));
         test.Execution.BlockRender = true;
         test.ResetCounts();
         var pan = test.Renderer.Dispatcher.InvokeAsync(() => PointerObserver(test.Host).WheelAsync(11, 7));
@@ -230,7 +230,7 @@ public sealed partial class DocumentCanvasHostTests
                 case "dpr": await test.Surface.RaiseAsync(new Canvas2DSurfaceSize(900, 600, 2)); break;
                 case "import":
                     Assert.True((await test.Host.ImportNativeDocumentAsync(NativeDocumentSerializer.Export(
-                        CreateImportedDocument("test:a125:fallback-import", 31)).AsMemory())).Succeeded);
+                        await CreatePreparedImportedDocumentAsync("test:a125:fallback-import", 31)).AsMemory())).Succeeded);
                     break;
                 case "new-diagram": Assert.True((await test.Host.NewDiagramAsync()).Succeeded); break;
                 case "properties":

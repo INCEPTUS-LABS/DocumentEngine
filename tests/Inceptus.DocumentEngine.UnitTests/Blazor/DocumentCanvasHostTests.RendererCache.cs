@@ -29,7 +29,7 @@ public sealed partial class DocumentCanvasHostTests
         else
         {
             Assert.True((await host.ImportNativeDocumentAsync(NativeDocumentSerializer.Export(
-                CreateImportedDocument("test:a123:import", 31)).AsMemory())).Succeeded);
+                await CreatePreparedImportedDocumentAsync("test:a123:import", 31)).AsMemory())).Succeeded);
         }
         var current = Session(host);
         Assert.NotSame(previous, current);

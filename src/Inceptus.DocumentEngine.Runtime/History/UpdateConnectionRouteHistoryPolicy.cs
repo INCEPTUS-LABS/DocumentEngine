@@ -22,6 +22,11 @@ internal sealed class UpdateConnectionRouteHistoryPolicy : ICommandHistoryPolicy
         ArgumentNullException.ThrowIfNull(before);
         ArgumentNullException.ThrowIfNull(committed);
 
+        if (before.VisualModel.RoutingScopes is not null)
+        {
+            return CommandHistoryPreparationResult.PreserveExistingHistory();
+        }
+
         if (command is not UpdateConnectionRouteCommand update ||
             !before.VisualModel.TryGetVisualState(update.TargetVisualStateId, out var oldState) ||
             oldState is null ||

@@ -22,6 +22,9 @@ public sealed class BpmnModelerFacadeArchitectureTests
         typeof(BpmnModelerDocumentResult),
         typeof(BpmnModelerFileResult),
         typeof(BpmnModelerFileArtifact),
+        typeof(BpmnModelerSaveCheckpoint),
+        typeof(BpmnModelerNativeSaveStatus),
+        typeof(BpmnModelerNativeImportOptions),
     ];
 
     [Fact]
@@ -60,6 +63,11 @@ public sealed class BpmnModelerFacadeArchitectureTests
             typeof(DocumentSnapshot), typeof(CancellationToken));
         AssertMethod(nameof(InceptusBpmnModeler.ImportNativeDocumentAsync),
             typeof(ValueTask<BpmnModelerDocumentResult>), typeof(ReadOnlyMemory<byte>), typeof(CancellationToken));
+        AssertMethod(nameof(InceptusBpmnModeler.ImportNativeDocumentAsync),
+            typeof(ValueTask<BpmnModelerDocumentResult>), typeof(ReadOnlyMemory<byte>), typeof(BpmnModelerNativeImportOptions), typeof(CancellationToken));
+        AssertMethod(nameof(InceptusBpmnModeler.AcknowledgeNativeSave), typeof(bool), typeof(BpmnModelerSaveCheckpoint));
+        Assert.Equal(typeof(BpmnModelerNativeSaveStatus), typeof(InceptusBpmnModeler)
+            .GetProperty(nameof(InceptusBpmnModeler.NativeSaveStatus))!.PropertyType);
         AssertMethod(nameof(InceptusBpmnModeler.ExportNativeDocumentAsync), typeof(ValueTask<BpmnModelerFileResult>),
             typeof(CancellationToken));
         AssertMethod(nameof(InceptusBpmnModeler.PublishAsync), typeof(ValueTask<BpmnModelerFileResult>),
@@ -129,7 +137,7 @@ public sealed class BpmnModelerFacadeArchitectureTests
     private static void AssertMethod(string name, Type returnType, params Type[] parameterTypes)
     {
         var method = Assert.Single(typeof(InceptusBpmnModeler).GetMethods(PublicDeclared),
-            method => method.Name == name);
+            method => method.Name == name && method.GetParameters().Select(static parameter => parameter.ParameterType).SequenceEqual(parameterTypes));
         Assert.Equal(returnType, method.ReturnType);
         Assert.Equal(parameterTypes, method.GetParameters().Select(static parameter => parameter.ParameterType));
         Assert.All(method.GetParameters().Where(static parameter => parameter.ParameterType == typeof(CancellationToken)),

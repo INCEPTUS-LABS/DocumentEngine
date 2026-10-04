@@ -14,7 +14,7 @@ namespace Inceptus.DocumentEngine.Bpmn.Routing;
 /// <summary>
 /// Provides deterministic polyline routing for the supported BPMN Sequence Flow slice.
 /// </summary>
-public sealed class BpmnRoutingAlgorithm : IRoutingAlgorithm
+public sealed partial class BpmnRoutingAlgorithm : IRoutingAlgorithm, IStableConnectorRoutingPolicy
 {
     public RoutingAlgorithmResult Route(
         ProjectedGraph graph,

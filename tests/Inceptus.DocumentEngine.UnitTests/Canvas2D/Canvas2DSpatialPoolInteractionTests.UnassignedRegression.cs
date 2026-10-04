@@ -19,7 +19,7 @@ public sealed partial class Canvas2DSpatialPoolInteractionTests
     {
         await using var fixture = await CreateEmptyUnassignedFixtureAsync();
         var traces = new List<string>();
-        var probe = new PointD(400d, 180d);
+        var probe = new PointD(400d, 140d);
         var emptyRegion = Unassigned(fixture);
         traces.Add(ObserveUnassigned("empty", fixture, probe));
         Assert.True(IsUnassignedDestinationAvailable(fixture, probe));
@@ -52,7 +52,7 @@ public sealed partial class Canvas2DSpatialPoolInteractionTests
 
         var nextTimer = await PlaceInUnassignedAsync(fixture, "timer-catch-event", new PointD(100d, 40d));
         traces.Add($"replacement Timer: committed={nextTimer.IsCommitted}; {Diagnostics(nextTimer.Diagnostics)}");
-        var nextPlacement = await PlaceInUnassignedAsync(fixture, "start-event", new PointD(250d, 180d));
+        var nextPlacement = await PlaceInUnassignedAsync(fixture, "start-event", new PointD(250d, 160d));
         traces.Add($"next placement: committed={nextPlacement.IsCommitted}; {Diagnostics(nextPlacement.Diagnostics)}");
         traces.Add(ObserveUnassigned("after repeated placement", fixture, probe));
 
@@ -81,7 +81,7 @@ public sealed partial class Canvas2DSpatialPoolInteractionTests
             }
         }
         var originalRegion = Destination(fixture, containerId);
-        foreach (var point in new[] { new PointD(100d, 40d), new PointD(400d, 180d), new PointD(250d, 180d) })
+        foreach (var point in new[] { new PointD(100d, 40d), new PointD(400d, 160d), new PointD(250d, 160d) })
         {
             var before = fixture.Document;
             var stateBefore = fixture.State;
@@ -109,7 +109,8 @@ public sealed partial class Canvas2DSpatialPoolInteractionTests
     public async Task SequentialMixedToolboxTypesUseCurrentTranslatedUnassignedAtEveryZoom(double zoom)
     {
         await using var fixture = await CreateEmptyUnassignedFixtureAsync();
-        // Grow an upper row using an ordinary canonical edit, so the destination is far below the origin.
+        // Author a taller upper row before moving its child; the move cannot grow its capacity.
+        await fixture.SetRegionHeightAsync(Fixture.PoolA, 1200d);
         await fixture.ExecuteAsync(state => new Inceptus.DocumentEngine.Contracts.Commands.MoveVisualStateCommand(
             state.DocumentId, state.DocumentRevision, Fixture.RegionNodes[1], new PointD(460d, 1000d)));
         Assert.True((await fixture.Session.UpdateViewportAsync(
@@ -122,7 +123,8 @@ public sealed partial class Canvas2DSpatialPoolInteractionTests
             var before = fixture.Document;
             var stateBefore = fixture.State;
             var previousRegion = Unassigned(fixture);
-            var point = new PointD(index % 2 == 0 ? 200d : 400d, index % 2 == 0 ? 80d : 180d);
+            // Distinct complete bodies fit the existing destination without relying on overlap or centre-only containment.
+            var point = new PointD(80d + index % 4 * 160d, index < 4 ? 50d : 150d);
             var result = await PlaceInUnassignedAsync(fixture, types[index], point);
             Assert.True(result.IsCommitted, $"{types[index]}: {Diagnostics(result.Diagnostics)}");
             var id = Assert.IsType<VisualStateId>(result.CreatedVisualStateId);
@@ -142,6 +144,8 @@ public sealed partial class Canvas2DSpatialPoolInteractionTests
     public async Task NineMixedOperationsReuseUnassignedWithoutAnyReset()
     {
         await using var fixture = await CreateEmptyUnassignedFixtureAsync();
+        await fixture.ExecuteAsync(state => new SetOrganizationalScopeWidthCommand(
+            state.DocumentId, state.DocumentRevision, state.ActiveScopeId, 800d));
         async Task<VisualStateId> Place(string type, PointD point)
         {
             var before = fixture.Document;
@@ -171,7 +175,7 @@ public sealed partial class Canvas2DSpatialPoolInteractionTests
         }
 
         var timer = await Place("timer-catch-event", new PointD(100d, 40d));
-        var task = await Place("task", new PointD(400d, 180d));
+        var task = await Place("task", new PointD(400d, 140d));
         await Move(Fixture.RegionNodes[0], null, new PointD(120d, 180d));
         await Place("exclusive-gateway", new PointD(620d, 80d));
         await Move(Fixture.RegionNodes[2], null, new PointD(620d, 240d));
@@ -194,9 +198,9 @@ public sealed partial class Canvas2DSpatialPoolInteractionTests
         Assert.Equal(state.DocumentRevision, fixture.State.DocumentRevision);
         Assert.Equal(state.HistoryStatus, fixture.State.HistoryStatus);
         Assert.True(IsUnassignedDestinationAvailable(fixture, new PointD(400d, 180d)));
-        var accepted = await PlaceInUnassignedAsync(fixture, "timer-catch-event", new PointD(400d, 180d));
+        var accepted = await PlaceInUnassignedAsync(fixture, "timer-catch-event", new PointD(400d, 160d));
         Assert.True(accepted.IsCommitted, Diagnostics(accepted.Diagnostics));
-        Assert.Equal(new PointD(382d, 162d), fixture.Visual(Assert.IsType<VisualStateId>(accepted.CreatedVisualStateId)).Position);
+        Assert.Equal(new PointD(382d, 142d), fixture.Visual(Assert.IsType<VisualStateId>(accepted.CreatedVisualStateId)).Position);
     }
 
     [Theory]
@@ -213,7 +217,7 @@ public sealed partial class Canvas2DSpatialPoolInteractionTests
         // Arm and preview before recomposition; the eventual click must reacquire the new Scene.
         fixture.ToolboxSelection.Select(new ToolboxItemId("bpmn:toolbox:task"));
         await fixture.Placement.UpdatePreviewAtCssPointAsync(fixture.Session,
-            fixture.Css(previousRegion.MapLocalToScene(new PointD(400d, 180d))));
+            fixture.Css(previousRegion.MapLocalToScene(new PointD(400d, 140d))));
         if (change == "collapse")
         {
             Assert.True((await fixture.Session.UpdateModelProfileElementViewStateAsync(
@@ -239,7 +243,7 @@ public sealed partial class Canvas2DSpatialPoolInteractionTests
         var before = fixture.Document;
         var stateBefore = fixture.State;
         var result = await fixture.Placement.TryPlaceAtCssPointAsync(fixture.Session,
-            fixture.Css(Unassigned(fixture).MapLocalToScene(new PointD(400d, 180d))));
+            fixture.Css(Unassigned(fixture).MapLocalToScene(new PointD(400d, 140d))));
         await fixture.Session.WaitForIdleAsync();
         Assert.True(result.IsCommitted, Diagnostics(result.Diagnostics));
         AssertUnrelatedVisualsUnchanged(before, fixture.Document);

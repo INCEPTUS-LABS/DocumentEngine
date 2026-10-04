@@ -82,7 +82,7 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
         var hidden = CapturePlacementState(fixture);
         await SetPlacementGraphicsAsync(fixture, true);
         AssertPlacementSiblingsExact(hidden, fixture);
-        Assert.Equal(hidden.State.CurrentScene!.SpatialPresentationPlan, fixture.State.CurrentScene!.SpatialPresentationPlan);
+        AssertSpatialGeometryUnchanged(hidden.State.CurrentScene!.SpatialPresentationPlan!, fixture.State.CurrentScene!.SpatialPresentationPlan!);
         var final = CapturePlacementState(fixture);
         Assert.Equal(initial.State.DocumentRevision.Value + 5, final.State.DocumentRevision.Value);
         Assert.Equal(initial.State.HistoryStatus.EntryCount + 5, final.State.HistoryStatus.EntryCount);
@@ -113,7 +113,7 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
     [InlineData("right")]
     [InlineData("below")]
     [InlineData("inside")]
-    public async Task PlacementAtPoolExtremesChangesOnlyNewNodeAndUniformDerivedLowerRows(string position)
+    public async Task PlacementAtPoolExtremesRequiresWholeBodyContainmentAndPreservesExistingGeometry(string position)
     {
         await using var fixture = await CreatePlacementStabilityFixtureAsync();
         var before = CapturePlacementState(fixture);
@@ -121,24 +121,34 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
         var localBand = region.MapSceneToLocal(region.Bounds);
         var center = position switch
         {
-            "left" => new PointD(80d, 350d),
-            "above" => new PointD(700d, 50d),
+            "left" => FindFreePlacementCenter(fixture, PoolAId, leftmost: true),
+            "above" => FindFreePlacementCenter(fixture, PoolAId),
             "right" => new PointD(localBand.Right - 1d, 300d),
             "below" => new PointD(1100d, localBand.Bottom - 1d),
-            _ => new PointD(700d, 300d),
+            _ => FindFreePlacementCenter(fixture, PoolAId, nearestCenter: true),
         };
+
+        if (position is "right" or "below")
+        {
+            // A1.2.14 intentionally replaces centre-only insertion and automatic destination
+            // growth with complete candidate containment before any command is planned.
+            fixture.ToolboxSelection.Select(new ToolboxItemId("bpmn:toolbox:task"));
+            var result = await fixture.Placement.TryPlaceAtCssPointAsync(fixture.Session,
+                fixture.Css(region.MapLocalToScene(center)));
+            Assert.False(result.IsCommitted);
+            Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Code == "TOOLBOX_PLACEMENT_OUTSIDE_REGION");
+            Assert.Same(before.Document, fixture.Document);
+            Assert.Equal(before.State.HistoryStatus, fixture.State.HistoryStatus);
+            AssertPlacementSiblingsExact(before, fixture);
+            Assert.Equal(before.State.CurrentScene!.SpatialPresentationPlan, fixture.State.CurrentScene!.SpatialPresentationPlan);
+            return;
+        }
 
         await AddStableToolboxElementAsync(fixture, PoolAId, "task", center);
 
         AssertPlacementSiblingsExact(before, fixture);
         Assert.Equal(region.Id, PlacementRegion(fixture, PoolAId).Id);
         Assert.Equal(region.LocalToSceneTransform, PlacementRegion(fixture, PoolAId).LocalToSceneTransform);
-        if (position == "below")
-        {
-            var lowerBefore = before.State.CurrentScene!.SpatialPresentationPlan!.Regions.Single(
-                candidate => candidate.ContainerSemanticElementId == PoolBId);
-            Assert.True(PlacementRegion(fixture, PoolBId).LocalToSceneTransform.OffsetY > lowerBefore.LocalToSceneTransform.OffsetY);
-        }
     }
 
     [Fact]
@@ -151,7 +161,7 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
             for (var index = 0; index < types.Length; index++)
             {
                 var before = CapturePlacementState(fixture);
-                await AddStableToolboxElementAsync(fixture, poolId, types[index], new PointD(650d + (index * 150d), 100d));
+                await AddStableToolboxElementAsync(fixture, poolId, types[index], FindFreePlacementCenter(fixture, poolId));
                 AssertPlacementSiblingsExact(before, fixture);
             }
         }
@@ -160,7 +170,7 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
         await MoveToRegionAsync(fixture, DragFixture.TaskIds[2], null, new PointD(450d, 100d), unassignedId);
         await MoveToRegionAsync(fixture, DragFixture.TaskIds[2], PoolBId, new PointD(180d, 160d), unassignedId);
         var beforeFinal = CapturePlacementState(fixture);
-        await AddStableToolboxElementAsync(fixture, null, "start-event", new PointD(1100d, 240d));
+        await AddStableToolboxElementAsync(fixture, null, "start-event", FindFreePlacementCenter(fixture, null));
         AssertPlacementSiblingsExact(beforeFinal, fixture);
     }
 
@@ -198,14 +208,45 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
             state.DocumentId, state.DocumentRevision, new SemanticElementId("n101:placement-stability:flow"),
             StabilityFlow, owner.SemanticElementId, fixture.Visual(StabilityA3).SemanticElementId,
             sourceAnchor, targetAnchor));
+        await fixture.ExecuteAsync(state => new SetConnectorRoutingTypeCommand(
+            state.DocumentId, state.DocumentRevision, StabilityFlow, Contracts.Routing.ConnectorRoutingType.Manual));
+        var savedPath = fixture.SavedRoute(StabilityFlow).Path;
         await fixture.ExecuteAsync(state => new UpdateConnectionRouteCommand(
             state.DocumentId, state.DocumentRevision, StabilityFlow,
-            [new PointD(200d, 450d), new PointD(250d, 600d), new PointD(850d, 600d), new PointD(900d, 500d)]));
+            [savedPath[0], new PointD(250d, 600d), new PointD(850d, 600d), savedPath[^1]]));
         return fixture;
     }
 
     private static Canvas2DSpatialRegion PlacementRegion(DragFixture fixture, SemanticElementId? poolId) =>
         fixture.State.CurrentScene!.SpatialPresentationPlan!.Regions.Single(region => region.ContainerSemanticElementId == poolId);
+
+    private static PointD FindFreePlacementCenter(
+        DragFixture fixture, SemanticElementId? poolId, bool leftmost = false, bool nearestCenter = false)
+    {
+        // These stability tests exercise retained sibling geometry. Arrange a complete free task-sized
+        // slot so their setup does not depend on the former overlap/centre-only insertion policy.
+        var region = PlacementRegion(fixture, poolId);
+        var local = region.MapSceneToLocal(region.Bounds);
+        var bodies = fixture.State.CurrentScene!.Items.Where(Canvas2DNodeBodyMetadata.IsNodeBody).ToArray();
+        var points = new List<PointD>();
+        for (var y = 40d; y + 40d <= local.Bottom; y += 20d)
+        {
+            for (var x = 60d; x + 60d <= local.Right; x += 20d)
+            {
+                var point = new PointD(x, y);
+                var body = region.MapLocalToScene(new RectD(x - 60d, y - 40d, 120d, 80d));
+                if (region.Bounds.Contains(body) && !bodies.Any(existing => existing.Bounds.Intersects(body)))
+                {
+                    points.Add(point);
+                }
+            }
+        }
+        Assert.NotEmpty(points);
+        return nearestCenter
+            ? points.OrderBy(point => Math.Abs(point.X - (local.Left + local.Right) / 2d) +
+                Math.Abs(point.Y - (local.Top + local.Bottom) / 2d)).First()
+            : leftmost ? points.OrderBy(point => point.X).ThenBy(point => point.Y).First() : points[0];
+    }
 
     private static PointD[] PlacementConnectorPath(DragFixture fixture, VisualStateId id)
     {
@@ -246,7 +287,8 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
         await WaitForReadyAsync(fixture.Session);
         Assert.Same(document, fixture.Document);
         Assert.Equal(before.HistoryStatus, fixture.State.HistoryStatus);
-        Assert.Equal(before.CurrentScene!.SpatialPresentationPlan, fixture.State.CurrentScene!.SpatialPresentationPlan);
+        AssertSpatialGeometryUnchanged(before.CurrentScene!.SpatialPresentationPlan!, fixture.State.CurrentScene!.SpatialPresentationPlan!);
+        Assert.Equal(visible, !fixture.State.CurrentScene.SpatialPresentationPlan!.ResizeTargets.IsEmpty);
     }
 
     private static PlacementState CapturePlacementState(DragFixture fixture) => new(fixture.Document, fixture.State);
@@ -296,6 +338,7 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
             await fixture.ExecuteAsync(state => new CreateOrganizationalPoolCommand(
                 state.DocumentId, state.DocumentRevision, PoolAId, state.ActiveScopeId,
                 OrganizationalPoolCreationMode.AdoptEligibleUnassigned, "Adopted demo"));
+            await PrepareRegionCapacitiesAsync(fixture.Session, 900d);
             return fixture;
         }
     }

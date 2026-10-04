@@ -542,6 +542,20 @@
                                 }
                             </label>
                         }
+                        @if (draft.Authoritative.CanEditRoutingType)
+                        {
+                            <label class="properties-field-compact">@Text["Properties_RoutingType"]
+                                <select id="@DomId("properties-routing-type")"
+                                        value="@draft.RoutingTypeValue"
+                                        disabled="@_propertiesApplying"
+                                        @onchange="UpdateRoutingTypeDraftValue">
+                                    <option value="automatic">@Text["RoutingType_Automatic"]</option>
+                                    <option value="straight">@Text["RoutingType_Straight"]</option>
+                                    <option value="manual">@Text["RoutingType_Manual"]</option>
+                                </select>
+                            </label>
+                            <p class="properties-feedback">@Text["Properties_RoutingApplyRule"]</p>
+                        }
                     </fieldset>
 
                     <fieldset data-property-group="parameters">
@@ -1304,6 +1318,15 @@
     private string StatusMessage => _state switch
     {
         { IsDisposed: true } or { Session.IsClosed: true } => Text["Status_Disposed"],
+        { Session.Status: EditingSessionStatus.Ready, LatestPresentationSucceeded: true }
+            when _state.Session.EditorState.TemporaryFeedback.FirstOrDefault(static feedback => feedback.SpatialResize is not null)?.SpatialResize is { } resize =>
+            Text[resize.IsAllowed ? "Status_RegionResizeAllowed" : "Status_RegionResizeRejected",
+                Text[resize.Target.Edge == Canvas2DSpatialResizeEdge.Bottom ? "Status_RegionHeight" : "Status_RegionWidth"],
+                Format(resize.RequestedExtent), Format(resize.Target.Constraints.Minimum)],
+        { Session.Status: EditingSessionStatus.Ready, LatestPresentationSucceeded: true }
+            when _state.Session.EditorState.TemporaryFeedback.Any(static feedback => feedback.PlacementPreview is not null) =>
+            Text[_state.Session.EditorState.TemporaryFeedback.First(static feedback => feedback.PlacementPreview is not null)
+                .PlacementPreview!.IsAllowed ? "Status_PlacementAllowed" : "Status_PlacementRejected"],
         { Session.Status: EditingSessionStatus.Ready, LatestPresentationSucceeded: true } =>
             Text["Status_Ready"],
         { Session.Status: EditingSessionStatus.Ready } =>
@@ -1670,6 +1693,11 @@
                 NativeDocumentContentType,
                 NativeDocumentFileName,
                 _componentLifetime.Token);
+            // Browser handoff succeeded; the browser does not expose the eventual disk-write outcome.
+            if (export.SaveCheckpoint is { } checkpoint)
+            {
+                host.AcknowledgeNativeSave(checkpoint);
+            }
             lock (_lifecycleSync)
             {
                 if (!_disposed)
@@ -2948,6 +2976,14 @@
                 isDirty: false);
             RefreshHostState(host);
         }
+    }
+
+    private void UpdateRoutingTypeDraftValue(ChangeEventArgs args)
+    {
+        if (_propertiesDraft is not { Authoritative.CanEditRoutingType: true } draft || _propertiesApplying)
+            return;
+        draft.RoutingTypeValue = args.Value?.ToString() ?? string.Empty;
+        PublishUpdatedPropertiesDraft(draft);
     }
 
     private void UpdateDataDraftValue(ElementPropertyFieldId fieldId, object? value)

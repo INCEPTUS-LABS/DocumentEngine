@@ -342,8 +342,9 @@ internal sealed class CommandValidationService
                 components == AuthoritativeDocumentComponent.Metadata,
             CommandCategory.Publication =>
                 components == AuthoritativeDocumentComponent.Publication,
-            CommandCategory.Document or CommandCategory.Compound =>
+            CommandCategory.Document =>
                 HasMultipleComponents(components),
+            CommandCategory.Compound => components != AuthoritativeDocumentComponent.None,
             _ => false,
         };
 

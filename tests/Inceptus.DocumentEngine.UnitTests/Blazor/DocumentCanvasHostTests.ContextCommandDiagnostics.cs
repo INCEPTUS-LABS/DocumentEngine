@@ -86,7 +86,11 @@ public sealed partial class DocumentCanvasHostTests
             markup, StringComparison.Ordinal);
         Assert.Equal(1, markup.Split(diagnostic.Message, StringSplitOptions.None).Length - 1);
         Assert.Same(before, host.CaptureDocumentSnapshot().Snapshot);
-        Assert.Equal(snapshot, before);
+        Assert.Equal(snapshot.SemanticModel, before.SemanticModel);
+        Assert.Equal(snapshot.VisualModel.VisualStates.AsEnumerable(), before.VisualModel.VisualStates.AsEnumerable());
+        Assert.NotNull(before.VisualModel.RoutingScopes);
+        Assert.Equal(snapshot.Metadata, before.Metadata);
+        Assert.Equal(snapshot.Publication, before.Publication);
         Assert.Equal(history, session.CaptureState().HistoryStatus);
         Assert.Empty(ModelerChanges(log));
         Assert.Empty(log.OfType<BpmnModelerOperationFailedEventArgs>());

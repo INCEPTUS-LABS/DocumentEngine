@@ -15,8 +15,45 @@ internal sealed class CompoundDocumentHistoryPolicy : ICommandHistoryPolicy
         new(CompoundDocumentCommand.KnownTypeId, new CompoundDocumentHistoryPolicy());
 
     public CommandHistoryPreparationResult Prepare(
-        ICommand command, DocumentSnapshot before, DocumentSnapshot committed) =>
-        CommandHistoryPreparationResult.Undoable(new Factory(before), new Factory(committed));
+        ICommand command, DocumentSnapshot before, DocumentSnapshot committed)
+    {
+        var beforeScopes = before.VisualModel.RoutingScopes ?? [];
+        var afterScopes = committed.VisualModel.RoutingScopes ?? [];
+        var afterConnectors = afterScopes.SelectMany(static scope => scope.Connectors)
+            .ToDictionary(static record => record.VisualStateId);
+        var routingDeltas = beforeScopes.SelectMany(static scope => scope.Connectors)
+            .Where(record => afterConnectors.TryGetValue(record.VisualStateId, out var after) &&
+                after.RoutingType != record.RoutingType)
+            .Select(record => new ConnectorRoutingTypeHistoryDelta(record.VisualStateId, record.RoutingType,
+                afterConnectors[record.VisualStateId].RoutingType)).ToImmutableArray();
+        var heightDeltas = ImmutableArray.CreateBuilder<SpatialRegionHeightHistoryDelta>();
+        var widthDeltas = ImmutableArray.CreateBuilder<SpatialScopeWidthHistoryDelta>();
+        foreach (var scope in beforeScopes)
+        {
+            var afterScope = afterScopes.FirstOrDefault(candidate => candidate.ScopeId == scope.ScopeId);
+            if (afterScope is null) continue;
+            foreach (var width in scope.Geometry.SpatialWidths)
+            {
+                var after = afterScope.Geometry.SpatialWidths.FirstOrDefault(candidate => candidate.ProfileId == width.ProfileId);
+                if (after is not null && after.OuterWidth != width.OuterWidth)
+                    widthDeltas.Add(new SpatialScopeWidthHistoryDelta(scope.ScopeId, width.ProfileId,
+                        width.OuterWidth, after.OuterWidth));
+            }
+            foreach (var region in scope.Geometry.Regions)
+            {
+                var after = afterScope.Geometry.Regions.FirstOrDefault(candidate => candidate.Id == region.Id);
+                if (after is not null && after.ExpandedHeight != region.ExpandedHeight)
+                    heightDeltas.Add(new SpatialRegionHeightHistoryDelta(scope.ScopeId, region.Id,
+                        region.ExpandedHeight, after.ExpandedHeight));
+            }
+        }
+        if (routingDeltas.IsEmpty && heightDeltas.Count == 0 && widthDeltas.Count == 0 &&
+            CommandProcessor.ContentEqualsIgnoringRevision(CommandProcessor.WithoutRoutingScopes(before),
+                CommandProcessor.WithoutRoutingScopes(committed)))
+            return CommandHistoryPreparationResult.PreserveExistingHistory();
+        return CommandHistoryPreparationResult.Undoable(new Factory(before), new Factory(committed),
+            routingDeltas, heightDeltas, widthDeltas);
+    }
 
     private sealed class Factory(DocumentSnapshot snapshot) : IHistoryCommandFactory
     {
@@ -59,7 +96,8 @@ internal sealed class RestoreCompoundDocumentCommandHandler : ICommandHandler, I
         var removed = beforeNodes.Keys.Except(afterNodes.Keys).ToArray();
         var changed = afterNodes.Where(pair => !beforeNodes.TryGetValue(pair.Key, out var previous) ||
                 !pair.Value.Equals(previous)).Select(pair => pair.Key).ToArray();
-        var impact = removed.Length > 0 ? NodeGeometryPipelineImpact.ForRemovedVisualStates(removed)
+        NodeGeometryPipelineImpact? impact = removed.Length > 0 && changed.Length > 0 ? null
+            : removed.Length > 0 ? NodeGeometryPipelineImpact.ForRemovedVisualStates(removed)
             : changed.Length > 0 ? NodeGeometryPipelineImpact.ForHistoricalRestoration(changed, restore.Snapshot.Revision)
             : NodeGeometryPipelineImpact.PreserveAll;
         return ValueTask.FromResult(CommandHandlerResult.Success(snapshot,

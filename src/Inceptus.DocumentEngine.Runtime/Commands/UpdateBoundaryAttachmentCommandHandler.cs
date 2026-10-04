@@ -130,7 +130,8 @@ internal sealed class UpdateBoundaryAttachmentCommandHandler : ICommandHandler
                 replacements.TryGetValue(visualState.Id, out var synchronized)
                     ? synchronized
                     : visualState),
-            document.VisualModel.ProfileElementPresentations);
+            document.VisualModel.ProfileElementPresentations,
+            document.VisualModel.RoutingScopes);
         return ValueTask.FromResult(CommandHandlerResult.Success(
             new DocumentSnapshot(
                 document.SemanticModel,

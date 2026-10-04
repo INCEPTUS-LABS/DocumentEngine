@@ -10,7 +10,7 @@ using Inceptus.DocumentEngine.Contracts.Visuals;
 
 namespace Inceptus.DocumentEngine.Runtime.Documents;
 
-internal static class DocumentInvariantValidator
+internal static partial class DocumentInvariantValidator
 {
     internal const string SemanticIdentityDuplicateCode = "DOC_SEMANTIC_ID_DUPLICATE";
     internal const string RelationshipSourceMissingCode = "DOC_RELATIONSHIP_SOURCE_MISSING";
@@ -244,6 +244,7 @@ internal static class DocumentInvariantValidator
         }
 
         ValidateConnectorAnchorOccupancy(snapshot.VisualModel, diagnostics);
+        diagnostics.AddRange(ValidateRoutingState(snapshot, requirePrepared: false, policyProvider));
 
         return [.. diagnostics];
     }

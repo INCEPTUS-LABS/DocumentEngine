@@ -281,10 +281,7 @@ public sealed class BpmnPluginRegistration
                 new BpmnNodeProjectionRule(
                     BpmnProjectionIdentities.ExclusiveGatewayRuleId,
                     requiresNameLabel: false,
-                    nameLabelPlacement: new NodeLabelPlacement(
-                        NodeLabelPlacementKind.OutsideBelow,
-                        gap: 8d,
-                        maximumWidth: 160d))),
+                    nameLabelPlacement: BpmnNodeLabelPlacementPolicy.OutsideBelow)),
         ];
         LayoutAlgorithms = m321.LayoutAlgorithms;
         RoutingAlgorithms = m321.RoutingAlgorithms;
@@ -313,10 +310,7 @@ public sealed class BpmnPluginRegistration
                 new BpmnNodeProjectionRule(
                     BpmnProjectionIdentities.ExclusiveGatewayRuleId,
                     requiresNameLabel: false,
-                    nameLabelPlacement: new NodeLabelPlacement(
-                        NodeLabelPlacementKind.OutsideBelow,
-                        gap: 8d,
-                        maximumWidth: 160d),
+                    nameLabelPlacement: BpmnNodeLabelPlacementPolicy.OutsideBelow,
                     nameLabelInteractionPolicy:
                         NodeLabelInteractionPolicy.MoveAndResize)),
         ];
@@ -373,10 +367,7 @@ public sealed class BpmnPluginRegistration
                 new BpmnNodeProjectionRule(
                     BpmnProjectionIdentities.ParallelGatewayRuleId,
                     requiresNameLabel: false,
-                    nameLabelPlacement: new NodeLabelPlacement(
-                        NodeLabelPlacementKind.OutsideBelow,
-                        gap: 8d,
-                        maximumWidth: 160d),
+                    nameLabelPlacement: BpmnNodeLabelPlacementPolicy.OutsideBelow,
                     nameLabelInteractionPolicy:
                         NodeLabelInteractionPolicy.MoveAndResize)),
         ];
@@ -432,10 +423,7 @@ public sealed class BpmnPluginRegistration
                 new BpmnNodeProjectionRule(
                     BpmnProjectionIdentities.InclusiveGatewayRuleId,
                     requiresNameLabel: false,
-                    nameLabelPlacement: new NodeLabelPlacement(
-                        NodeLabelPlacementKind.OutsideBelow,
-                        gap: 8d,
-                        maximumWidth: 160d),
+                    nameLabelPlacement: BpmnNodeLabelPlacementPolicy.OutsideBelow,
                     nameLabelInteractionPolicy:
                         NodeLabelInteractionPolicy.MoveAndResize)),
         ];
@@ -963,10 +951,7 @@ public sealed class BpmnPluginRegistration
                 new BpmnNodeProjectionRule(
                     BpmnProjectionIdentities.TimerBoundaryEventRuleId,
                     requiresNameLabel: true,
-                    nameLabelPlacement: new NodeLabelPlacement(
-                        NodeLabelPlacementKind.OutsideBelow,
-                        gap: 8d,
-                        maximumWidth: 160d),
+                    nameLabelPlacement: BpmnNodeLabelPlacementPolicy.OutsideBelow,
                     nameLabelInteractionPolicy:
                         NodeLabelInteractionPolicy.MoveAndResize,
                     geometryInteractionPolicy:
@@ -1140,7 +1125,8 @@ public sealed class BpmnPluginRegistration
         ProjectionRules = n91.ProjectionRules;
         LayoutAlgorithms = n91.LayoutAlgorithms;
         RoutingAlgorithms = n91.RoutingAlgorithms;
-        SceneContributors = n91.SceneContributors;
+        SceneContributors = [BpmnCanvas2DSceneContributor.NodesRegistration,
+            BpmnCanvas2DSceneContributor.PlacementRegistration];
         ToolboxContributions = n91.ToolboxContributions;
         ToolboxPlacementRegistrations = n91.ToolboxPlacementRegistrations;
         PropertiesSchemas = n91.PropertiesSchemas;
@@ -1347,10 +1333,7 @@ public sealed class BpmnPluginRegistration
             new BpmnNodeProjectionRule(
                 ruleId,
                 requiresNameLabel: false,
-                nameLabelPlacement: new NodeLabelPlacement(
-                    NodeLabelPlacementKind.OutsideBelow,
-                    gap: 8d,
-                    maximumWidth: 160d),
+                nameLabelPlacement: BpmnNodeLabelPlacementPolicy.OutsideBelow,
                 nameLabelInteractionPolicy: NodeLabelInteractionPolicy.MoveAndResize));
 
     private static ProjectionRuleRegistration TaskNodeProjection(
@@ -1374,10 +1357,7 @@ public sealed class BpmnPluginRegistration
             new BpmnNodeProjectionRule(
                 ruleId,
                 requiresNameLabel: true,
-                nameLabelPlacement: new NodeLabelPlacement(
-                    NodeLabelPlacementKind.OutsideBelow,
-                    gap: 8d,
-                    maximumWidth: 160d),
+                nameLabelPlacement: BpmnNodeLabelPlacementPolicy.OutsideBelow,
                 nameLabelInteractionPolicy: NodeLabelInteractionPolicy.MoveAndResize,
                 geometryInteractionPolicy:
                     NodeGeometryInteractionPolicy.AttachedBoundaryMoveFixedSize));

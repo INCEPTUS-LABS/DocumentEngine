@@ -42,6 +42,8 @@ public sealed class PhaseN107PublishedDescriptionIntegrationTests
         Assert.True((await renderer.InitializeAsync(
             "phase-n107-data",
             new Canvas2DSurfaceSize(1400d, 900d, 1d))).Succeeded);
+        composition = BpmnModelerTestComposition.WithDocument(composition,
+            await BpmnModelerTestComposition.PrepareFreshDocumentAsync(composition.Document, composition.Configuration, renderer));
         var attached = await EditingSession.AttachAsync(
             composition.Document,
             renderer,
@@ -180,6 +182,8 @@ public sealed class PhaseN107PublishedDescriptionIntegrationTests
         Assert.True((await renderer.InitializeAsync(
             "phase-n107-stability",
             new Canvas2DSurfaceSize(1400d, 900d, 1d))).Succeeded);
+        composition = BpmnModelerTestComposition.WithDocument(composition,
+            await BpmnModelerTestComposition.PrepareFreshDocumentAsync(composition.Document, composition.Configuration, renderer));
         var attached = await EditingSession.AttachAsync(
             composition.Document,
             renderer,
@@ -255,6 +259,8 @@ public sealed class PhaseN107PublishedDescriptionIntegrationTests
         Assert.True((await renderer.InitializeAsync(
             "phase-n107-default",
             new Canvas2DSurfaceSize(1400d, 900d, 1d))).Succeeded);
+        composition = BpmnModelerTestComposition.WithDocument(composition,
+            await BpmnModelerTestComposition.PrepareFreshDocumentAsync(composition.Document, composition.Configuration, renderer));
         var attached = await EditingSession.AttachAsync(
             composition.Document,
             renderer,

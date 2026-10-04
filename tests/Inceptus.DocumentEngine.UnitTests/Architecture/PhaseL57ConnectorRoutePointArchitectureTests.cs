@@ -211,7 +211,7 @@ public sealed class PhaseL57ConnectorRoutePointArchitectureTests
 
         var resolution = Between(
             controller,
-            "private static Canvas2DConnectorRouteContextAction?",
+            "private Canvas2DConnectorRouteContextAction?",
             "private static bool TryResolveContextBend(");
         var bendResolution = Between(
             controller,

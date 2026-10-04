@@ -62,6 +62,43 @@ public sealed class Canvas2DConnectorLineJumpSceneTests
     }
 
     [Theory]
+    [InlineData(5e-10, false)]
+    [InlineData(-5e-10, false)]
+    [InlineData(5e-10, true)]
+    [InlineData(-5e-10, true)]
+    public void OrthogonalRoundoffRetainsHorizontalOwnershipWithoutChangingCenterlines(double error, bool reversed)
+    {
+        PointD[] horizontal = [new(0, 10), new(60, 10 + error)];
+        PointD[] vertical = [new(30, 0), new(30 + error, 20)];
+        if (reversed)
+        {
+            Array.Reverse(horizontal);
+            Array.Reverse(vertical);
+        }
+        var beforeHorizontal = horizontal.ToArray();
+        var beforeVertical = vertical.ToArray();
+        var jump = Canvas2DConnectorLineJumpGeometry.CreatePresentation(horizontal, [vertical]);
+        var owned = Assert.Single(jump.JumpPaths);
+        // Independently: the segments intersect within 1e-9 of (30,10), and
+        // horizontal ownership raises the sampled center by the established 4 units.
+        Assert.Equal(30, owned[4].X, 8);
+        Assert.Equal(14, owned[4].Y, 8);
+        Assert.Empty(Canvas2DConnectorLineJumpGeometry.CreatePresentation(vertical, [horizontal]).JumpPaths);
+        Assert.Equal(beforeHorizontal, horizontal);
+        Assert.Equal(beforeVertical, vertical);
+    }
+
+    [Fact]
+    public void AxisRoundoffToleranceDoesNotDecorateDiagonalOrDegenerateSegments()
+    {
+        PointD[] horizontal = [new(0, 10), new(60, 10)];
+        PointD[] diagonal = [new(30, 0), new(30.000001, 20)];
+        PointD[] degenerate = [new(30, 10 - 1e-10), new(30, 10 + 1e-10)];
+        Assert.Empty(Canvas2DConnectorLineJumpGeometry.CreatePresentation(horizontal, [diagonal, degenerate]).JumpPaths);
+        Assert.Empty(Canvas2DConnectorLineJumpGeometry.CreatePresentation(diagonal, [horizontal]).JumpPaths);
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public void DistinctCrowdedCrossingsAreDeduplicatedSortedAndShrunkToFit(bool reversed)

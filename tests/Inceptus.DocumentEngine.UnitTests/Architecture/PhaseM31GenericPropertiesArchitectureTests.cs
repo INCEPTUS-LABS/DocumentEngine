@@ -151,7 +151,9 @@ public sealed class PhaseM31GenericPropertiesArchitectureTests
 
         Assert.Equal(3, CountOccurrences(dataGroup, "@oninput="));
         Assert.DoesNotContain("@onblur", dataGroup, StringComparison.Ordinal);
-        Assert.Equal(1, CountOccurrences(dataGroup, "@onchange="));
+        Assert.Equal(2, CountOccurrences(dataGroup, "@onchange="));
+        Assert.Contains("UpdateRoutingTypeDraftValue", dataGroup, StringComparison.Ordinal);
+        Assert.Contains("new SetConnectorRoutingTypeCommand(", apply, StringComparison.Ordinal);
         Assert.DoesNotContain("@onkeydown", dataGroup, StringComparison.Ordinal);
         Assert.DoesNotContain("Command", inputHandler, StringComparison.Ordinal);
         Assert.DoesNotContain("Execute", inputHandler, StringComparison.Ordinal);

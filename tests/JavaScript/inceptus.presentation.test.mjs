@@ -907,6 +907,75 @@ test("captured pointer continues outside while secondary input and leave are ign
     observer.dispose();
 });
 
+test("focus loss cancels uncaptured surface input once and restores the cursor", async () => {
+    const invocations = [];
+    const observer = createCanvasPointerObserver("canvas", {
+        invokeMethodAsync(...args) {
+            invocations.push(args);
+            return Promise.resolve();
+        }
+    });
+    observer.start();
+    windowListeners.get("blur")();
+    assert.deepEqual(invocations, []);
+
+    canvas.dispatch("pointermove", pointer({ clientX: 180, clientY: 240 }));
+    observer.setCursor("none");
+    windowListeners.get("blur")();
+    windowListeners.get("blur")();
+    assert.equal(canvas.style.cursor, "default");
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(invocations.map(call => [call[1], call[2], call[6], call[7]]), [
+        [1, 7, 180, 240],
+        [3, 7, 180, 240]
+    ]);
+    assert.deepEqual(canvas.captureOperations, []);
+    observer.dispose();
+    assert.equal(windowListeners.has("blur"), false);
+});
+
+test("focus loss releases capture and queues cancellation after in-flight input", async () => {
+    const invocations = [];
+    let finishDown;
+    const downPending = new Promise(resolve => { finishDown = resolve; });
+    const observer = createCanvasPointerObserver("canvas", {
+        invokeMethodAsync(...args) {
+            invocations.push(args);
+            return args[1] === 0 ? downPending : Promise.resolve();
+        }
+    });
+    observer.start();
+    canvas.dispatch("pointerdown", pointer({ button: 0, buttons: 1 }));
+    windowListeners.get("blur")();
+    assert.equal(canvas.capturedPointers.size, 0);
+    assert.equal(invocations.length, 1);
+    finishDown();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(invocations.map(call => [call[1], call[2], call[3], call[4]]), [
+        [0, 7, 0, 1],
+        [3, 7, -1, 0]
+    ]);
+    assert.equal(invocations[0][14], invocations[1][14]);
+    observer.dispose();
+});
+
+test("leaving the uncaptured surface prevents a later focus-loss cancellation", async () => {
+    const invocations = [];
+    const observer = createCanvasPointerObserver("canvas", {
+        invokeMethodAsync(...args) {
+            invocations.push(args);
+            return Promise.resolve();
+        }
+    });
+    observer.start();
+    canvas.dispatch("pointermove", pointer());
+    canvas.dispatch("pointerleave", pointer());
+    windowListeners.get("blur")();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(invocations.map(call => call[1]), [1, 4]);
+    observer.dispose();
+});
+
 test("managed gesture invalidation releases current capture and emits one ordered cancel", async () => {
     const invocations = [];
     const observer = createCanvasPointerObserver("canvas", {

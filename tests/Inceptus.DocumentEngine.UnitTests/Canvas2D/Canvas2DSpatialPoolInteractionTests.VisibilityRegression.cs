@@ -48,7 +48,8 @@ public sealed partial class Canvas2DSpatialPoolInteractionTests
         Assert.Same(visible.RoutingResult, hidden.RoutingResult);
         Assert.True(hidden.CurrentScene!.SpatialPresentationPlan is not null,
             visibleTrace + Environment.NewLine + hiddenTrace);
-        Assert.Equal(visible.CurrentScene!.SpatialPresentationPlan, hidden.CurrentScene.SpatialPresentationPlan);
+        AssertSpatialGeometryUnchanged(visible.CurrentScene!.SpatialPresentationPlan!, hidden.CurrentScene.SpatialPresentationPlan!);
+        Assert.Empty(hidden.CurrentScene.SpatialPresentationPlan!.ResizeTargets);
         foreach (var id in ids)
         {
             Assert.Equal(displayed[id], fixture.Node(id).Bounds);
@@ -79,7 +80,8 @@ public sealed partial class Canvas2DSpatialPoolInteractionTests
             Assert.Equal(stateBefore.HistoryStatus, fixture.State.HistoryStatus);
             Assert.Equal(stateBefore.EditorState.Viewport, fixture.State.EditorState.Viewport);
             Assert.Equal(stateBefore.ModelProfileElementViewState, fixture.State.ModelProfileElementViewState);
-            Assert.Equal(stateBefore.CurrentScene!.SpatialPresentationPlan, fixture.State.CurrentScene!.SpatialPresentationPlan);
+            AssertSpatialGeometryUnchanged(stateBefore.CurrentScene!.SpatialPresentationPlan!, fixture.State.CurrentScene!.SpatialPresentationPlan!);
+            Assert.Equal(visible, !fixture.State.CurrentScene.SpatialPresentationPlan!.ResizeTargets.IsEmpty);
             Assert.Equal(originalItems, ProcessPresentationItems(fixture));
             Assert.Equal(visible, OrganizationalDecoration(fixture).Length > 0);
         }
@@ -340,6 +342,15 @@ public sealed partial class Canvas2DSpatialPoolInteractionTests
         Assert.True(result.Succeeded, Diagnostics(result.Diagnostics));
         await fixture.Session.WaitForIdleAsync();
         fixture.AssertReady();
+    }
+
+    private static void AssertSpatialGeometryUnchanged(Canvas2DSpatialPresentationPlan expected, Canvas2DSpatialPresentationPlan actual)
+    {
+        Assert.Equal(expected.Regions.AsEnumerable(), actual.Regions.AsEnumerable());
+        Assert.Equal(expected.VisualPlacements.AsEnumerable(), actual.VisualPlacements.AsEnumerable());
+        Assert.Equal(expected.CanonicalGuidanceToSceneTransform, actual.CanonicalGuidanceToSceneTransform);
+        Assert.Equal(expected.CoordinateMap, actual.CoordinateMap);
+        Assert.Equal(expected.MovementBottomBoundaryRegionId, actual.MovementBottomBoundaryRegionId);
     }
 
     private static PointD[] PresentedPath(Fixture fixture, VisualStateId flowId)

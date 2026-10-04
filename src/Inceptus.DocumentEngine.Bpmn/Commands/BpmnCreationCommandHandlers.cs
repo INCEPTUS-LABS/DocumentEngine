@@ -1,9 +1,11 @@
+using System.Collections.Immutable;
 using Inceptus.DocumentEngine.Bpmn.Semantics;
 using Inceptus.DocumentEngine.Bpmn.Visuals;
 using Inceptus.DocumentEngine.Contracts.Commands;
 using Inceptus.DocumentEngine.Contracts.Documents;
 using Inceptus.DocumentEngine.Contracts.Geometry;
 using Inceptus.DocumentEngine.Contracts.Primitives;
+using Inceptus.DocumentEngine.Contracts.Routing;
 using Inceptus.DocumentEngine.Contracts.Semantics;
 using Inceptus.DocumentEngine.Contracts.Visuals;
 
@@ -314,6 +316,7 @@ internal sealed class BpmnSequenceFlowCreationCommandHandler : ICommandHandler
             return ValueTask.FromResult(CommandHandlerResult.Failure(diagnostics));
         }
 
+        var prepareRouting = document.VisualModel.RoutingScopes is not null || flow.HasExplicitRoutingType;
         var relationship = BpmnSemanticFactory.CreateSequenceFlow(
             flow.RelationshipId,
             flow.SourceId,
@@ -326,11 +329,28 @@ internal sealed class BpmnSequenceFlowCreationCommandHandler : ICommandHandler
             new PointD(0d, 0d),
             new SizeD(0d, 0d),
             VisualPlacementMode.Manual,
-            flow.Route,
+            prepareRouting ? [] : flow.Route,
             sourceAnchorId: flow.SourceAnchorId,
             targetAnchorId: flow.TargetAnchorId);
-        return ValueTask.FromResult(CommandHandlerResult.Success(
-            BpmnDocumentReplacement.Add(document, relationship, visual)));
+        var proposed = BpmnDocumentReplacement.Add(document, relationship, visual);
+        return ValueTask.FromResult(prepareRouting
+            ? PrepareRoutingCreation(proposed, flow.VisualStateId, flow.RoutingType, flow.Route)
+            : CommandHandlerResult.Success(proposed));
+    }
+
+    internal static CommandHandlerResult PrepareRoutingCreation(DocumentSnapshot proposed,
+        VisualStateId visualStateId, ConnectorRoutingType routingType,
+        ImmutableArray<PointD> route)
+    {
+        if (route.Length == 1)
+            return CommandHandlerResult.Failure([BpmnDiagnostics.Error(BpmnCommandDiagnosticCodes.InvalidCommand,
+                "A supplied connector path must contain both endpoints.", visualStateId.Value)]);
+        var intents = new List<ConnectorRoutingIntent> { ConnectorRoutingIntent.Initialize(visualStateId, routingType) };
+        if (routingType == ConnectorRoutingType.Manual && route.Length >= 2)
+            intents.Add(ConnectorRoutingIntent.ReplaceManualDefinition(visualStateId,
+                route.Skip(1).Take(route.Length - 2), route[0], route[^1]));
+        return CommandHandlerResult.SuccessWithPreparation(proposed, intents, [],
+            pipelineInvalidation: CommandPipelineInvalidation.ConnectorOnly);
     }
 }
 
@@ -377,21 +397,21 @@ internal sealed class BpmnSequenceFlowWithTargetAnchorCreationCommandHandler : I
             creation.TargetId,
             creation.Name,
             creation.Description);
+        var prepareRouting = document.VisualModel.RoutingScopes is not null || creation.HasExplicitRoutingType;
         var connector = new VisualStateSnapshot(
             creation.VisualStateId,
             creation.RelationshipId,
             new PointD(0d, 0d),
             new SizeD(0d, 0d),
             VisualPlacementMode.Manual,
-            creation.Route,
+            prepareRouting ? [] : creation.Route,
             sourceAnchorId: creation.SourceAnchorId,
             targetAnchorId: creation.TargetAnchorId);
-        return ValueTask.FromResult(CommandHandlerResult.Success(
-            BpmnDocumentReplacement.Add(
-                document,
-                relationship,
-                targetReplacement,
-                connector)));
+        var proposed = BpmnDocumentReplacement.Add(document, relationship, targetReplacement, connector);
+        return ValueTask.FromResult(prepareRouting
+            ? BpmnSequenceFlowCreationCommandHandler.PrepareRoutingCreation(proposed,
+                creation.VisualStateId, creation.RoutingType, creation.Route)
+            : CommandHandlerResult.Success(proposed));
     }
 }
 
@@ -485,7 +505,8 @@ internal static class BpmnDocumentReplacement
                 document.DocumentId,
                 document.Revision,
                 visualModel.VisualStates,
-                visualModel.ProfileElementPresentations),
+                visualModel.ProfileElementPresentations,
+                visualModel.RoutingScopes),
             document.Metadata,
             document.Publication);
 
@@ -510,7 +531,8 @@ internal static class BpmnDocumentReplacement
                 document.DocumentId,
                 document.Revision,
                 visuals,
-                document.VisualModel.ProfileElementPresentations),
+                document.VisualModel.ProfileElementPresentations,
+                document.VisualModel.RoutingScopes),
             document.Metadata,
             document.Publication);
 }

@@ -15,7 +15,7 @@ namespace Inceptus.DocumentEngine.Bpmn.Scene;
 /// Maps the supported BPMN flow-node slice to notation-specific Canvas2D Scene geometry.
 /// It consumes immutable pipeline results and replaces only canonical node appearance.
 /// </summary>
-public sealed class BpmnCanvas2DSceneContributor : ICanvas2DSceneContributor
+public sealed class BpmnCanvas2DSceneContributor : ICanvas2DSceneContributor, ICanvas2DScopeGeometryContributor
 {
     private const double StartEventStrokeWidth = 1.5d;
     private const double TaskStrokeWidth = 1.5d;
@@ -46,19 +46,51 @@ public sealed class BpmnCanvas2DSceneContributor : ICanvas2DSceneContributor
         Canvas2DSceneTransientDependency.Invariant,
         Canvas2DSceneTransientDependency.Invariant);
 
+    private static readonly Canvas2DSceneContributorDescriptor NodesDescriptor = new(
+        Descriptor.ContributorId, Descriptor.Version, Canvas2DScenePanDependency.Invariant,
+        Canvas2DSceneMoveGestureDependency.Invariant, Canvas2DSceneTransientDependency.Invariant,
+        Canvas2DSceneTransientDependency.Invariant, Canvas2DScenePlacementDependency.Invariant,
+        Canvas2DSceneTransientDependency.Invariant,
+        Canvas2DSceneTransientDependency.Invariant,
+        Canvas2DSceneTransientDependency.Invariant);
+
+    private static readonly Canvas2DSceneContributorDescriptor PlacementDescriptor = new(
+        new Canvas2DSceneContributorId("bpmn:scene/placement-feedback"), "1",
+        Canvas2DScenePanDependency.Invariant, Canvas2DSceneMoveGestureDependency.Invariant,
+        Canvas2DSceneTransientDependency.Invariant, Canvas2DSceneTransientDependency.Invariant,
+        Canvas2DScenePlacementDependency.BoundedFeedbackOnly,
+        Canvas2DSceneTransientDependency.Invariant,
+        Canvas2DSceneTransientDependency.Invariant,
+        Canvas2DSceneTransientDependency.Invariant);
+
+    internal static Canvas2DSceneContributorRegistration PlacementRegistration { get; } =
+        new(PlacementDescriptor, new PlacementContributor());
+
     internal static Canvas2DSceneContributorRegistration Registration { get; } =
         new(Descriptor, new BpmnCanvas2DSceneContributor());
 
+    internal static Canvas2DSceneContributorRegistration NodesRegistration { get; } =
+        new(NodesDescriptor, new NodesContributor());
+
     public Canvas2DSceneContributionResult Contribute(
-        Canvas2DSceneContributionContext context)
+        Canvas2DSceneContributionContext context) => ContributeNodes(context, includeLegacyFeedback: true);
+
+    private static Canvas2DSceneContributionResult ContributeNodes(
+        Canvas2DSceneContributionContext context, bool includeLegacyFeedback)
     {
         ArgumentNullException.ThrowIfNull(context);
+        return ContributeNodes(context.ProjectedGraph, context.LayoutResult, context.EditorState, includeLegacyFeedback);
+    }
 
-        var layouts = context.LayoutResult.Nodes.ToDictionary(
+    private static Canvas2DSceneContributionResult ContributeNodes(
+        ProjectedGraph graph, LayoutResult localLayout, EditorStateSnapshot editorState, bool includeLegacyFeedback)
+    {
+
+        var layouts = localLayout.Nodes.ToDictionary(
             static geometry => geometry.ProjectedObjectId);
         var items = new List<Canvas2DSceneItem>();
         var visualOverrides = new List<Canvas2DCanonicalSceneItemVisualOverride>();
-        foreach (var node in context.ProjectedGraph.Nodes)
+        foreach (var node in graph.Nodes)
         {
             if (!BpmnSemanticTypes.IsFlowNode(node.Source.SemanticTypeId))
             {
@@ -81,38 +113,59 @@ public sealed class BpmnCanvas2DSceneContributor : ICanvas2DSceneContributor
                     node.Id.Value);
             }
 
+            var appearance = CreateAppearance(node, layout);
             var localBounds = new RectD(0d, 0d, layout.Bounds.Width, layout.Bounds.Height);
             visualOverrides.Add(new Canvas2DCanonicalSceneItemVisualOverride(
                 Canvas2DSceneObjectIdentity.ForProjected(node.Id, "node"),
                 Geometry(node.Source.SemanticTypeId, localBounds),
-                Style(node)));
+                Style(appearance)));
             if (BpmnSemanticTypes.IsGateway(node.Source.SemanticTypeId))
             {
-                items.AddRange(CreateGatewayMarkers(node, layout, localBounds));
+                items.AddRange(CreateGatewayMarkers(appearance, localBounds));
             }
             else if (BpmnIntermediateEventSemanticTypes.IsIntermediateEvent(
                     node.Source.SemanticTypeId) ||
                 BpmnBoundaryEventSemanticTypes.IsBoundaryEvent(
                     node.Source.SemanticTypeId))
             {
-                items.AddRange(CreateIntermediateEventMarkers(node, layout, localBounds));
+                items.AddRange(CreateIntermediateEventMarkers(appearance, localBounds));
             }
             else if (BpmnTaskSemanticTypes.IsTask(node.Source.SemanticTypeId) &&
                 node.Source.SemanticTypeId != BpmnSemanticTypes.Task)
             {
-                items.AddRange(CreateTaskMarkers(node, layout, localBounds));
+                items.AddRange(CreateTaskMarkers(appearance, localBounds));
             }
             else if (node.Source.SemanticTypeId == BpmnSemanticTypes.SubProcess)
             {
-                items.AddRange(CreateSubProcessMarkers(node, layout, localBounds));
+                items.AddRange(CreateSubProcessMarkers(appearance, localBounds));
             }
         }
 
-        AddBoundaryEventCandidateFeedback(context.EditorState, items);
+        if (includeLegacyFeedback)
+        {
+            AddBoundaryEventCandidateFeedback(editorState, items, Descriptor.ContributorId);
+            AddPlacementFeedback(editorState, items, Descriptor.ContributorId);
+        }
 
         return Canvas2DSceneContributionResult.Success(new Canvas2DSceneContribution(
             items: items,
             canonicalItemVisualOverrides: visualOverrides));
+    }
+
+    public Canvas2DScopeGeometryBaseResult PrepareBase(Canvas2DScopeGeometryBaseContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        var result = ContributeNodes(context.ProjectedGraph, context.LocalLayout,
+            EditorStateSnapshot.Empty, includeLegacyFeedback: false);
+        return result.Succeeded
+            ? Canvas2DScopeGeometryBaseResult.Success(result.Contribution!, diagnostics: result.Diagnostics)
+            : Canvas2DScopeGeometryBaseResult.Failure(result.Diagnostics);
+    }
+
+    public Canvas2DScopeGeometryPresentationResult PreparePresentation(Canvas2DScopeGeometryPresentationContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        return Canvas2DScopeGeometryPresentationResult.Success([]);
     }
 
     private static bool HasCanonicalProjectedType(ProjectedNode node) =>
@@ -152,10 +205,10 @@ public sealed class BpmnCanvas2DSceneContributor : ICanvas2DSceneContributor
         return Canvas2DSceneGeometry.Path(RoundedRectanglePoints(localBounds), isClosed: true);
     }
 
-    private static Canvas2DSceneStyle Style(ProjectedNode node)
+    private static Canvas2DSceneStyle Style(NodeAppearanceContext node)
     {
-        var semanticTypeId = node.Source.SemanticTypeId;
-        var dashPattern = IsInterrupting(node) ? null : new[] { 3d, 2d };
+        var semanticTypeId = node.SemanticTypeId;
+        var dashPattern = node.Interrupting ? null : new[] { 3d, 2d };
         return new Canvas2DSceneStyle(
             fill: "#ffffff",
             stroke: "#000000",
@@ -172,33 +225,31 @@ public sealed class BpmnCanvas2DSceneContributor : ICanvas2DSceneContributor
     }
 
     private static IEnumerable<Canvas2DSceneItem> CreateGatewayMarkers(
-        ProjectedNode node,
-        LayoutNodeGeometry layout,
+        NodeAppearanceContext node,
         RectD localBounds)
     {
-        var semanticTypeId = node.Source.SemanticTypeId;
+        var semanticTypeId = node.SemanticTypeId;
         var isExclusive = semanticTypeId == BpmnSemanticTypes.ExclusiveGateway;
         var isParallel = semanticTypeId == BpmnSemanticTypes.ParallelGateway;
         var isInclusive = semanticTypeId == BpmnSemanticTypes.InclusiveGateway;
         if (semanticTypeId == BpmnSemanticTypes.EventBasedGateway)
         {
-            return CreateEventBasedGatewayMarkers(node, layout, localBounds);
+            return CreateEventBasedGatewayMarkers(node, localBounds);
         }
 
         var stableSourceKey = isExclusive
-            ? $"exclusive-gateway-x:{node.Id.Value}"
+            ? $"exclusive-gateway-x:{node.StableKey}"
             : isParallel
-                ? $"parallel-gateway-plus:{node.Id.Value}"
+                ? $"parallel-gateway-plus:{node.StableKey}"
                 : isInclusive
-                    ? $"inclusive-gateway-o:{node.Id.Value}"
+                    ? $"inclusive-gateway-o:{node.StableKey}"
                     : throw new InvalidOperationException(
                         "A BPMN Gateway marker requires a supported Gateway type.");
         return
         [
             CreateMarker(
                 node,
-                layout,
-                stableSourceKey,
+                    stableSourceKey,
                 GatewayMarkerZIndex,
             isInclusive
                 ? Canvas2DSceneGeometry.Ellipse(
@@ -218,25 +269,23 @@ public sealed class BpmnCanvas2DSceneContributor : ICanvas2DSceneContributor
     }
 
     private static List<Canvas2DSceneItem> CreateIntermediateEventMarkers(
-        ProjectedNode node,
-        LayoutNodeGeometry layout,
+        NodeAppearanceContext node,
         RectD bounds)
     {
-        var semanticTypeId = node.Source.SemanticTypeId;
+        var semanticTypeId = node.SemanticTypeId;
         var prefix = IntermediateEventMarkerPrefix(semanticTypeId);
         var minimumDimension = Math.Min(bounds.Width, bounds.Height);
         var strokeWidth = minimumDimension * EventMarkerStrokeWidthRatio;
         var inset = minimumDimension * IntermediateEventInnerRingInsetRatio;
         var markerBounds = BpmnIntermediateEventMarkerPlacementPolicy.ResolveMarkerBounds(
             bounds);
-        var dashPattern = IsInterrupting(node) ? null : new[] { 3d, 2d };
+        var dashPattern = node.Interrupting ? null : new[] { 3d, 2d };
         var items = new List<Canvas2DSceneItem>();
         if (BpmnBoundaryEventSemanticTypes.IsBoundaryEvent(semanticTypeId))
         {
             items.Add(CreateMarker(
                 node,
-                layout,
-                $"{prefix}:body-appearance:{node.Id.Value}",
+                    $"{prefix}:body-appearance:{node.StableKey}",
                 BoundaryEventBodyAppearanceZIndex,
                 Canvas2DSceneGeometry.Ellipse(bounds),
                 Style(node)));
@@ -244,8 +293,7 @@ public sealed class BpmnCanvas2DSceneContributor : ICanvas2DSceneContributor
 
         items.Add(CreateMarker(
                 node,
-                layout,
-                $"{prefix}:inner-ring:{node.Id.Value}",
+                    $"{prefix}:inner-ring:{node.StableKey}",
                 GatewayMarkerZIndex,
                 Canvas2DSceneGeometry.Ellipse(Inset(bounds, inset)),
                 new Canvas2DSceneStyle(
@@ -263,8 +311,7 @@ public sealed class BpmnCanvas2DSceneContributor : ICanvas2DSceneContributor
                     markerBounds);
             items.Add(CreateMarker(
                 node,
-                layout,
-                $"{prefix}:envelope:{node.Id.Value}",
+                    $"{prefix}:envelope:{node.StableKey}",
                 GatewayMarkerZIndex + 1,
                 Canvas2DSceneGeometry.Path(
                 [
@@ -280,8 +327,7 @@ public sealed class BpmnCanvas2DSceneContributor : ICanvas2DSceneContributor
                     strokeWidth: strokeWidth)));
             items.Add(CreateMarker(
                 node,
-                layout,
-                $"{prefix}:envelope-flap:{node.Id.Value}",
+                    $"{prefix}:envelope-flap:{node.StableKey}",
                 GatewayMarkerZIndex + 2,
                 Canvas2DSceneGeometry.Path(
                 [
@@ -305,15 +351,13 @@ public sealed class BpmnCanvas2DSceneContributor : ICanvas2DSceneContributor
             var clockRadius = Math.Min(clockBounds.Width, clockBounds.Height) / 2d;
             items.Add(CreateMarker(
                 node,
-                layout,
-                $"{prefix}:clock:{node.Id.Value}",
+                    $"{prefix}:clock:{node.StableKey}",
                 GatewayMarkerZIndex + 1,
                 Canvas2DSceneGeometry.Ellipse(clockBounds),
                 new Canvas2DSceneStyle(stroke: "#000000", strokeWidth: strokeWidth)));
             items.Add(CreateMarker(
                 node,
-                layout,
-                $"{prefix}:clock-hands:{node.Id.Value}",
+                    $"{prefix}:clock-hands:{node.StableKey}",
                 GatewayMarkerZIndex + 2,
                 Canvas2DSceneGeometry.Path(
                 [
@@ -328,8 +372,7 @@ public sealed class BpmnCanvas2DSceneContributor : ICanvas2DSceneContributor
             var isThrow = BpmnIntermediateEventSemanticTypes.IsThrowEvent(semanticTypeId);
             items.Add(CreateMarker(
                 node,
-                layout,
-                $"{prefix}:signal:{node.Id.Value}",
+                    $"{prefix}:signal:{node.StableKey}",
                 GatewayMarkerZIndex + 1,
                 Canvas2DSceneGeometry.Path(
                     BpmnIntermediateEventMarkerPlacementPolicy.ResolveSignalTriangle(
@@ -401,7 +444,8 @@ public sealed class BpmnCanvas2DSceneContributor : ICanvas2DSceneContributor
 
     private static void AddBoundaryEventCandidateFeedback(
         EditorStateSnapshot editorState,
-        List<Canvas2DSceneItem> items)
+        List<Canvas2DSceneItem> items,
+        Canvas2DSceneContributorId contributorId)
     {
         foreach (var feedback in editorState.TemporaryFeedback)
         {
@@ -425,6 +469,7 @@ public sealed class BpmnCanvas2DSceneContributor : ICanvas2DSceneContributor
             var dashPattern = interrupting ? null : new[] { 3d, 2d };
 
             items.Add(CreateFeedbackItem(
+                contributorId,
                 feedback,
                 "body",
                 5000,
@@ -436,6 +481,7 @@ public sealed class BpmnCanvas2DSceneContributor : ICanvas2DSceneContributor
                     dashPattern: dashPattern),
                 bounds));
             items.Add(CreateFeedbackItem(
+                contributorId,
                 feedback,
                 "inner-ring",
                 5001,
@@ -447,6 +493,7 @@ public sealed class BpmnCanvas2DSceneContributor : ICanvas2DSceneContributor
                 bounds));
 
             AddBoundaryEventCandidateMarker(
+                contributorId,
                 feedback,
                 semanticTypeId!,
                 markerBounds,
@@ -457,6 +504,7 @@ public sealed class BpmnCanvas2DSceneContributor : ICanvas2DSceneContributor
     }
 
     private static void AddBoundaryEventCandidateMarker(
+        Canvas2DSceneContributorId contributorId,
         EditorFeedbackSnapshot feedback,
         SemanticTypeId semanticTypeId,
         RectD markerBounds,
@@ -470,6 +518,7 @@ public sealed class BpmnCanvas2DSceneContributor : ICanvas2DSceneContributor
                 BpmnIntermediateEventMarkerPlacementPolicy.ResolveEnvelopeBounds(
                     markerBounds);
             items.Add(CreateFeedbackItem(
+                contributorId,
                 feedback,
                 "envelope",
                 5002,
@@ -487,6 +536,7 @@ public sealed class BpmnCanvas2DSceneContributor : ICanvas2DSceneContributor
                     strokeWidth: strokeWidth),
                 bounds));
             items.Add(CreateFeedbackItem(
+                contributorId,
                 feedback,
                 "envelope-flap",
                 5003,
@@ -508,6 +558,7 @@ public sealed class BpmnCanvas2DSceneContributor : ICanvas2DSceneContributor
         if (semanticTypeId == BpmnSemanticTypes.SignalBoundaryEvent)
         {
             items.Add(CreateFeedbackItem(
+                contributorId,
                 feedback,
                 "signal",
                 5002,
@@ -528,6 +579,7 @@ public sealed class BpmnCanvas2DSceneContributor : ICanvas2DSceneContributor
         var center = Center(clockBounds);
         var clockRadius = Math.Min(clockBounds.Width, clockBounds.Height) / 2d;
         items.Add(CreateFeedbackItem(
+            contributorId,
             feedback,
             "clock",
             5002,
@@ -535,6 +587,7 @@ public sealed class BpmnCanvas2DSceneContributor : ICanvas2DSceneContributor
             new Canvas2DSceneStyle(stroke: "#000000", strokeWidth: strokeWidth),
             bounds));
         items.Add(CreateFeedbackItem(
+            contributorId,
             feedback,
             "clock-hands",
             5003,
@@ -586,6 +639,7 @@ public sealed class BpmnCanvas2DSceneContributor : ICanvas2DSceneContributor
     }
 
     private static Canvas2DSceneItem CreateFeedbackItem(
+        Canvas2DSceneContributorId contributorId,
         EditorFeedbackSnapshot feedback,
         string localKey,
         int zIndex,
@@ -594,7 +648,7 @@ public sealed class BpmnCanvas2DSceneContributor : ICanvas2DSceneContributor
         RectD bounds) =>
         new(
             Canvas2DSceneObjectIdentity.ForExtension(
-                Descriptor.ContributorId,
+                contributorId,
                 $"feedback:{feedback.Id}:{localKey}"),
             Canvas2DSceneLayer.Overlay,
             zIndex,
@@ -608,18 +662,17 @@ public sealed class BpmnCanvas2DSceneContributor : ICanvas2DSceneContributor
             bounds: bounds);
 
     private static List<Canvas2DSceneItem> CreateTaskMarkers(
-        ProjectedNode node,
-        LayoutNodeGeometry layout,
+        NodeAppearanceContext node,
         RectD taskBounds)
     {
         var markerBounds = BpmnTaskMarkerPlacementPolicy.ResolveBounds(taskBounds);
         var strokeWidth = BpmnTaskMarkerPlacementPolicy.ResolveStrokeWidth(markerBounds);
-        var prefix = BpmnTaskSemanticTypes.DisplayName(node.Source.SemanticTypeId)
+        var prefix = BpmnTaskSemanticTypes.DisplayName(node.SemanticTypeId)
             .Replace(' ', '-')
             .ToLowerInvariant();
         var items = new List<Canvas2DSceneItem>();
 
-        if (node.Source.SemanticTypeId == BpmnSemanticTypes.UserTask)
+        if (node.SemanticTypeId == BpmnSemanticTypes.UserTask)
         {
             var headRadius = markerBounds.Width * 0.15d;
             var headCenter = new PointD(
@@ -627,15 +680,13 @@ public sealed class BpmnCanvas2DSceneContributor : ICanvas2DSceneContributor
                 markerBounds.Top + (markerBounds.Height * 0.27d));
             items.Add(CreateMarker(
                 node,
-                layout,
-                $"{prefix}:head:{node.Id.Value}",
+                    $"{prefix}:head:{node.StableKey}",
                 TaskMarkerZIndex,
                 Canvas2DSceneGeometry.Ellipse(CenteredSquare(headCenter, headRadius)),
                 new Canvas2DSceneStyle(fill: "#000000")));
             items.Add(CreateMarker(
                 node,
-                layout,
-                $"{prefix}:body:{node.Id.Value}",
+                    $"{prefix}:body:{node.StableKey}",
                 TaskMarkerZIndex + 1,
                 Canvas2DSceneGeometry.Path(
                 [
@@ -657,12 +708,11 @@ public sealed class BpmnCanvas2DSceneContributor : ICanvas2DSceneContributor
             return items;
         }
 
-        if (node.Source.SemanticTypeId == BpmnSemanticTypes.ManualTask)
+        if (node.SemanticTypeId == BpmnSemanticTypes.ManualTask)
         {
             items.Add(CreateMarker(
                 node,
-                layout,
-                $"{prefix}:hand:{node.Id.Value}",
+                    $"{prefix}:hand:{node.StableKey}",
                 TaskMarkerZIndex,
                 Canvas2DSceneGeometry.Path(
                 [
@@ -701,14 +751,13 @@ public sealed class BpmnCanvas2DSceneContributor : ICanvas2DSceneContributor
             return items;
         }
 
-        if (node.Source.SemanticTypeId == BpmnSemanticTypes.ServiceTask)
+        if (node.SemanticTypeId == BpmnSemanticTypes.ServiceTask)
         {
             var center = Center(markerBounds);
             var outerRadius = markerBounds.Width * 0.43d;
             items.Add(CreateMarker(
                 node,
-                layout,
-                $"{prefix}:gear:{node.Id.Value}",
+                    $"{prefix}:gear:{node.StableKey}",
                 TaskMarkerZIndex,
                 Canvas2DSceneGeometry.Path(
                     GearPoints(center, outerRadius, outerRadius * 0.72d, 8),
@@ -716,8 +765,7 @@ public sealed class BpmnCanvas2DSceneContributor : ICanvas2DSceneContributor
                 new Canvas2DSceneStyle(fill: "#000000")));
             items.Add(CreateMarker(
                 node,
-                layout,
-                $"{prefix}:gear-hole:{node.Id.Value}",
+                    $"{prefix}:gear-hole:{node.StableKey}",
                 TaskMarkerZIndex + 1,
                 Canvas2DSceneGeometry.Ellipse(
                     CenteredSquare(center, markerBounds.Width * 0.16d)),
@@ -725,19 +773,18 @@ public sealed class BpmnCanvas2DSceneContributor : ICanvas2DSceneContributor
             return items;
         }
 
-        if (node.Source.SemanticTypeId == BpmnSemanticTypes.SendTask ||
-            node.Source.SemanticTypeId == BpmnSemanticTypes.ReceiveTask)
+        if (node.SemanticTypeId == BpmnSemanticTypes.SendTask ||
+            node.SemanticTypeId == BpmnSemanticTypes.ReceiveTask)
         {
             var envelope = new RectD(
                 markerBounds.Left + (markerBounds.Width * 0.08d),
                 markerBounds.Top + (markerBounds.Height * 0.2d),
                 markerBounds.Width * 0.84d,
                 markerBounds.Height * 0.6d);
-            var isSend = node.Source.SemanticTypeId == BpmnSemanticTypes.SendTask;
+            var isSend = node.SemanticTypeId == BpmnSemanticTypes.SendTask;
             items.Add(CreateMarker(
                 node,
-                layout,
-                $"{prefix}:envelope:{node.Id.Value}",
+                    $"{prefix}:envelope:{node.StableKey}",
                 TaskMarkerZIndex,
                 Canvas2DSceneGeometry.Path(
                 [
@@ -753,8 +800,7 @@ public sealed class BpmnCanvas2DSceneContributor : ICanvas2DSceneContributor
                     strokeWidth: strokeWidth)));
             items.Add(CreateMarker(
                 node,
-                layout,
-                $"{prefix}:envelope-flap:{node.Id.Value}",
+                    $"{prefix}:envelope-flap:{node.StableKey}",
                 TaskMarkerZIndex + 1,
                 Canvas2DSceneGeometry.Path(
                 [
@@ -770,12 +816,11 @@ public sealed class BpmnCanvas2DSceneContributor : ICanvas2DSceneContributor
         }
 
         throw new InvalidOperationException(
-            $"BPMN Task type '{node.Source.SemanticTypeId}' has no specialized marker.");
+            $"BPMN Task type '{node.SemanticTypeId}' has no specialized marker.");
     }
 
     private static IEnumerable<Canvas2DSceneItem> CreateSubProcessMarkers(
-        ProjectedNode node,
-        LayoutNodeGeometry layout,
+        NodeAppearanceContext node,
         RectD activityBounds)
     {
         var markerBounds = BpmnSubProcessMarkerPlacementPolicy.ResolveBounds(activityBounds);
@@ -785,8 +830,7 @@ public sealed class BpmnCanvas2DSceneContributor : ICanvas2DSceneContributor
         [
             CreateMarker(
                 node,
-                layout,
-                $"subprocess:marker-box:{node.Id.Value}",
+                    $"subprocess:marker-box:{node.StableKey}",
                 SubProcessMarkerZIndex,
                 Canvas2DSceneGeometry.Path(
                 [
@@ -802,8 +846,7 @@ public sealed class BpmnCanvas2DSceneContributor : ICanvas2DSceneContributor
                     strokeWidth: strokeWidth)),
             CreateMarker(
                 node,
-                layout,
-                $"subprocess:marker-plus:{node.Id.Value}",
+                    $"subprocess:marker-plus:{node.StableKey}",
                 SubProcessMarkerZIndex + 1,
                 Canvas2DSceneGeometry.Path(
                     BpmnSubProcessMarkerPlacementPolicy.ResolvePlusPoints(markerBounds),
@@ -813,8 +856,7 @@ public sealed class BpmnCanvas2DSceneContributor : ICanvas2DSceneContributor
     }
 
     private static IEnumerable<Canvas2DSceneItem> CreateEventBasedGatewayMarkers(
-        ProjectedNode node,
-        LayoutNodeGeometry layout,
+        NodeAppearanceContext node,
         RectD bounds)
     {
         var minimumDimension = Math.Min(bounds.Width, bounds.Height);
@@ -827,22 +869,19 @@ public sealed class BpmnCanvas2DSceneContributor : ICanvas2DSceneContributor
         [
             CreateMarker(
                 node,
-                layout,
-                $"event-based-gateway:outer-ring:{node.Id.Value}",
+                    $"event-based-gateway:outer-ring:{node.StableKey}",
                 GatewayMarkerZIndex,
                 CenteredSquare(center, outerRadius),
                 strokeWidth),
             CreateMarker(
                 node,
-                layout,
-                $"event-based-gateway:inner-ring:{node.Id.Value}",
+                    $"event-based-gateway:inner-ring:{node.StableKey}",
                 GatewayMarkerZIndex + 1,
                 CenteredSquare(center, innerRadius),
                 strokeWidth),
             CreateMarker(
                 node,
-                layout,
-                $"event-based-gateway:pentagon:{node.Id.Value}",
+                    $"event-based-gateway:pentagon:{node.StableKey}",
                 GatewayMarkerZIndex + 2,
                 Canvas2DSceneGeometry.Path(
                     RegularPolygon(center, pentagonRadius, 5, -Math.PI / 2d),
@@ -855,21 +894,26 @@ public sealed class BpmnCanvas2DSceneContributor : ICanvas2DSceneContributor
     }
 
     private static Canvas2DSceneItem CreateMarker(
-        ProjectedNode node,
-        LayoutNodeGeometry layout,
+        NodeAppearanceContext node,
         string stableSourceKey,
         int zIndex,
         RectD ellipseBounds,
         double strokeWidth) =>
         CreateMarker(
             node,
-            layout,
             stableSourceKey,
             zIndex,
             Canvas2DSceneGeometry.Ellipse(ellipseBounds),
             new Canvas2DSceneStyle(stroke: "#000000", strokeWidth: strokeWidth));
 
     private static Canvas2DSceneItem CreateMarker(
+        NodeAppearanceContext node,
+        string stableSourceKey,
+        int zIndex,
+        Canvas2DSceneGeometry geometry,
+        Canvas2DSceneStyle style) => node.CreateItem(stableSourceKey, zIndex, geometry, style);
+
+    private static Canvas2DSceneItem CreateNormalMarker(
         ProjectedNode node,
         LayoutNodeGeometry layout,
         string stableSourceKey,
@@ -902,6 +946,96 @@ public sealed class BpmnCanvas2DSceneContributor : ICanvas2DSceneContributor
             style: style,
             hitTestPolicy: Canvas2DHitTestPolicy.None,
             bounds: layout.Bounds);
+    }
+
+
+    private sealed record NodeAppearanceContext(
+        SemanticTypeId SemanticTypeId,
+        string StableKey,
+        bool Interrupting,
+        Func<string, int, Canvas2DSceneGeometry, Canvas2DSceneStyle, Canvas2DSceneItem> CreateItem);
+
+    private static NodeAppearanceContext CreateAppearance(ProjectedNode node, LayoutNodeGeometry layout) =>
+        new(node.Source.SemanticTypeId, node.Id.Value, IsInterrupting(node),
+            (key, z, geometry, style) => CreateNormalMarker(node, layout, key, z, geometry, style));
+
+    private sealed class NodesContributor : ICanvas2DSceneContributor, ICanvas2DScopeGeometryContributor
+    {
+        public Canvas2DSceneContributionResult Contribute(Canvas2DSceneContributionContext context) =>
+            ContributeNodes(context, includeLegacyFeedback: false);
+
+        public Canvas2DScopeGeometryBaseResult PrepareBase(Canvas2DScopeGeometryBaseContext context) =>
+            new BpmnCanvas2DSceneContributor().PrepareBase(context);
+
+        public Canvas2DScopeGeometryPresentationResult PreparePresentation(Canvas2DScopeGeometryPresentationContext context) =>
+            new BpmnCanvas2DSceneContributor().PreparePresentation(context);
+    }
+
+    private sealed class PlacementContributor : ICanvas2DSceneContributor
+    {
+        public Canvas2DSceneContributionResult Contribute(Canvas2DSceneContributionContext context)
+        {
+            var items = new List<Canvas2DSceneItem>();
+            AddPlacementFeedback(context.EditorState, items, PlacementDescriptor.ContributorId);
+            return Canvas2DSceneContributionResult.Success(new Canvas2DSceneContribution(items: items));
+        }
+    }
+
+    private static void AddPlacementFeedback(EditorStateSnapshot editorState,
+        List<Canvas2DSceneItem> items, Canvas2DSceneContributorId contributorId)
+    {
+        foreach (var feedback in editorState.TemporaryFeedback)
+        {
+            if (feedback.PlacementPreview is not { } preview || feedback.Bounds is not { } bounds ||
+                !BpmnSemanticTypes.IsFlowNode(preview.SemanticTypeId))
+            {
+                continue;
+            }
+
+            var local = new RectD(0d, 0d, bounds.Width, bounds.Height);
+            var tint = preview.IsAllowed ? "#15803d" : "#b91c1c";
+            var appearance = new NodeAppearanceContext(preview.SemanticTypeId, feedback.Id, true,
+                (key, z, geometry, style) => PreviewItem(feedback, contributorId, key, z + 5100, geometry,
+                    style, bounds, tint));
+            items.Add(PreviewItem(feedback, contributorId, "body", 5000, Geometry(preview.SemanticTypeId, local),
+                Style(appearance), bounds, tint));
+            if (BpmnSemanticTypes.IsGateway(preview.SemanticTypeId))
+            {
+                items.AddRange(CreateGatewayMarkers(appearance, local));
+            }
+            else if (BpmnIntermediateEventSemanticTypes.IsIntermediateEvent(preview.SemanticTypeId) ||
+                BpmnBoundaryEventSemanticTypes.IsBoundaryEvent(preview.SemanticTypeId))
+            {
+                items.AddRange(CreateIntermediateEventMarkers(appearance, local));
+            }
+            else if (BpmnTaskSemanticTypes.IsTask(preview.SemanticTypeId) &&
+                preview.SemanticTypeId != BpmnSemanticTypes.Task)
+            {
+                items.AddRange(CreateTaskMarkers(appearance, local));
+            }
+            else if (preview.SemanticTypeId == BpmnSemanticTypes.SubProcess)
+            {
+                items.AddRange(CreateSubProcessMarkers(appearance, local));
+            }
+        }
+    }
+
+    private static Canvas2DSceneItem PreviewItem(EditorFeedbackSnapshot feedback,
+        Canvas2DSceneContributorId contributorId, string localKey,
+        int zIndex, Canvas2DSceneGeometry geometry, Canvas2DSceneStyle style, RectD bounds, string tint)
+    {
+        var key = $"feedback:{feedback.Id}:{localKey}";
+        return new Canvas2DSceneItem(
+            Canvas2DSceneObjectIdentity.ForExtension(contributorId, key),
+            Canvas2DSceneLayer.Overlay, zIndex, geometry,
+            new Canvas2DSceneOriginTrace(Canvas2DSceneOriginCategory.EditorState |
+                Canvas2DSceneOriginCategory.RegisteredExtension, stableSourceKey: key),
+            transform: Matrix2D.CreateTranslation(bounds.X, bounds.Y),
+            style: new Canvas2DSceneStyle(
+                fill: style.Fill == "#000000" ? tint : style.Fill,
+                stroke: style.Stroke == "#000000" ? tint : style.Stroke,
+                strokeWidth: style.StrokeWidth, dashPattern: style.DashPattern, opacity: 0.9d),
+            hitTestPolicy: Canvas2DHitTestPolicy.None, bounds: bounds);
     }
 
     private static RectD Inset(RectD bounds, double inset) =>

@@ -1,5 +1,4 @@
 using System.Collections.Immutable;
-using System.Globalization;
 using Inceptus.DocumentEngine.Bpmn.Commands;
 using Inceptus.DocumentEngine.Bpmn.Semantics;
 using Inceptus.DocumentEngine.Bpmn.Scene;
@@ -93,7 +92,9 @@ internal static class BpmnToolboxPlacementContribution
         new ToolboxPlacementRegistration(
             BpmnToolboxContribution.TimerBoundaryEventItemId,
             new BpmnTimerBoundaryEventToolboxPlacementCommandFactory(),
-            new BpmnTimerBoundaryEventPlacementCandidateProvider()),
+            new BpmnTimerBoundaryEventPlacementCandidateProvider(),
+            new BpmnToolboxPlacementPreviewProvider(BpmnToolboxContribution.TimerBoundaryEventItemId,
+                BpmnSemanticTypes.TimerBoundaryEvent, BpmnTimerBoundaryEventSceneFeedback.AttachmentCandidateKind)),
     ];
 
     internal static ImmutableArray<ToolboxPlacementRegistration> N91Registrations { get; } =
@@ -102,11 +103,15 @@ internal static class BpmnToolboxPlacementContribution
         new ToolboxPlacementRegistration(
             BpmnToolboxContribution.MessageBoundaryEventItemId,
             new BpmnMessageBoundaryEventToolboxPlacementCommandFactory(),
-            new BpmnMessageBoundaryEventPlacementCandidateProvider()),
+            new BpmnMessageBoundaryEventPlacementCandidateProvider(),
+            new BpmnToolboxPlacementPreviewProvider(BpmnToolboxContribution.MessageBoundaryEventItemId,
+                BpmnSemanticTypes.MessageBoundaryEvent, BpmnMessageBoundaryEventSceneFeedback.AttachmentCandidateKind)),
         new ToolboxPlacementRegistration(
             BpmnToolboxContribution.SignalBoundaryEventItemId,
             new BpmnSignalBoundaryEventToolboxPlacementCommandFactory(),
-            new BpmnSignalBoundaryEventPlacementCandidateProvider()),
+            new BpmnSignalBoundaryEventPlacementCandidateProvider(),
+            new BpmnToolboxPlacementPreviewProvider(BpmnToolboxContribution.SignalBoundaryEventItemId,
+                BpmnSemanticTypes.SignalBoundaryEvent, BpmnSignalBoundaryEventSceneFeedback.AttachmentCandidateKind)),
     ];
 
     private static ToolboxPlacementRegistration Registration(
@@ -114,7 +119,10 @@ internal static class BpmnToolboxPlacementContribution
         BpmnPlacementNodeKind nodeKind) =>
         new(
             toolboxItemId,
-            new BpmnToolboxPlacementCommandFactory(toolboxItemId, nodeKind));
+            new BpmnToolboxPlacementCommandFactory(toolboxItemId, nodeKind),
+            candidateProvider: null,
+            new BpmnToolboxPlacementPreviewProvider(toolboxItemId,
+                BpmnToolboxPlacementCommandFactory.SemanticTypeId(nodeKind)));
 }
 
 internal sealed class BpmnTimerBoundaryEventPlacementCandidateProvider :
@@ -193,6 +201,13 @@ internal sealed class BpmnBoundaryEventPlacementCandidateProvider :
         "bpmn:toolbox:boundary-position-on-side";
 
     public ToolboxPlacementCandidate? ResolveCandidate(ToolboxPlacementRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        return ResolveCandidate(new ToolboxPlacementPreviewRequest(request.ToolboxItemId,
+            request.Document, request.DocumentPoint, request.TargetScopeId, request.VisibleTargets));
+    }
+
+    internal ToolboxPlacementCandidate? ResolveCandidate(ToolboxPlacementPreviewRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
         var eventSize = BpmnNodeLogicalSizePolicy.Resolve(_semanticTypeId);
@@ -367,13 +382,7 @@ internal sealed class BpmnBoundaryEventToolboxPlacementCommandFactory :
 
         var identity = request.IdentityProvider.CreateIdentity();
         ArgumentNullException.ThrowIfNull(identity);
-        var number = request.Document.SemanticModel.Elements.LongCount(element =>
-            element.TypeId == _semanticTypeId) + 1L;
-        var name = string.Concat(
-            _displayName,
-            " ",
-            number.ToString(CultureInfo.InvariantCulture));
-        var description = string.Concat(_displayName, " created from the Toolbox.");
+        var defaults = BpmnToolboxCreationDefaults.Resolve(request.Document, _semanticTypeId, out _);
         var command = CreateCommand(
             request.Document.DocumentId,
             request.ExpectedRevision,
@@ -383,8 +392,8 @@ internal sealed class BpmnBoundaryEventToolboxPlacementCommandFactory :
             placement.Side,
             placement.PositionOnSide,
             target.Bounds,
-            name,
-            description,
+            defaults.Name!,
+            defaults.Description!,
             request.TargetScopeId);
 
         return ToolboxPlacementPlanResult.Success(new ToolboxPlacementPlan(
@@ -544,41 +553,25 @@ internal sealed class BpmnToolboxPlacementCommandFactory :
             ]);
         }
 
-        var semanticTypeId = SemanticTypeId(_nodeKind);
-        long taskElementNumber = default;
-        if (BpmnTaskSemanticTypes.IsTask(semanticTypeId) &&
-            !TryResolveNextTaskElementNumber(
-                request,
-                out taskElementNumber,
-                out var failure))
+        var defaults = BpmnToolboxCreationDefaults.Resolve(request.Document, SemanticTypeId(_nodeKind), out var defaultsFailure);
+        if (defaultsFailure is not null)
         {
-            return failure!;
+            return ToolboxPlacementPlanResult.Failure([new Diagnostic(defaultsFailure.Code,
+                defaultsFailure.Severity, defaultsFailure.Message, request.ToolboxItemId.Value)]);
         }
 
-        var eventNumber = BpmnIntermediateEventSemanticTypes.IsIntermediateEvent(
-            semanticTypeId)
-            ? NextSemanticTypeNumber(request, semanticTypeId)
-            : default;
-        var subProcessNumber = semanticTypeId == BpmnSemanticTypes.SubProcess
-            ? NextSemanticTypeNumber(request, semanticTypeId)
-            : default;
-
-        var size = BpmnNodeLogicalSizePolicy.Resolve(semanticTypeId);
-        var position = new PointD(
-            request.DocumentPoint.X - (size.Width / 2d),
-            request.DocumentPoint.Y - (size.Height / 2d));
-        var bounds = new RectD(position.X, position.Y, size.Width, size.Height);
+        var size = defaults.Size;
+        var bounds = defaults.BoundsAt(request.DocumentPoint);
+        var position = bounds.TopLeft;
         if (!DocumentGeometryBoundary.Contains(bounds))
         {
             return ToolboxPlacementPlanResult.Failure(
             [
-                Error(
-                    CommandExecutionDiagnosticCodes.VisualStateGeometryInvalid,
+                Error(CommandExecutionDiagnosticCodes.VisualStateGeometryInvalid,
                     $"BPMN Toolbox item '{request.ToolboxItemId}' cannot be placed because its final bounds would cross the Document boundary.",
                     request.ToolboxItemId.Value),
             ]);
         }
-
         var identity = request.IdentityProvider.CreateIdentity();
         ArgumentNullException.ThrowIfNull(identity);
         var command = CreateCommand(
@@ -586,9 +579,7 @@ internal sealed class BpmnToolboxPlacementCommandFactory :
             identity,
             position,
             size,
-            taskElementNumber,
-            eventNumber,
-            subProcessNumber);
+            defaults);
 
         return ToolboxPlacementPlanResult.Success(
             new ToolboxPlacementPlan(
@@ -602,9 +593,7 @@ internal sealed class BpmnToolboxPlacementCommandFactory :
         DocumentCreationIdentity identity,
         PointD position,
         SizeD size,
-        long taskElementNumber,
-        long eventNumber,
-        long subProcessNumber) => _nodeKind switch
+        BpmnToolboxCreationDefaults defaults) => _nodeKind switch
         {
             BpmnPlacementNodeKind.StartEvent => new CreateBpmnStartEventCommand(
                 request.Document.DocumentId,
@@ -626,7 +615,7 @@ internal sealed class BpmnToolboxPlacementCommandFactory :
                 position,
                 size,
                 SemanticTypeId(_nodeKind),
-                taskElementNumber),
+                defaults),
             BpmnPlacementNodeKind.SubProcess => new CreateBpmnSubProcessCommand(
                 request.Document.DocumentId,
                 request.ExpectedRevision,
@@ -636,14 +625,10 @@ internal sealed class BpmnToolboxPlacementCommandFactory :
                 new DocumentScopeId($"bpmn:scope:{identity.SemanticElementId.Value}"),
                 position,
                 size,
-                string.Concat(
-                    "SUBPROCESS_",
-                    subProcessNumber.ToString(CultureInfo.InvariantCulture)),
-                string.Concat(
-                    "SubProcess ",
-                    subProcessNumber.ToString(CultureInfo.InvariantCulture)),
+                defaults.Code!,
+                defaults.Name!,
                 VisualPlacementMode.Pinned,
-                description: "SubProcess created from the Toolbox."),
+                description: defaults.Description),
             BpmnPlacementNodeKind.ExclusiveGateway =>
                 new CreateBpmnExclusiveGatewayCommand(
                     request.Document.DocumentId,
@@ -652,10 +637,10 @@ internal sealed class BpmnToolboxPlacementCommandFactory :
                     identity.VisualStateId,
                     position,
                     size,
-                    "EXCLUSIVE_GATEWAY",
-                    "Exclusive Gateway",
+                    defaults.Code!,
+                    defaults.Name!,
                     VisualPlacementMode.Pinned,
-                    description: "Exclusive Gateway created from the Toolbox.",
+                    description: defaults.Description,
                     targetScopeId: request.TargetScopeId),
             BpmnPlacementNodeKind.ParallelGateway =>
                 new CreateBpmnParallelGatewayCommand(
@@ -665,10 +650,10 @@ internal sealed class BpmnToolboxPlacementCommandFactory :
                     identity.VisualStateId,
                     position,
                     size,
-                    "PARALLEL_GATEWAY",
-                    "Parallel Gateway",
+                    defaults.Code!,
+                    defaults.Name!,
                     VisualPlacementMode.Pinned,
-                    description: "Parallel Gateway created from the Toolbox.",
+                    description: defaults.Description,
                     targetScopeId: request.TargetScopeId),
             BpmnPlacementNodeKind.InclusiveGateway =>
                 new CreateBpmnInclusiveGatewayCommand(
@@ -678,10 +663,10 @@ internal sealed class BpmnToolboxPlacementCommandFactory :
                     identity.VisualStateId,
                     position,
                     size,
-                    "INCLUSIVE_GATEWAY",
-                    "Inclusive Gateway",
+                    defaults.Code!,
+                    defaults.Name!,
                     VisualPlacementMode.Pinned,
-                    description: "Inclusive Gateway created from the Toolbox.",
+                    description: defaults.Description,
                     targetScopeId: request.TargetScopeId),
             BpmnPlacementNodeKind.EventBasedGateway =>
                 new CreateBpmnEventBasedGatewayCommand(
@@ -691,10 +676,10 @@ internal sealed class BpmnToolboxPlacementCommandFactory :
                     identity.VisualStateId,
                     position,
                     size,
-                    "EVENT_BASED_GATEWAY",
-                    "Event-Based Gateway",
+                    defaults.Code!,
+                    defaults.Name!,
                     VisualPlacementMode.Pinned,
-                    description: "Event-Based Gateway created from the Toolbox.",
+                    description: defaults.Description,
                     targetScopeId: request.TargetScopeId),
             BpmnPlacementNodeKind.MessageCatchEvent =>
                 new CreateBpmnMessageCatchEventCommand(
@@ -704,11 +689,9 @@ internal sealed class BpmnToolboxPlacementCommandFactory :
                     identity.VisualStateId,
                     position,
                     size,
-                    string.Concat(
-                        "Message Event ",
-                        eventNumber.ToString(CultureInfo.InvariantCulture)),
+                    defaults.Name!,
                     VisualPlacementMode.Pinned,
-                    description: "Message catch event created from the Toolbox.",
+                    description: defaults.Description,
                     targetScopeId: request.TargetScopeId),
             BpmnPlacementNodeKind.MessageThrowEvent =>
                 new CreateBpmnMessageThrowEventCommand(
@@ -718,11 +701,9 @@ internal sealed class BpmnToolboxPlacementCommandFactory :
                     identity.VisualStateId,
                     position,
                     size,
-                    string.Concat(
-                        "Message Throw Event ",
-                        eventNumber.ToString(CultureInfo.InvariantCulture)),
+                    defaults.Name!,
                     VisualPlacementMode.Pinned,
-                    description: "Message Throw Event created from the Toolbox.",
+                    description: defaults.Description,
                     targetScopeId: request.TargetScopeId),
             BpmnPlacementNodeKind.TimerCatchEvent =>
                 new CreateBpmnTimerCatchEventCommand(
@@ -732,11 +713,9 @@ internal sealed class BpmnToolboxPlacementCommandFactory :
                     identity.VisualStateId,
                     position,
                     size,
-                    string.Concat(
-                        "Timer Event ",
-                        eventNumber.ToString(CultureInfo.InvariantCulture)),
+                    defaults.Name!,
                     VisualPlacementMode.Pinned,
-                    description: "Timer catch event created from the Toolbox.",
+                    description: defaults.Description,
                     targetScopeId: request.TargetScopeId),
             BpmnPlacementNodeKind.SignalCatchEvent =>
                 new CreateBpmnSignalCatchEventCommand(
@@ -746,11 +725,9 @@ internal sealed class BpmnToolboxPlacementCommandFactory :
                     identity.VisualStateId,
                     position,
                     size,
-                    string.Concat(
-                        "Signal Catch Event ",
-                        eventNumber.ToString(CultureInfo.InvariantCulture)),
+                    defaults.Name!,
                     VisualPlacementMode.Pinned,
-                    description: "Signal Catch Event created from the Toolbox.",
+                    description: defaults.Description,
                     targetScopeId: request.TargetScopeId),
             BpmnPlacementNodeKind.SignalThrowEvent =>
                 new CreateBpmnSignalThrowEventCommand(
@@ -760,11 +737,9 @@ internal sealed class BpmnToolboxPlacementCommandFactory :
                     identity.VisualStateId,
                     position,
                     size,
-                    string.Concat(
-                        "Signal Throw Event ",
-                        eventNumber.ToString(CultureInfo.InvariantCulture)),
+                    defaults.Name!,
                     VisualPlacementMode.Pinned,
-                    description: "Signal Throw Event created from the Toolbox.",
+                    description: defaults.Description,
                     targetScopeId: request.TargetScopeId),
             BpmnPlacementNodeKind.EndEvent => new CreateBpmnEndEventCommand(
                 request.Document.DocumentId,
@@ -785,10 +760,8 @@ internal sealed class BpmnToolboxPlacementCommandFactory :
         PointD position,
         SizeD size,
         SemanticTypeId semanticTypeId,
-        long elementNumber)
+        BpmnToolboxCreationDefaults defaults)
     {
-        var number = elementNumber.ToString(CultureInfo.InvariantCulture);
-        var displayName = BpmnTaskSemanticTypes.DisplayName(semanticTypeId);
         return new CreateBpmnTaskCommand(
             request.Document.DocumentId,
             request.ExpectedRevision,
@@ -796,60 +769,16 @@ internal sealed class BpmnToolboxPlacementCommandFactory :
             identity.VisualStateId,
             position,
             size,
-            string.Concat(BpmnTaskSemanticTypes.DefaultCodePrefix(semanticTypeId), "_", number),
-            string.Concat(displayName, " ", number),
-            elementNumber,
+            defaults.Code!,
+            defaults.Name!,
+            defaults.ElementNumber,
             VisualPlacementMode.Pinned,
-            description: string.Concat(displayName, " ", number, " created from the Toolbox."),
+            description: defaults.Description,
             taskTypeId: semanticTypeId,
             targetScopeId: request.TargetScopeId);
     }
 
-    private static bool TryResolveNextTaskElementNumber(
-        ToolboxPlacementRequest request,
-        out long nextElementNumber,
-        out ToolboxPlacementPlanResult? failure)
-    {
-        var maximum = 0L;
-        foreach (var element in request.Document.SemanticModel.Elements)
-        {
-            if (!BpmnTaskSemanticTypes.IsTask(element.TypeId) ||
-                !element.Properties.TryGetValue(
-                    BpmnSemanticProperties.ElementNumber,
-                    out var elementNumber) ||
-                elementNumber.Kind != PropertyValueKind.Integer)
-            {
-                continue;
-            }
-
-            maximum = Math.Max(maximum, elementNumber.IntegerValue);
-        }
-
-        if (maximum == long.MaxValue)
-        {
-            nextElementNumber = default;
-            failure = ToolboxPlacementPlanResult.Failure(
-            [
-                Error(
-                    BpmnToolboxPlacementDiagnosticCodes.TaskElementNumberExhausted,
-                    "A BPMN Task cannot be placed because its next Element number would exceed Int64.MaxValue.",
-                    request.ToolboxItemId.Value),
-            ]);
-            return false;
-        }
-
-        nextElementNumber = checked(maximum + 1L);
-        failure = null;
-        return true;
-    }
-
-    private static long NextSemanticTypeNumber(
-        ToolboxPlacementRequest request,
-        SemanticTypeId semanticTypeId) =>
-        checked(request.Document.SemanticModel.Elements.LongCount(element =>
-            element.TypeId == semanticTypeId) + 1L);
-
-    private static SemanticTypeId SemanticTypeId(BpmnPlacementNodeKind nodeKind) =>
+    internal static SemanticTypeId SemanticTypeId(BpmnPlacementNodeKind nodeKind) =>
         nodeKind switch
         {
             BpmnPlacementNodeKind.StartEvent => BpmnSemanticTypes.StartEvent,

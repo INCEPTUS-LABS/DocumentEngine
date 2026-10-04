@@ -13,6 +13,7 @@ using Inceptus.DocumentEngine.Contracts.Documents;
 using Inceptus.DocumentEngine.Contracts.Geometry;
 using Inceptus.DocumentEngine.Contracts.Primitives;
 using Inceptus.DocumentEngine.Contracts.Properties;
+using Inceptus.DocumentEngine.Contracts.Routing;
 using Inceptus.DocumentEngine.Contracts.Visuals;
 using Microsoft.Extensions.Localization;
 
@@ -286,7 +287,8 @@ internal sealed record DocumentCanvasPropertySnapshot(
     SceneObjectId? TargetSceneObjectId = null,
     Canvas2DSpatialRegion? SpatialRegion = null,
     EditingSessionGeneration? SessionGeneration = null,
-    Canvas2DScene? SourceScene = null)
+    Canvas2DScene? SourceScene = null,
+    ConnectorRoutingType? RoutingType = null)
 {
     // Ordinary element UI eligibility is presentation policy; schemas and their
     // internal values remain available to commands, serialization and diagnostics.
@@ -297,6 +299,8 @@ internal sealed record DocumentCanvasPropertySnapshot(
 
     internal bool CanEditBounds => VisualStateId is not null &&
         !IsConnector && !IsBoundaryAttached;
+
+    internal bool CanEditRoutingType => IsConnector && VisualStateId is not null && RoutingType is not null;
 
     internal static bool TryCreate(
         DocumentSnapshot document,
@@ -379,7 +383,9 @@ internal sealed record DocumentCanvasPropertySnapshot(
             targetSceneObjectId,
             spatialRegion,
             sessionGeneration,
-            sourceScene);
+            sourceScene,
+            document.VisualModel.RoutingScopes?.SelectMany(static scope => scope.Connectors)
+                .FirstOrDefault(record => record.VisualStateId == visualState.Id)?.RoutingType);
         return true;
     }
 
@@ -599,6 +605,7 @@ internal sealed class DocumentCanvasPropertiesDraft
         Y = Format(authoritative.Bounds.Y);
         Width = Format(authoritative.Bounds.Width);
         Height = Format(authoritative.Bounds.Height);
+        RoutingTypeValue = authoritative.RoutingType?.ToString().ToLowerInvariant() ?? string.Empty;
     }
 
     internal DocumentCanvasPropertySnapshot Authoritative { get; }
@@ -613,6 +620,23 @@ internal sealed class DocumentCanvasPropertiesDraft
 
     internal string Height { get; set; }
 
+    internal string RoutingTypeValue { get; set; }
+
+    internal bool IsRoutingTypeDirty => Authoritative.CanEditRoutingType &&
+        (!TryParseRoutingType(out var type) || type != Authoritative.RoutingType);
+
+    internal bool TryParseRoutingType(out ConnectorRoutingType routingType)
+    {
+        routingType = RoutingTypeValue switch
+        {
+            "automatic" => ConnectorRoutingType.Automatic,
+            "straight" => ConnectorRoutingType.Straight,
+            "manual" => ConnectorRoutingType.Manual,
+            _ => (ConnectorRoutingType)(-1),
+        };
+        return Enum.IsDefined(routingType);
+    }
+
     internal bool IsStale { get; set; }
 
     internal string? Feedback { get; set; }
@@ -625,9 +649,9 @@ internal sealed class DocumentCanvasPropertiesDraft
         (!TryParseBounds(out var bounds, out _) || bounds != Authoritative.Bounds);
 
     internal bool HasConflictingChanges =>
-        SemanticDirtyFieldCount > 1 || IsSemanticDirty && IsBoundsDirty;
+        SemanticDirtyFieldCount + (IsBoundsDirty ? 1 : 0) + (IsRoutingTypeDirty ? 1 : 0) > 1;
 
-    internal bool IsDirty => IsSemanticDirty || IsBoundsDirty;
+    internal bool IsDirty => IsSemanticDirty || IsBoundsDirty || IsRoutingTypeDirty;
 
     internal bool IsValid => TryValidate(out _, out _);
 
@@ -638,6 +662,8 @@ internal sealed class DocumentCanvasPropertiesDraft
     {
         var boundsValid = TryParseBounds(out bounds, out var boundsMessages, text);
         var messages = boundsMessages.ToBuilder();
+        if (Authoritative.CanEditRoutingType && !TryParseRoutingType(out _))
+            messages.Add(text is null ? "Select a supported routing type." : text["Validation_RoutingType"]);
         foreach (var field in DataFields.Where(static field => field.IsDirty))
         {
             if (field.Definition.MutationKind == SemanticPropertyMutationKind.Name &&
@@ -672,7 +698,7 @@ internal sealed class DocumentCanvasPropertiesDraft
         {
             messages.Add(
                 text is null
-                    ? "Apply one Data field or visual bounds before editing another property group."
+                    ? "Apply one Data field, routing type, or visual bounds before editing another property group."
                     : text["Validation_Conflicting"]);
         }
 

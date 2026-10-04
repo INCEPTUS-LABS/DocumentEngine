@@ -217,23 +217,27 @@ public sealed partial class Canvas2DSceneBuilder
             }
 
             var layoutService = new Canvas2DTextLayoutService(textMetrics, requestFactory);
-            var nodeLabelLayouts = await CreateMeasuredNodeLabelLayoutsAsync(
+            var nodeLabelLayouts = routingResult.LogicalGeometry is { } saved && editorState.ActiveGesture is null
+                ? RestoreSavedNodeLabels(projectedGraph, saved.Geometry)
+                : await CreateMeasuredNodeLabelLayoutsAsync(
                 projectedGraph,
                 layoutResult,
                 visualModel,
                 editorState,
                 layoutService,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken, routingResult.LogicalGeometry?.Geometry).ConfigureAwait(false);
             var connectorLabelLayouts = await CreateMeasuredConnectorLabelLayoutsAsync(
                 projectedGraph,
                 routingResult,
                 visualModel,
                 layoutService,
                 cancellationToken).ConfigureAwait(false);
+            var placementLabelLayouts = await CreatePlacementLabelLayoutsAsync(
+                editorState, layoutService, [], cancellationToken).ConfigureAwait(false);
             var diagnostics = compatibilityDiagnostics
                 .Concat(layoutService.Diagnostics)
                 .ToArray();
-            if (nodeLabelLayouts is null || connectorLabelLayouts is null ||
+            if (nodeLabelLayouts is null || connectorLabelLayouts is null || placementLabelLayouts is null ||
                 HasErrors(diagnostics))
             {
                 if (!HasErrors(diagnostics))
@@ -267,7 +271,8 @@ public sealed partial class Canvas2DSceneBuilder
                 nodeLabelLayouts,
                 connectorLabelLayouts,
                 diagnostics,
-                presentation);
+                presentation,
+                placementLabelLayouts);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -430,7 +435,8 @@ public sealed partial class Canvas2DSceneBuilder
         IReadOnlyDictionary<ProjectedObjectId, Canvas2DMeasuredConnectorLabel>?
             measuredConnectorLabels = null,
         IEnumerable<Diagnostic>? initialDiagnostics = null,
-        ScenePresentationInput? presentation = null)
+        ScenePresentationInput? presentation = null,
+        ImmutableArray<Canvas2DPlacementLabelLayout>? placementLabelLayouts = null)
     {
         var diagnostics = initialDiagnostics?.ToList() ?? [];
         ValidateCompatibility(graph, layout, routing, visualModel, editorState, diagnostics);
@@ -455,6 +461,7 @@ public sealed partial class Canvas2DSceneBuilder
             new Dictionary<SceneObjectId, CanonicalItemVisualOverrideRegistration>();
 
         var contributorMetadata = new List<KeyValuePair<string, PropertyValue>>();
+        var placementContributorItems = new List<Canvas2DSceneItem>();
         InvokeContributors(
             Canvas2DSceneContributionStage.Canonical,
             graph,
@@ -468,7 +475,8 @@ public sealed partial class Canvas2DSceneBuilder
             contributorMetadata,
             diagnostics,
             presentation,
-            spatialPresentations: null);
+            spatialPresentations: null,
+            placementContributorItems: placementContributorItems);
         if (HasErrors(diagnostics))
         {
             return Canvas2DSceneBuildResult.Failure(diagnostics);
@@ -493,7 +501,8 @@ public sealed partial class Canvas2DSceneBuilder
             contributorMetadata,
             diagnostics,
             presentation,
-            spatialPresentations);
+            spatialPresentations,
+            placementContributorItems: placementContributorItems);
         if (HasErrors(diagnostics))
         {
             return Canvas2DSceneBuildResult.Failure(diagnostics);
@@ -529,7 +538,8 @@ public sealed partial class Canvas2DSceneBuilder
         SuppressNodeLabelHitTestingDuringAnchorConnection(editorState, items);
 
         var editorOverlayStartIndex = items.Count;
-        var moveBaseItems = items.ToArray();
+        var placementItemIds = placementContributorItems.Select(static item => item.Id).ToHashSet();
+        var moveBaseItems = items.Where(item => !placementItemIds.Contains(item.Id)).ToArray();
         var overlayInputs = CreateEditorOverlayInputs(graph, visualModel);
         ComposeEditorOverlays(
             editorState,
@@ -540,9 +550,14 @@ public sealed partial class Canvas2DSceneBuilder
             measuredNodeLabels,
             measuredConnectorLabels,
             overlayInputs);
+        var placementLabelStart = items.Count;
+        ComposePlacementLabels(editorState, placementLabelLayouts ?? [], items);
+        var placementFamily = placementContributorItems.Concat(items.Skip(placementLabelStart)).ToImmutableArray();
         AssociateEditorOverlaysWithSpatialPresentation(items, editorOverlayStartIndex);
+        SuppressInstalledMovingLabel(editorState, items);
         var moveOverlayItems = items.Skip(editorOverlayStartIndex)
-            .Where(static item => !IsDocumentBoundaryGuide(item)).ToArray();
+            .Where(static item => !IsDocumentBoundaryGuide(item))
+            .Concat(placementContributorItems).ToArray();
         ValidateAndOrderSceneItems(
             graph,
             routing,
@@ -582,7 +597,8 @@ public sealed partial class Canvas2DSceneBuilder
             CreatePanReuseSource(graph, layout, routing, visualModel, editorState, presentation),
             boundaryGuides,
             CreateBoundedPresentation(graph, layout, routing, visualModel, editorState,
-                presentation, moveBaseItems, moveOverlayItems, overlayInputs, diagnostics));
+                presentation, moveBaseItems, moveOverlayItems, overlayInputs, diagnostics,
+                placementLabelLayouts ?? [], placementFamily, measuredNodeLabels, measuredConnectorLabels));
 
         return Canvas2DSceneBuildResult.Success(scene);
     }
@@ -601,9 +617,11 @@ public sealed partial class Canvas2DSceneBuilder
         List<KeyValuePair<string, PropertyValue>> contributorMetadata,
         List<Diagnostic> diagnostics,
         ScenePresentationInput? presentation,
-        List<SpatialPresentationRegistration>? spatialPresentations)
+        List<SpatialPresentationRegistration>? spatialPresentations,
+        List<Canvas2DSceneItem>? placementContributorItems = null,
+        bool placementOnly = false)
     {
-        var presentationContext = presentation is null
+        var presentationContext = presentation is null || placementOnly
             ? null
             : new Canvas2DScenePresentationContext(
                 presentation.Document,
@@ -612,18 +630,30 @@ public sealed partial class Canvas2DSceneBuilder
                 presentation.ModelProfileElementViewState,
                 canonicalItems.Values);
         foreach (var registration in _contributors.Registrations.Where(
-                     registration => registration.Stage == stage))
+                     registration => registration.Stage == stage &&
+                         (!placementOnly || registration.Descriptor.PlacementDependency ==
+                             Canvas2DScenePlacementDependency.BoundedFeedbackOnly)))
         {
             var descriptor = registration.Descriptor;
+            var boundedFeedback = descriptor.PlacementDependency ==
+                Canvas2DScenePlacementDependency.BoundedFeedbackOnly;
+            var contributorEditorState = boundedFeedback
+                ? new EditorStateSnapshot(temporaryFeedback: editorState.TemporaryFeedback
+                    .Where(static feedback => feedback.PlacementPreview is not null))
+                : editorState;
+            var contributorPresentation = boundedFeedback && presentation is not null
+                ? new Canvas2DScenePresentationContext(presentation.Document, presentation.ActiveScopeId,
+                    presentation.ModelProfileViewState, presentation.ModelProfileElementViewState, [])
+                : presentationContext;
             var context = new Canvas2DSceneContributionContext(
                 graph,
                 layout,
                 routing,
                 visualModel,
-                editorState,
+                contributorEditorState,
                 _configuration,
                 descriptor,
-                presentationContext);
+                contributorPresentation);
 
             Canvas2DSceneContributionResult? result;
 #pragma warning disable CA1031 // Plugin faults are isolated as deterministic diagnostics.
@@ -680,6 +710,12 @@ public sealed partial class Canvas2DSceneBuilder
                 continue;
             }
 
+            if (descriptor.PlacementDependency == Canvas2DScenePlacementDependency.BoundedFeedbackOnly &&
+                !IsValidBoundedPlacementContribution(contribution, descriptor, contributorEditorState, diagnostics))
+            {
+                continue;
+            }
+
             if (stage == Canvas2DSceneContributionStage.Canonical &&
                 contribution.SpatialPresentationPlan is not null)
             {
@@ -708,6 +744,10 @@ public sealed partial class Canvas2DSceneBuilder
                 }
 
                 items.Add(item);
+                if (descriptor.PlacementDependency == Canvas2DScenePlacementDependency.BoundedFeedbackOnly)
+                {
+                    placementContributorItems?.Add(item);
+                }
             }
 
             foreach (var visualOverride in contribution.CanonicalItemVisualOverrides)

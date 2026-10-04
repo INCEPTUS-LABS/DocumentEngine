@@ -2,6 +2,7 @@ using Inceptus.DocumentEngine.Contracts.Commands;
 using Inceptus.DocumentEngine.Contracts.Diagnostics;
 using Inceptus.DocumentEngine.Contracts.Documents;
 using Inceptus.DocumentEngine.Contracts.History;
+using System.Collections.Immutable;
 
 namespace Inceptus.DocumentEngine.Runtime.History;
 
@@ -76,6 +77,11 @@ internal sealed class HistoryCoordinator
             return HistoryMutationPreparationResult.Failure(preparation.Diagnostics);
         }
 
+        if (preparation.Behavior == HistoryRecordingBehavior.PreserveExistingHistory)
+        {
+            return HistoryMutationPreparationResult.Success(diagnostics: preparation.Diagnostics);
+        }
+
         if (preparation.Behavior == HistoryRecordingBehavior.NotUndoable)
         {
             var discardRedo = store.PrepareNotUndoable();
@@ -99,13 +105,38 @@ internal sealed class HistoryCoordinator
         var entry = new HistoryEntry(
             command.TypeId,
             preparation.UndoFactory,
-            preparation.RedoFactory);
+            preparation.RedoFactory,
+            preparation.RoutingTypeDeltas,
+            preparation.SpatialHeightDeltas,
+            CaptureNodeGeometryDeltas(before, committed), preparation.SpatialWidthDeltas);
         var record = store.PrepareRecord(entry);
         return !record.Succeeded || preparation.Diagnostics.IsEmpty
             ? record
             : HistoryMutationPreparationResult.Success(
                 record.Mutation,
                 preparation.Diagnostics.Concat(record.Diagnostics));
+    }
+
+    private static ImmutableArray<NodeGeometryHistoryDelta> CaptureNodeGeometryDeltas(
+        DocumentSnapshot before, DocumentSnapshot committed)
+    {
+        if (before.VisualModel.RoutingScopes is not { } beforeScopes ||
+            committed.VisualModel.RoutingScopes is not { } afterScopes) return [];
+        var beforeNodes = beforeScopes.SelectMany(scope => scope.Geometry.Nodes.Select(node =>
+            new NodeGeometryHistorySeed(scope.ScopeId, node))).ToDictionary(seed => seed.Geometry.VisualStateId);
+        var afterNodes = afterScopes.SelectMany(scope => scope.Geometry.Nodes.Select(node =>
+            new NodeGeometryHistorySeed(scope.ScopeId, node))).ToDictionary(seed => seed.Geometry.VisualStateId);
+        var deltas = ImmutableArray.CreateBuilder<NodeGeometryHistoryDelta>();
+        foreach (var visual in committed.VisualModel.VisualStates)
+        {
+            if (!before.VisualModel.TryGetVisualState(visual.Id, out var prior) ||
+                !beforeNodes.TryGetValue(visual.Id, out var oldNode) ||
+                !afterNodes.TryGetValue(visual.Id, out var newNode) || oldNode == newNode) continue;
+            if (prior!.Position != visual.Position || prior.Size != visual.Size ||
+                prior.PlacementMode != visual.PlacementMode || !Equals(prior.BoundaryAttachment, visual.BoundaryAttachment))
+                deltas.Add(new NodeGeometryHistoryDelta(oldNode, newNode));
+        }
+        return deltas.ToImmutable();
     }
 
     private static HistoryMutationPreparationResult Failure(

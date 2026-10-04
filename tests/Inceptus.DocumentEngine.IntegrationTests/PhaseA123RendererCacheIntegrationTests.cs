@@ -5,6 +5,7 @@ using Inceptus.DocumentEngine.Canvas2D.Rendering;
 using Inceptus.DocumentEngine.Canvas2D.Rendering.Interop;
 using Inceptus.DocumentEngine.Contracts.Geometry;
 using Inceptus.DocumentEngine.Contracts.Commands;
+using Inceptus.DocumentEngine.Contracts.Routing;
 using Inceptus.DocumentEngine.Contracts.EditorState;
 using Inceptus.DocumentEngine.Contracts.Profiles;
 using Inceptus.DocumentEngine.Contracts.Visuals;
@@ -28,6 +29,8 @@ public sealed class PhaseA123RendererCacheIntegrationTests
         await test.ExecuteAsync(new UpdateBpmnSequenceFlowNameCommand(test.Snapshot.DocumentId,
             test.Snapshot.Revision, flow, "Automatic branch label"));
         var edgeVisual = test.Snapshot.VisualModel.VisualStates.Single(item => item.SemanticElementId == flow);
+        if (change == "route")
+            await BpmnModelerTestComposition.SetRoutingTypeAsync(test.Session, edgeVisual.Id, ConnectorRoutingType.Manual);
         if (change == "label-reset")
         {
             await test.ExecuteAsync(new MoveLabelCommand(test.Snapshot.DocumentId,
@@ -124,10 +127,16 @@ public sealed class PhaseA123RendererCacheIntegrationTests
         try
         {
             await newerStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
-            if (transition is "document" or "scope" or "profile")
+            if (transition is "scope" or "profile")
             {
                 await superseded.Task.WaitAsync(TimeSpan.FromSeconds(10));
                 Assert.False(test.State.IsCurrentScenePresented);
+            }
+            else if (transition == "document")
+            {
+                // Saved-state preparation uses renderer text metrics and waits behind this
+                // presentation. The Document stays atomic until the renderer is released.
+                Assert.Equal(before.DocumentRevision, test.State.DocumentRevision);
             }
         }
         finally

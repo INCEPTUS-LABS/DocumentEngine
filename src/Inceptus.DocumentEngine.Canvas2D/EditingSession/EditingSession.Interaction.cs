@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using Inceptus.DocumentEngine.Contracts.Canvas2D;
 using Inceptus.DocumentEngine.Canvas2D.Interaction;
 using Inceptus.DocumentEngine.Canvas2D.Scene;
 using Inceptus.DocumentEngine.Contracts.Commands;
@@ -12,6 +13,10 @@ namespace Inceptus.DocumentEngine.Canvas2D.EditingSession;
 
 public sealed partial class EditingSession
 {
+    internal long CaptureInteractionSurfaceGeneration()
+    {
+        lock (_sync) { return _surfaceGeneration; }
+    }
     internal VisualStateSnapshot? CaptureVisualStateForInteraction(
         Canvas2DScene expectedScene,
         EditingSessionGeneration expectedGeneration,
@@ -404,13 +409,45 @@ public sealed partial class EditingSession
         EditorStateSnapshot clearedEditorState,
         MoveVisualStateCommand command,
         CancellationToken cancellationToken = default) =>
+        CompletePersistentGestureAsync(expectedScene, expectedGeneration, expectedEditorState,
+            clearedEditorState, command, cancellationToken);
+
+    internal ValueTask<HistoryOperationResult> CompleteMoveGestureAsync(
+        Canvas2DScene expectedScene,
+        EditingSessionGeneration expectedGeneration,
+        EditorStateSnapshot expectedEditorState,
+        EditorStateSnapshot clearedEditorState,
+        MoveVisualStateCommand command,
+        Canvas2DSpatialMoveEvaluation? spatialMove,
+        CancellationToken cancellationToken = default) =>
         CompletePersistentGestureAsync(
             expectedScene,
             expectedGeneration,
             expectedEditorState,
             clearedEditorState,
             command,
-            cancellationToken);
+            spatialMove, cancellationToken);
+
+    internal ValueTask<HistoryOperationResult> CompletePersistentGestureAsync(
+        Canvas2DScene expectedScene,
+        EditingSessionGeneration expectedGeneration,
+        EditorStateSnapshot expectedEditorState,
+        EditorStateSnapshot clearedEditorState,
+        ICommand command,
+        CancellationToken cancellationToken = default) =>
+        CompletePersistentGestureAsync(expectedScene, expectedGeneration, expectedEditorState,
+            clearedEditorState, command, spatialMove: null, cancellationToken);
+
+    internal ValueTask<HistoryOperationResult> CompletePersistentGestureAsync(
+        Canvas2DScene expectedScene,
+        EditingSessionGeneration expectedGeneration,
+        EditorStateSnapshot expectedEditorState,
+        EditorStateSnapshot clearedEditorState,
+        ICommand command,
+        Canvas2DSpatialMoveEvaluation? spatialMove,
+        CancellationToken cancellationToken = default) =>
+        CompletePersistentGestureAsync(expectedScene, expectedGeneration, expectedEditorState,
+            clearedEditorState, command, spatialMove, null, null, null, cancellationToken);
 
     internal async ValueTask<HistoryOperationResult> CompletePersistentGestureAsync(
         Canvas2DScene expectedScene,
@@ -418,6 +455,10 @@ public sealed partial class EditingSession
         EditorStateSnapshot expectedEditorState,
         EditorStateSnapshot clearedEditorState,
         ICommand command,
+        Canvas2DSpatialMoveEvaluation? spatialMove,
+        Canvas2DSpatialResizeRequest? spatialResize,
+        Canvas2DSpatialEditPlannerCatalog? resizePlanner,
+        long? resizeSurfaceGeneration,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(expectedScene);
@@ -464,8 +505,8 @@ public sealed partial class EditingSession
                 snapshot = AttachedDocument.CaptureSnapshot();
                 if (snapshot.DocumentId != command.TargetDocumentId ||
                     snapshot.Revision != command.ExpectedRevision ||
-                    !IsCurrentVisualSelection(
-                        snapshot, expectedScene, _activeScopeId, expectedEditorState) ||
+                    (spatialResize is null && !IsCurrentVisualSelection(
+                        snapshot, expectedScene, _activeScopeId, expectedEditorState)) ||
                     _artifacts is not { } currentArtifacts ||
                     !currentArtifacts.IsCompatibleWith(
                         snapshot.DocumentId,
@@ -477,6 +518,32 @@ public sealed partial class EditingSession
                         state,
                         Canvas2DInteractionDiagnosticCodes.StaleGesture,
                         "The persistent gesture no longer represents the current Document revision.");
+                }
+
+                if (spatialResize is not null)
+                {
+                    var planned = resizePlanner?.PlanResize(new Canvas2DSpatialResizeRequest(snapshot,
+                        _activeScopeId, spatialResize.Target, spatialResize.RequestedExtent));
+                    if (resizeSurfaceGeneration != _surfaceGeneration || spatialResize.ActiveScopeId != _activeScopeId ||
+                        expectedEditorState.ActiveGesture?.Kind != Canvas2DSpatialResizeFeedback.FeedbackKind ||
+                        expectedScene.SpatialPresentationPlan?.ResizeTargets.Any(target => target.Equals(spatialResize.Target)) != true ||
+                        planned?.Succeeded != true || !Equals(planned.Command, command))
+                        return InteractionCommandRejected(command, state, Canvas2DInteractionDiagnosticCodes.StaleGesture,
+                            "The acquired spatial dimension no longer matches the current target and capacity.");
+                }
+
+                if (spatialMove is not null)
+                {
+                    var evaluation = expectedScene.SpatialPresentationPlan is { } plan && plan.Equals(spatialMove.Plan)
+                        ? Canvas2DSpatialMoveEvaluator.Evaluate(expectedScene, snapshot, spatialMove.Bodies, spatialMove.Translation)
+                        : null;
+                    if (evaluation is null || !evaluation.Succeeded || evaluation.Translation != spatialMove.Translation ||
+                        !evaluation.MatchesCommand(snapshot, command))
+                    {
+                        return InteractionCommandRejected(command, state,
+                            Canvas2DInteractionDiagnosticCodes.StaleGesture,
+                            "The complete moving bodies no longer fit the current spatial destination and movement boundary.");
+                    }
                 }
 
                 if (!EditorState.TryUpdate(expectedEditorState, clearedEditorState))
@@ -572,7 +639,7 @@ public sealed partial class EditingSession
             source.FocusTargetId,
             source.Viewport,
             activeGesture: null,
-            source.TemporaryFeedback,
+            source.TemporaryFeedback.Where(static feedback => feedback.SpatialResize is null),
             source.ToolState,
             source.SemanticSceneSelection);
 }

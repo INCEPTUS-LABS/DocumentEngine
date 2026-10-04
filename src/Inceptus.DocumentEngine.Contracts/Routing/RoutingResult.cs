@@ -17,6 +17,18 @@ public sealed class RoutingResult : IEquatable<RoutingResult>
         AlgorithmId routingAlgorithmId,
         RoutingComputation computation,
         IEnumerable<Diagnostic>? diagnostics = null)
+        : this(documentId, sourceRevision, layoutAlgorithmId, routingAlgorithmId, computation, diagnostics, null)
+    {
+    }
+
+    public RoutingResult(
+        DocumentId documentId,
+        DocumentRevision sourceRevision,
+        AlgorithmId layoutAlgorithmId,
+        AlgorithmId routingAlgorithmId,
+        RoutingComputation computation,
+        IEnumerable<Diagnostic>? diagnostics,
+        RoutingLogicalGeometry? logicalGeometry)
     {
         ArgumentNullException.ThrowIfNull(documentId);
         ArgumentNullException.ThrowIfNull(layoutAlgorithmId);
@@ -40,6 +52,7 @@ public sealed class RoutingResult : IEquatable<RoutingResult>
         RoutingAlgorithmId = routingAlgorithmId;
         Computation = computation;
         Diagnostics = copiedDiagnostics;
+        LogicalGeometry = logicalGeometry;
     }
 
     public DocumentId DocumentId { get; }
@@ -51,6 +64,8 @@ public sealed class RoutingResult : IEquatable<RoutingResult>
     public AlgorithmId RoutingAlgorithmId { get; }
 
     public RoutingComputation Computation { get; }
+
+    public RoutingLogicalGeometry? LogicalGeometry { get; }
 
     public ImmutableArray<RoutedConnectorGeometry> Routes => Computation.Routes;
 
@@ -70,6 +85,7 @@ public sealed class RoutingResult : IEquatable<RoutingResult>
         LayoutAlgorithmId == other.LayoutAlgorithmId &&
         RoutingAlgorithmId == other.RoutingAlgorithmId &&
         Computation.Equals(other.Computation) &&
+        Equals(LogicalGeometry, other.LogicalGeometry) &&
         RoutingDiagnosticCollection.SequenceEquals(Diagnostics, other.Diagnostics);
 
     public override bool Equals(object? obj) => Equals(obj as RoutingResult);
@@ -82,6 +98,7 @@ public sealed class RoutingResult : IEquatable<RoutingResult>
         hash.Add(LayoutAlgorithmId);
         hash.Add(RoutingAlgorithmId);
         hash.Add(Computation);
+        hash.Add(LogicalGeometry);
         RoutingDiagnosticCollection.AddHashCode(ref hash, Diagnostics);
         return hash.ToHashCode();
     }

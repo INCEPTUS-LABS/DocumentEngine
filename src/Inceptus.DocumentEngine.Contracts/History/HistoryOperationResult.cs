@@ -78,7 +78,7 @@ public sealed class HistoryOperationResult : IEquatable<HistoryOperationResult>
 
     public bool IsApplied => Status == HistoryOperationStatus.Applied;
 
-    public bool Succeeded => IsCommitted || IsApplied;
+    public bool Succeeded => IsCommitted || IsApplied || Status == HistoryOperationStatus.NoChange;
 
     public static HistoryOperationResult CreateCommitted(
         DocumentId documentId,
@@ -104,7 +104,7 @@ public sealed class HistoryOperationResult : IEquatable<HistoryOperationResult>
         HistoryStatus historyStatus,
         IEnumerable<Diagnostic>? diagnostics = null)
     {
-        if (status is HistoryOperationStatus.Committed or HistoryOperationStatus.Applied)
+        if (status is HistoryOperationStatus.Committed or HistoryOperationStatus.Applied or HistoryOperationStatus.NoChange)
         {
             throw new ArgumentException(
                 "A non-applied result cannot use a successful status.",
@@ -134,6 +134,12 @@ public sealed class HistoryOperationResult : IEquatable<HistoryOperationResult>
             committedRevision: null,
             historyStatus,
             diagnostics);
+
+    public static HistoryOperationResult CreateNoChange(
+        DocumentId documentId, CommandTypeId? commandTypeId, DocumentRevision currentRevision,
+        HistoryStatus historyStatus, IEnumerable<Diagnostic>? diagnostics = null) =>
+        new(documentId, commandTypeId, HistoryOperationStatus.NoChange, currentRevision,
+            null, historyStatus, diagnostics);
 
     public bool Equals(HistoryOperationResult? other) =>
         ReferenceEquals(this, other) ||

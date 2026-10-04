@@ -29,7 +29,7 @@ public sealed partial class DocumentCanvasHostTests
         using var notifications = RecordModelerNotifications(log);
         var surface = new RecordingSurfaceObserver(new Canvas2DSurfaceSize(1000d, 700d, 1d));
         var factory = useDemo
-            ? new BpmnModelerCompositionFactory([BpmnDemoStartupDocumentProvider.Instance])
+            ? await BpmnModelerTestComposition.CreateFreshDemoFactoryAsync()
             : new BpmnModelerCompositionFactory();
         await using var host = CreateHost(new RecordingRenderExecution(), surface,
             compositionFactory: factory);
@@ -216,8 +216,8 @@ public sealed partial class DocumentCanvasHostTests
         host.ModelerNotifications = notifications;
         await host.InitializeAsync("active-canvas", "standby-canvas", "container");
         var initialId = Session(host).CaptureState().DocumentId;
-        var loaded = CreateImportedDocument("test:p1.3:notification-load", 31).CaptureSnapshot();
-        var imported = CreateImportedDocument("test:p1.3:notification-import", 47).CaptureSnapshot();
+        var loaded = (await CreatePreparedImportedDocumentAsync("test:p1.3:notification-load", 31)).CaptureSnapshot();
+        var imported = (await CreatePreparedImportedDocumentAsync("test:p1.3:notification-import", 47)).CaptureSnapshot();
 
         Assert.True((await host.NewDiagramAsync()).Succeeded);
         Assert.True((await host.LoadDocumentAsync(loaded)).Succeeded);
@@ -345,7 +345,7 @@ public sealed partial class DocumentCanvasHostTests
             replacementRendererFactory: () => CreateRenderer(new RecordingRenderExecution()));
         host.ModelerNotifications = notifications;
         await host.InitializeAsync("active-canvas", "standby-canvas", "container");
-        var loaded = CreateImportedDocument("test:p1.3:ordered-load", 53).CaptureSnapshot();
+        var loaded = (await CreatePreparedImportedDocumentAsync("test:p1.3:ordered-load", 53)).CaptureSnapshot();
         var newOperation = host.NewDiagramAsync().AsTask();
         Task<NativeDocumentHostImportResult>? loadOperation = null;
         DocumentSnapshot? firstSnapshot = null;

@@ -20,6 +20,22 @@ namespace Inceptus.DocumentEngine.UnitTests.Blazor;
 public sealed class BpmnDemoPipelineTests
 {
     [Fact]
+    public void EmbeddedNativeSampleIncludesCorrectedSpatialResizeV2Contracts()
+    {
+        using var stream = typeof(BpmnDemoPipeline).Assembly.GetManifestResourceStream(
+            "Inceptus.DocumentEngine.Blazor.Demo.bpmn-demo.inceptus.json");
+        Assert.NotNull(stream);
+        using var payload = new MemoryStream();
+        stream.CopyTo(payload);
+        var bytes = payload.ToArray();
+        Assert.Contains("\"spatialWidths\"", System.Text.Encoding.UTF8.GetString(bytes), StringComparison.Ordinal);
+        Assert.Contains("\"regionResizeDependency\"", System.Text.Encoding.UTF8.GetString(bytes), StringComparison.Ordinal);
+        var imported = Inceptus.DocumentEngine.Runtime.Documents.NativeDocumentSerializer.Import(bytes.AsMemory());
+        Assert.True(imported.Succeeded, string.Join("; ", imported.Diagnostics.Select(diagnostic => diagnostic.Message)));
+        Assert.Equal(bytes, Inceptus.DocumentEngine.Runtime.Documents.NativeDocumentSerializer.Export(imported.Document!.CaptureSnapshot()));
+    }
+
+    [Fact]
     public async Task EmbeddedNativeSamplePreservesTheAcceptedBranchingDemoModel()
     {
         var composition = await BpmnModelerTestComposition.DemoFactory.CreateAsync();

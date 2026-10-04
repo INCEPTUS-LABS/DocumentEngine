@@ -14,7 +14,7 @@ using Inceptus.DocumentEngine.Contracts.Visuals;
 
 namespace Inceptus.DocumentEngine.Runtime.Documents;
 
-internal static class NativeDocumentJsonCodec
+internal static partial class NativeDocumentJsonCodec
 {
     private static readonly JsonDocumentOptions ReaderOptions = new()
     {
@@ -241,6 +241,7 @@ internal static class NativeDocumentJsonCodec
         }
 
         writer.WriteEndArray();
+        WriteRoutingScopes(writer, visualModel.RoutingScopes!.Value);
         writer.WriteEndObject();
     }
 
@@ -627,7 +628,7 @@ internal static class NativeDocumentJsonCodec
         DocumentId documentId,
         DocumentRevision revision)
     {
-        ValidateObject(value, path, "visualStates", "profileElementPresentations");
+        ValidateObject(value, path, "visualStates", "profileElementPresentations", "routingScopes");
         return new VisualModelSnapshot(
             documentId,
             revision,
@@ -638,7 +639,11 @@ internal static class NativeDocumentJsonCodec
             ReadArray(
                 Required(value, "profileElementPresentations"),
                 $"{path}.profileElementPresentations",
-                ReadProfilePresentation));
+                ReadProfilePresentation),
+            ReadArray(
+                Required(value, "routingScopes"),
+                $"{path}.routingScopes",
+                ReadRoutingScope));
     }
 
     private static VisualStateSnapshot ReadVisualState(JsonElement value, string path)
@@ -844,7 +849,7 @@ internal static class NativeDocumentJsonCodec
             {
                 throw Structure(
                     $"{path}.{property.Name}",
-                    $"The JSON member '{property.Name}' is not defined by native format version 1.");
+                    $"The JSON member '{property.Name}' is not defined by native format version 2.");
             }
         }
 
@@ -887,7 +892,7 @@ internal static class NativeDocumentJsonCodec
             {
                 throw Structure(
                     $"{path}.{property.Name}",
-                    $"The JSON member '{property.Name}' is not defined by native format version 1.");
+                    $"The JSON member '{property.Name}' is not defined by native format version 2.");
             }
         }
 

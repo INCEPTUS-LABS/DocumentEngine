@@ -64,10 +64,11 @@ internal sealed partial class DocumentCanvasHost
                 }
             }
 
+            var snapshot = await session.CaptureDocumentSnapshotAsync(linked.Token).ConfigureAwait(false);
             var state = session.CaptureState();
-            if (state.Status != EditingSessionStatus.Ready ||
+            if (state.Status is not (EditingSessionStatus.Ready or EditingSessionStatus.Rebuilding) ||
                 state.EditorState.ActiveGesture is not null ||
-                !session.TryCaptureDocumentSnapshot(out var snapshot))
+                snapshot is null)
             {
                 return outcome = NativeDocumentHostExportResult.Failure(
                     NativeDocumentHostOperationStatus.Unavailable,
@@ -79,8 +80,9 @@ internal sealed partial class DocumentCanvasHost
 #pragma warning disable CA1031 // Export failures become bounded operation diagnostics.
             try
             {
+                var payload = NativeDocumentSerializer.Export(snapshot);
                 return outcome = NativeDocumentHostExportResult.Success(
-                    NativeDocumentSerializer.Export(snapshot));
+                    payload, IssueNativeSaveCheckpoint(snapshot));
             }
             catch (Exception exception) when (IsNonFatal(exception))
             {
@@ -92,6 +94,10 @@ internal sealed partial class DocumentCanvasHost
                         exception.GetType().FullName ?? exception.GetType().Name));
             }
 #pragma warning restore CA1031
+        }
+        catch (OperationCanceledException) when (linked.IsCancellationRequested)
+        {
+            return outcome = NativeDocumentHostExportResult.Cancelled;
         }
         finally
         {
@@ -106,10 +112,17 @@ internal sealed partial class DocumentCanvasHost
         }
     }
 
+    internal ValueTask<NativeDocumentHostImportResult> ImportNativeDocumentAsync(
+        ReadOnlyMemory<byte> utf8Json,
+        CancellationToken cancellationToken = default) =>
+        ImportNativeDocumentAsync(utf8Json, new BpmnModelerNativeImportOptions(), cancellationToken);
+
     internal async ValueTask<NativeDocumentHostImportResult> ImportNativeDocumentAsync(
         ReadOnlyMemory<byte> utf8Json,
+        BpmnModelerNativeImportOptions options,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(options);
         NativeDocumentHostImportResult? outcome = null;
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(
             cancellationToken,
@@ -155,7 +168,8 @@ internal sealed partial class DocumentCanvasHost
                 replacement = await ReplaceDocumentUnderGateAsync(
                     import.Document!,
                     NativeImportReplacementMessages,
-                    linked.Token).ConfigureAwait(false);
+                    linked.Token,
+                    options).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (linked.IsCancellationRequested)
             {
@@ -163,20 +177,24 @@ internal sealed partial class DocumentCanvasHost
             }
 
             notify = replacement.ShouldNotify;
+            if (replacement.Status == DocumentSessionReplacementStatus.Succeeded && !replacement.Recovered)
+            {
+                MarkImportedNativeSnapshotSaved(replacement.Snapshot!);
+            }
             return outcome = replacement.Status switch
             {
                 DocumentSessionReplacementStatus.Succeeded =>
-                    NativeDocumentHostImportResult.Success with
+                    new NativeDocumentHostImportResult(NativeDocumentHostOperationStatus.Succeeded, replacement.Diagnostics)
                     {
-                        Snapshot = import.Document!.CaptureSnapshot(),
+                        Snapshot = replacement.Snapshot,
                     },
+                DocumentSessionReplacementStatus.Rejected => NativeDocumentHostImportResult.Rejected(replacement.Diagnostics),
                 DocumentSessionReplacementStatus.Unavailable =>
                     NativeDocumentHostImportResult.Failure(
                         NativeDocumentHostOperationStatus.Unavailable,
                         replacement.Diagnostic!),
-                _ => NativeDocumentHostImportResult.Failure(
-                    NativeDocumentHostOperationStatus.Failed,
-                    replacement.Diagnostic!),
+                _ => new NativeDocumentHostImportResult(NativeDocumentHostOperationStatus.Failed,
+                    replacement.Diagnostics.IsEmpty ? [replacement.Diagnostic!] : [replacement.Diagnostic!, .. replacement.Diagnostics]),
             };
         }
         finally
@@ -215,10 +233,15 @@ internal sealed record NativeDocumentHostExportResult(
     ImmutableArray<byte> Payload,
     ImmutableArray<Diagnostic> Diagnostics)
 {
+    internal BpmnModelerSaveCheckpoint? SaveCheckpoint { get; init; }
+
     internal bool Succeeded => Status == NativeDocumentHostOperationStatus.Succeeded;
 
     internal static NativeDocumentHostExportResult Success(ImmutableArray<byte> payload) =>
         new(NativeDocumentHostOperationStatus.Succeeded, payload, []);
+
+    internal static NativeDocumentHostExportResult Success(ImmutableArray<byte> payload, BpmnModelerSaveCheckpoint checkpoint) =>
+        new(NativeDocumentHostOperationStatus.Succeeded, payload, []) { SaveCheckpoint = checkpoint };
 
     internal static NativeDocumentHostExportResult Failure(
         NativeDocumentHostOperationStatus status,

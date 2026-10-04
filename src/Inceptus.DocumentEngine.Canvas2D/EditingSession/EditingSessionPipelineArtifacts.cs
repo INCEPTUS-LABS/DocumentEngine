@@ -52,7 +52,8 @@ internal sealed record EditingSessionPipelineArtifacts(
     internal EditingSessionPipelineArtifacts RebindToCommittedRevision(
         DocumentId documentId,
         DocumentRevision previousRevision,
-        DocumentRevision committedRevision)
+        DocumentRevision committedRevision,
+        ScopeGeometrySnapshot? committedGeometry = null)
     {
         ArgumentNullException.ThrowIfNull(documentId);
         if (!IsCompatibleWith(documentId, previousRevision, ScopeId))
@@ -91,6 +92,11 @@ internal sealed record EditingSessionPipelineArtifacts(
                 RoutingResult.LayoutAlgorithmId,
                 RoutingResult.RoutingAlgorithmId,
                 RoutingResult.Computation,
-                RoutingResult.Diagnostics));
+                RoutingResult.Diagnostics,
+                RoutingResult.LogicalGeometry is { } logical
+                    ? new RoutingLogicalGeometry(logical.ScopeId, committedGeometry ?? logical.Geometry,
+                        new LayoutResult(documentId, committedRevision, logical.Layout.AlgorithmId,
+                            logical.Layout.Computation, logical.Layout.Diagnostics))
+                    : null));
     }
 }

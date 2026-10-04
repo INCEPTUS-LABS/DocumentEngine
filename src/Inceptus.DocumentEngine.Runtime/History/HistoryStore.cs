@@ -237,7 +237,18 @@ internal sealed class HistoryStore
                     baseline,
                     proposed,
                     isUndo ? HistoryMutationKind.Undo : HistoryMutationKind.Redo,
-                    command));
+                    command,
+                    routingIntents: entry.RoutingTypeDeltas.Select(delta =>
+                        ConnectorRoutingIntent.SetType(delta.VisualStateId,
+                            isUndo ? delta.BeforeType : delta.AfterType)).ToImmutableArray(),
+                    spatialHeightIntents: entry.SpatialHeightDeltas.Select(delta =>
+                        new SpatialRegionHeightIntent(delta.ScopeId, delta.RegionId,
+                            isUndo ? delta.BeforeHeight : delta.AfterHeight)).ToImmutableArray(),
+                    spatialWidthIntents: entry.SpatialWidthDeltas.Select(delta =>
+                        new SpatialScopeWidthIntent(delta.ScopeId, delta.ProfileId,
+                            isUndo ? delta.BeforeWidth : delta.AfterWidth)).ToImmutableArray(),
+                    nodeGeometrySeeds: entry.NodeGeometryDeltas.Select(delta =>
+                        isUndo ? delta.Before : delta.After).ToImmutableArray()));
         }
         catch (Exception exception) when (IsNonFatal(exception))
         {

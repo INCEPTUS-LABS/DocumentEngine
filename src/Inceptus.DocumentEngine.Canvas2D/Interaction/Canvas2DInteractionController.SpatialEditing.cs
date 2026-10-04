@@ -15,10 +15,12 @@ public sealed partial class Canvas2DInteractionController
         EditingSessionState state,
         PointD finalPoint,
         out ICommand? command,
-        out ImmutableArray<Diagnostic> diagnostics)
+        out ImmutableArray<Diagnostic> diagnostics,
+        out Canvas2DSpatialMoveEvaluation? evaluation)
     {
         command = null;
         diagnostics = [];
+        evaluation = null;
         if (!_session.TryCaptureDocumentSnapshot(out var document) || document is null ||
             document.Revision != gesture.DocumentRevision ||
             state.CurrentScene?.SpatialPresentationPlan is not { } plan)
@@ -26,31 +28,15 @@ public sealed partial class Canvas2DInteractionController
             return Reject("The spatial edit no longer has a current Document and presentation plan.", out diagnostics);
         }
 
-        var destinations = new List<(MoveGestureTarget Target, Canvas2DSpatialRegion Region, VisualStateMove Move)>();
-        var delta = finalPoint - gesture.StartDocumentPoint;
-        foreach (var target in gesture.MoveTargets.Where(static target => !target.IsPreviewOnly))
+        evaluation = Canvas2DSpatialMoveEvaluator.Evaluate(state.CurrentScene!, document,
+            SpatialMoveBodies(gesture.MoveTargets), finalPoint - gesture.StartDocumentPoint);
+        if (!evaluation.Succeeded) return Reject(evaluation.Rejection!, out diagnostics);
+        var destinations = new List<(Canvas2DSpatialMoveBody Target, Canvas2DSpatialRegion Region, VisualStateMove Move)>();
+        foreach (var destination in evaluation.Destinations.Where(static destination => !destination.Body.IsPreviewOnly))
         {
-            var bounds = target.OriginalBounds.Translate(delta);
-            if (state.CurrentScene.Items.Any(item => item.IsVisible &&
-                    Canvas2DSemanticSceneInteractionMetadata.BlocksPlacement(item) &&
-                    item.Bounds.Contains(Center(bounds))))
-            {
-                return Reject("The destination is a collapsed or otherwise unavailable spatial region.", out diagnostics);
-            }
-            var regions = plan.Regions.Where(region => region.Bounds.Contains(Center(bounds))).ToArray();
-            if (regions.Length != 1)
-            {
-                return Reject("Move the node into one recognized spatial destination region.", out diagnostics);
-            }
-            var region = regions[0];
-            var canonical = region.MapSceneToLocal(bounds);
-            if (!DocumentGeometryBoundary.Contains(canonical) ||
-                !DocumentGeometryBoundary.Contains(region.MapSceneToLocal(target.BoundaryBounds.Translate(delta))))
-            {
-                return Reject("The destination would place canonical Process geometry outside its valid boundary.", out diagnostics);
-            }
-            destinations.Add((target, region,
-                new VisualStateMove(target.VisualStateId, canonical.TopLeft, VisualPlacementMode.Pinned)));
+            var canonical = destination.Region.MapSceneToLocal(destination.Bounds);
+            destinations.Add((destination.Body, destination.Region,
+                new VisualStateMove(destination.Body.VisualStateId, canonical.TopLeft, VisualPlacementMode.Pinned)));
         }
 
         var changedMoves = destinations.Select(static target => target.Move).Where(move =>
@@ -106,6 +92,18 @@ public sealed partial class Canvas2DInteractionController
             _ => new CompoundDocumentCommand(document.DocumentId, document.Revision, commands),
         };
         return true;
+    }
+
+    private static ImmutableArray<Canvas2DSpatialMoveBody> SpatialMoveBodies(ImmutableArray<MoveGestureTarget> targets) =>
+        targets.Select(static target => new Canvas2DSpatialMoveBody(target.SceneObjectId, target.VisualStateId,
+            target.OriginalBounds, target.IsPreviewOnly)).ToImmutableArray();
+
+    private string SpatialMoveCursor(EditingSessionState state, ImmutableArray<MoveGestureTarget> targets, VectorD delta)
+    {
+        if (state.CurrentScene?.SpatialPresentationPlan is null) return "grabbing";
+        return _session.TryCaptureDocumentSnapshot(out var document) && document is not null &&
+            document.Revision == state.DocumentRevision && Canvas2DSpatialMoveEvaluator.Evaluate(
+                state.CurrentScene, document, SpatialMoveBodies(targets), delta).Succeeded ? "grabbing" : "not-allowed";
     }
 
     private static bool Reject(string message, out ImmutableArray<Diagnostic> diagnostics)

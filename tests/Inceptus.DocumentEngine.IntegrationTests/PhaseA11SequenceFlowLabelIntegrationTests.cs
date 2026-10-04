@@ -12,6 +12,7 @@ using Inceptus.DocumentEngine.Canvas2D.Rendering;
 using Inceptus.DocumentEngine.Canvas2D.Scene;
 using Inceptus.DocumentEngine.Contracts.Canvas2D;
 using Inceptus.DocumentEngine.Contracts.Commands;
+using Inceptus.DocumentEngine.Contracts.Routing;
 using Inceptus.DocumentEngine.Contracts.Documents;
 using Inceptus.DocumentEngine.Contracts.Geometry;
 using Inceptus.DocumentEngine.Contracts.Primitives;
@@ -164,6 +165,7 @@ public sealed class PhaseA11SequenceFlowLabelIntegrationTests
         await test.ExecuteAsync(new AddConnectorAnchorCommand(test.Id, test.Revision, source.Id,
             new ConnectorAnchorId("a11:redistributed"), existing.Side, ConnectorAnchorRole.Source, 0));
         test.AssertAutomatic(flow);
+        await BpmnModelerTestComposition.SetRoutingTypeAsync(test.Session, test.Visual(flow).Id, ConnectorRoutingType.Manual);
         var route = test.Path(flow);
         foreach (var bends in new PointD[][]
                  {
@@ -312,7 +314,7 @@ public sealed class PhaseA11SequenceFlowLabelIntegrationTests
         var bytes = NativeDocumentSerializer.Export(test.Snapshot);
         var imported = NativeDocumentSerializer.Import(bytes.ToArray());
         Assert.True(imported.Succeeded, Diagnostics(imported.Diagnostics));
-        Assert.Equal(1, NativeDocumentSerializer.FormatVersion);
+        Assert.Equal(2, NativeDocumentSerializer.FormatVersion);
         Assert.Equal(bytes.ToArray(), NativeDocumentSerializer.Export(imported.Document!).ToArray());
         Assert.Equal(test.Snapshot.SemanticModel.Relationships.AsEnumerable(), imported.Document!.SemanticModel.Relationships);
         Assert.Equal(test.Snapshot.VisualModel.VisualStates.AsEnumerable(), imported.Document.VisualModel.VisualStates);
@@ -472,7 +474,11 @@ public sealed class PhaseA11SequenceFlowLabelIntegrationTests
             await session.WaitForIdleAsync();
             Assert.Equal(EditingSessionStatus.Ready, State.Status);
             Assert.Equal(revision.Increment(), Revision);
-            if (!truncatesRedo)
+            if (command is UpdateConnectionRouteCommand)
+            {
+                Assert.Equal(history, State.HistoryStatus.EntryCount);
+            }
+            else if (!truncatesRedo)
             {
                 Assert.Equal(history + 1, State.HistoryStatus.EntryCount);
             }
@@ -510,6 +516,8 @@ public sealed class PhaseA11SequenceFlowLabelIntegrationTests
                     [new Canvas2DFontResource("org.dejavu.DejaVuSans", "2.37", "DejaVu Sans", "fonts/DejaVuSans-2.37.ttf", 400, TextFontStyle.Normal)],
                     defaultFontFamily: "DejaVu Sans"));
             Assert.True((await renderer.InitializeAsync("a11", new Canvas2DSurfaceSize(1400, 900, 1))).Succeeded);
+            composition = BpmnModelerTestComposition.WithDocument(composition,
+                await BpmnModelerTestComposition.PrepareFreshDocumentAsync(composition.Document, composition.Configuration, renderer));
             var attached = await EditingSession.AttachAsync(composition.Document, renderer, composition.Configuration);
             Assert.Equal(EditingSessionAttachStatus.Ready, attached.Status);
             return new Fixture(composition, renderer, attached.Session!);

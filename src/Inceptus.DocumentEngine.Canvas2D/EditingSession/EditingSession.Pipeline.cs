@@ -554,7 +554,9 @@ public sealed partial class EditingSession
             }
             else if (HasValidProvenance(result, snapshot, activeScopeId) &&
                      (!EditorState.CaptureSnapshot().Equals(editorState) ||
-                      ((result.ReusedPanContent || result.ReusedMoveContent || result.ReusedSelectionContent) &&
+                      ((result.ReusedPanContent || result.ReusedMoveContent || result.ReusedSelectionContent ||
+                        result.ReusedPlacementContent || result.ReusedSpatialResizeContent || result.ReusedNodeLabelMoveContent ||
+                        result.ReusedRouteBendContent) &&
                        surfaceGeneration != _surfaceGeneration)))
             {
                 sceneToDispose = result.Scene;
@@ -1252,7 +1254,9 @@ public sealed partial class EditingSession
                     ? artifacts.RebindToCommittedRevision(
                         change.DocumentId,
                         change.PreviousRevision,
-                        change.CommittedRevision)
+                        change.CommittedRevision,
+                        change.CommittedSnapshot.VisualModel.RoutingScopes?.SingleOrDefault(
+                            scope => scope.ScopeId == _activeScopeId)?.Geometry)
                     : null;
         }
     }

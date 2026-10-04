@@ -14,6 +14,7 @@ using Inceptus.DocumentEngine.Contracts.EditorState;
 using Inceptus.DocumentEngine.Contracts.Geometry;
 using Inceptus.DocumentEngine.Contracts.Primitives;
 using Inceptus.DocumentEngine.Contracts.Profiles;
+using Inceptus.DocumentEngine.Contracts.Routing;
 using Inceptus.DocumentEngine.Contracts.Visuals;
 
 namespace Inceptus.DocumentEngine.UnitTests.Canvas2D;
@@ -33,7 +34,7 @@ public sealed partial class Canvas2DSpatialPoolInteractionTests
         var destinationId = secondPool ? Fixture.PoolB : Fixture.PoolA;
         var region = before.CurrentScene!.SpatialPresentationPlan!.Regions.Single(
             region => region.ContainerSemanticElementId == destinationId);
-        var scenePoint = Center(region.Bounds);
+        var scenePoint = region.MapLocalToScene(FreeTaskCenter(fixture, region));
         var localPoint = region.MapSceneToLocal(scenePoint);
         fixture.ToolboxSelection.Select(new ToolboxItemId(
             subProcess ? "bpmn:toolbox:sub-process" : "bpmn:toolbox:task"));
@@ -150,7 +151,7 @@ public sealed partial class Canvas2DSpatialPoolInteractionTests
         var before = fixture.State;
         Assert.Null(before.CurrentScene!.SpatialPresentationPlan);
         fixture.ToolboxSelection.Select(new ToolboxItemId("bpmn:toolbox:task"));
-        var point = new PointD(350d, 250d);
+        var point = new PointD(1100d, 500d);
         var placed = await fixture.Placement.TryPlaceAtCssPointAsync(fixture.Session, fixture.Css(point));
         Assert.True(placed.IsCommitted, Diagnostics(placed.Diagnostics));
         var visual = fixture.Visual(Assert.IsType<VisualStateId>(placed.CreatedVisualStateId));
@@ -235,6 +236,8 @@ public sealed partial class Canvas2DSpatialPoolInteractionTests
         var flow = fixture.Visual(flowId);
         Assert.Equal(fixture.State.ActiveScopeId, fixture.Document.SemanticModel.GetScope(flow.SemanticElementId).Id);
         Assert.Empty(flow.Route);
+        await fixture.ExecuteAsync(state => new SetConnectorRoutingTypeCommand(
+            state.DocumentId, state.DocumentRevision, flowId, ConnectorRoutingType.Manual));
         var connector = fixture.State.CurrentScene!.Items.Single(item =>
             item.Origin.VisualStateId == flowId &&
             item.Layer == Canvas2DSceneLayer.Connector &&
@@ -259,7 +262,7 @@ public sealed partial class Canvas2DSpatialPoolInteractionTests
             }
         }
         var routeAction = Assert.IsType<Canvas2DConnectorRouteContextAction>(acquiredRouteAction);
-        Assert.True(routeAction.TryResolveTargetRoute(fixture.State.CurrentScene!, flow.Route, out var route));
+        Assert.True(routeAction.TryResolveTargetRoute(fixture.State.CurrentScene!, fixture.SavedRoute(flowId).Path, out var route));
         var beforeRoute = fixture.State;
         var routeTarget = beforeRoute.CurrentScene!.Items.Single(item => item.Id == routeAction.SourceSceneObjectId);
         var routeCommit = await fixture.Session.ExecuteForSceneTargetAsync(
@@ -267,14 +270,15 @@ public sealed partial class Canvas2DSpatialPoolInteractionTests
             beforeRoute.CurrentScene, beforeRoute.Generation, routeTarget.Id, routeTarget.SpatialRegion);
         Assert.True(routeCommit.IsCommitted, Diagnostics(routeCommit.Diagnostics));
         await fixture.Session.WaitForIdleAsync();
-        Assert.Equal(route, fixture.Visual(flowId).Route);
+        Assert.Equal(route.AsEnumerable(), fixture.SavedRoute(flowId).Path.AsEnumerable());
         var bend = fixture.State.CurrentScene!.Items.Single(item =>
             item.Origin.VisualStateId == flowId &&
-            item.Metadata.ContainsKey(Canvas2DRouteGestureMetadata.BendIndex));
+            item.Metadata.TryGetValue(Canvas2DRouteGestureMetadata.BendIndex, out var bendIndex) &&
+            bendIndex.IntegerValue == 1);
         var bendMovement = new VectorD(0d, 34d);
         await fixture.DragAsync(Center(bend.Bounds), bendMovement);
-        Assert.Equal(route[1] + bendMovement, fixture.Visual(flowId).Route[1]);
-        Assert.Equal(beforeRoute.HistoryStatus.EntryCount + 2, fixture.State.HistoryStatus.EntryCount);
+        Assert.Equal(route[1] + bendMovement, fixture.SavedRoute(flowId).Path[1]);
+        Assert.Equal(beforeRoute.HistoryStatus.EntryCount, fixture.State.HistoryStatus.EntryCount);
         Assert.Equal(initial.ActiveScopeId, fixture.State.ActiveScopeId);
         fixture.AssertReady();
     }
@@ -495,6 +499,7 @@ public sealed partial class Canvas2DSpatialPoolInteractionTests
             await fixture.ExecuteAsync(state => new CreateOrganizationalPoolCommand(
                 state.DocumentId, state.DocumentRevision, PoolB, state.ActiveScopeId,
                 OrganizationalPoolCreationMode.Empty, "B"));
+            await fixture.PrepareInteractionCapacitiesAsync();
             await fixture.ExecuteAsync(state => new AssignOrganizationalElementCommand(
                 state.DocumentId, state.DocumentRevision, fixture.Visual(TaskB).SemanticElementId, PoolB));
             fixture.AssertReady();
@@ -509,8 +514,28 @@ public sealed partial class Canvas2DSpatialPoolInteractionTests
             AssertReady();
         }
 
+        internal async Task PrepareInteractionCapacitiesAsync()
+        {
+            foreach (var region in Document.VisualModel.RoutingScopes!.Value.Single(
+                         scope => scope.ScopeId == State.ActiveScopeId).Geometry.Regions)
+                if (region.ExpandedHeight < 600d)
+                    await SetRegionHeightAsync(region.ContainerSemanticElementId, 600d);
+        }
+
+        internal Task SetRegionHeightAsync(SemanticElementId? container, double height)
+        {
+            var region = Document.VisualModel.RoutingScopes!.Value.Single(scope => scope.ScopeId == State.ActiveScopeId)
+                .Geometry.Regions.Single(region => region.ContainerSemanticElementId == container);
+            return ExecuteAsync(state => new SetOrganizationalRegionExpandedHeightCommand(
+                state.DocumentId, state.DocumentRevision, state.ActiveScopeId, region.Id, height));
+        }
+
         internal VisualStateSnapshot Visual(VisualStateId id) =>
             Document.VisualModel.VisualStates.Single(visual => visual.Id == id);
+
+        internal ConnectorRoutingRecord SavedRoute(VisualStateId id) =>
+            Document.VisualModel.RoutingScopes!.Value.Single(scope => scope.ScopeId == State.ActiveScopeId)
+                .Connectors.Single(record => record.VisualStateId == id);
 
         internal Canvas2DSceneItem Node(VisualStateId id, SemanticElementId? owner = null) =>
             State.CurrentScene!.Items.First(item => item.Origin.VisualStateId == id &&

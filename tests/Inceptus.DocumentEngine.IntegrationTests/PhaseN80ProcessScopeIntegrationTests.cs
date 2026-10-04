@@ -168,7 +168,7 @@ public sealed class PhaseN80ProcessScopeIntegrationTests
         Assert.Equal(originalRootPipeline.Scene, reconstructedRootPipeline.Scene);
 
         var nestedDocument = RequireSuccess(DocumentReconstructor.Reconstruct(
-            CreateScopedBpmnSnapshot(),
+            CreateScopedBpmnSnapshotWithAuthoredOwner(),
             configuration.ConnectorAnchorPolicyProvider));
         var nestedBefore = nestedDocument.CaptureSnapshot();
 
@@ -541,6 +541,17 @@ public sealed class PhaseN80ProcessScopeIntegrationTests
                 new SemanticElementScopeMembershipSnapshot(NestedSourceId, BpmnScopeId),
                 new SemanticElementScopeMembershipSnapshot(NestedTargetId, BpmnScopeId),
             ]);
+    }
+
+    private static DocumentSnapshot CreateScopedBpmnSnapshotWithAuthoredOwner()
+    {
+        var source = CreateScopedBpmnSnapshot();
+        // Saved geometry requires an authored visual identity for every projected node.
+        // Raw Command tests above retain their deliberately sparse visual model.
+        return new DocumentSnapshot(source.SemanticModel,
+            new VisualModelSnapshot(source.DocumentId, source.Revision,
+                source.VisualModel.VisualStates.Append(NodeVisual(BpmnScopeOwnerId,
+                    "test:n8.0:bpmn-scope-owner:visual", new PointD(400, 80), []))), source.Metadata);
     }
 
     private static VisualStateSnapshot NodeVisual(

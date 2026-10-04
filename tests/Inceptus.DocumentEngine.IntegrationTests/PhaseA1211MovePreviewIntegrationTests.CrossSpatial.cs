@@ -179,6 +179,7 @@ public sealed partial class PhaseA1211MovePreviewIntegrationTests
         var poolC = new SemanticElementId("test:a1211:cross:pool-c");
         await test.ExecuteAsync(new CreateOrganizationalPoolCommand(test.Snapshot.DocumentId, test.Snapshot.Revision,
             poolC, test.State.ActiveScopeId, OrganizationalPoolCreationMode.Empty, "Codex"));
+        await PhaseN101OrganizationalPoolIntegrationTests.PrepareRegionCapacitiesAsync(test.Session, 1000d);
         var node = shape switch
         {
             "gateway" => BpmnDemoPipeline.ExclusiveGatewayId,

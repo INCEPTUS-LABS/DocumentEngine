@@ -20,7 +20,11 @@ internal sealed class EditingSessionPipelineResult
         IEnumerable<Diagnostic>? diagnostics,
         bool reusedPanContent = false,
         bool reusedMoveContent = false,
-        bool reusedSelectionContent = false)
+        bool reusedSelectionContent = false,
+        bool reusedPlacementContent = false,
+        bool reusedSpatialResizeContent = false,
+        bool reusedNodeLabelMoveContent = false,
+        bool reusedRouteBendContent = false)
     {
         Status = status;
         Artifacts = artifacts;
@@ -28,6 +32,10 @@ internal sealed class EditingSessionPipelineResult
         ReusedPanContent = reusedPanContent;
         ReusedMoveContent = reusedMoveContent;
         ReusedSelectionContent = reusedSelectionContent;
+        ReusedPlacementContent = reusedPlacementContent;
+        ReusedSpatialResizeContent = reusedSpatialResizeContent;
+        ReusedNodeLabelMoveContent = reusedNodeLabelMoveContent;
+        ReusedRouteBendContent = reusedRouteBendContent;
         Diagnostics = EditingSessionDiagnosticCollection.CopyAndOrder(
             diagnostics,
             nameof(diagnostics));
@@ -45,6 +53,11 @@ internal sealed class EditingSessionPipelineResult
 
     internal bool ReusedSelectionContent { get; }
 
+    internal bool ReusedPlacementContent { get; }
+    internal bool ReusedSpatialResizeContent { get; }
+    internal bool ReusedNodeLabelMoveContent { get; }
+    internal bool ReusedRouteBendContent { get; }
+
     internal ImmutableArray<Diagnostic> Diagnostics { get; }
 
     internal static EditingSessionPipelineResult Success(
@@ -53,7 +66,11 @@ internal sealed class EditingSessionPipelineResult
         IEnumerable<Diagnostic>? diagnostics = null,
         bool reusedPanContent = false,
         bool reusedMoveContent = false,
-        bool reusedSelectionContent = false)
+        bool reusedSelectionContent = false,
+        bool reusedPlacementContent = false,
+        bool reusedSpatialResizeContent = false,
+        bool reusedNodeLabelMoveContent = false,
+        bool reusedRouteBendContent = false)
     {
         ArgumentNullException.ThrowIfNull(artifacts);
         ArgumentNullException.ThrowIfNull(scene);
@@ -64,7 +81,8 @@ internal sealed class EditingSessionPipelineResult
             diagnostics,
             reusedPanContent,
             reusedMoveContent,
-            reusedSelectionContent);
+            reusedSelectionContent,
+            reusedPlacementContent, reusedSpatialResizeContent, reusedNodeLabelMoveContent, reusedRouteBendContent);
     }
 
     internal static EditingSessionPipelineResult Failure(IEnumerable<Diagnostic> diagnostics) =>

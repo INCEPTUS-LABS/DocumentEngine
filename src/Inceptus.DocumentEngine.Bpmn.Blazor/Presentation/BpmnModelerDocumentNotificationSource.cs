@@ -28,7 +28,19 @@ internal sealed class BpmnModelerDocumentNotificationSource : IDocumentChangedSu
         _notificationReceived = notificationReceived;
     }
 
-    internal DocumentSnapshot InitialSnapshot { get; }
+    internal DocumentSnapshot InitialSnapshot { get; private set; }
+
+    internal void AcceptPreparedInitialSnapshot(DocumentSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        lock (_sync)
+        {
+            if (_disposed || _pending.Count != 0 || snapshot.DocumentId != InitialSnapshot.DocumentId ||
+                snapshot.Revision != InitialSnapshot.Revision || _lastReceivedRevision != InitialSnapshot.Revision)
+                throw new InvalidOperationException("Initial preparation must preserve the attachment identity and revision before notifications begin.");
+            InitialSnapshot = snapshot;
+        }
+    }
 
     internal DocumentRevision LastReceivedRevision
     {

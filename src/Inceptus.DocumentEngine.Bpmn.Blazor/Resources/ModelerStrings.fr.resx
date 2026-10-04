@@ -162,4 +162,16 @@
   <data name="Validation_MinHeight" xml:space="preserve"><value>La hauteur doit être d’au moins {0}.</value></data>
   <data name="Validation_Bounds" xml:space="preserve"><value>Les dimensions demandées doivent être finies et affichables.</value></data>
   <data name="Validation_Finite" xml:space="preserve"><value>Le champ « {0} » doit contenir un nombre fini.</value></data>
+  <data name="Status_PlacementAllowed" xml:space="preserve"><value>Placement autorisé. Cliquez pour insérer ; Échap pour annuler.</value></data>
+  <data name="Status_PlacementRejected" xml:space="preserve"><value>Placement refusé. Choisissez une autre position ou appuyez sur Échap.</value></data>
+  <data name="Properties_RoutingType" xml:space="preserve"><value>Type de tracé</value></data>
+  <data name="RoutingType_Automatic" xml:space="preserve"><value>Automatique</value></data>
+  <data name="RoutingType_Straight" xml:space="preserve"><value>Droit</value></data>
+  <data name="RoutingType_Manual" xml:space="preserve"><value>Manuel</value></data>
+  <data name="Properties_RoutingApplyRule" xml:space="preserve"><value>Appliquez le nom et le type de tracé séparément.</value></data>
+  <data name="Validation_RoutingType" xml:space="preserve"><value>Sélectionnez un type de tracé pris en charge.</value></data>
+  <data name="Status_RegionHeight" xml:space="preserve"><value>Hauteur</value></data>
+  <data name="Status_RegionWidth" xml:space="preserve"><value>Largeur de l’ensemble</value></data>
+  <data name="Status_RegionResizeAllowed" xml:space="preserve"><value>{0} : {1} (minimum {2}). Faites glisser ; Échap annule.</value></data>
+  <data name="Status_RegionResizeRejected" xml:space="preserve"><value>{0} : {1} refusé (minimum {2}). Tous les corps doivent tenir ; Échap annule.</value></data>
 </root>

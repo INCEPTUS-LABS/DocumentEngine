@@ -77,7 +77,7 @@ internal sealed partial class DocumentCanvasHost
                 DocumentSessionReplacementStatus.Succeeded =>
                     NativeDocumentHostImportResult.Success with
                     {
-                        Snapshot = reconstruction.Document!.CaptureSnapshot(),
+                        Snapshot = replacement.Snapshot,
                     },
                 DocumentSessionReplacementStatus.Unavailable =>
                     NativeDocumentHostImportResult.Failure(

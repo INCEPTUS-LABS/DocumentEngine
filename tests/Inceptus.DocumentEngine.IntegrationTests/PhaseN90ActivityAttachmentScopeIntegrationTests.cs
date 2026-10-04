@@ -24,9 +24,12 @@ public sealed class PhaseN90ActivityAttachmentScopeIntegrationTests
     public async Task ChildAttachmentRetainedGeometryAndInactiveScopeHistoryStayExact()
     {
         var composition = await BpmnModelerTestComposition.DemoFactory.CreateAsync();
+        var renderer = Renderer("phase-n90-child-attachment-cache");
+        composition = BpmnModelerTestComposition.WithDocument(composition,
+            await BpmnModelerTestComposition.PrepareFreshDocumentAsync(composition.Document, composition.Configuration, renderer));
         var attachment = await EditingSession.AttachAsync(
             composition.Document,
-            Renderer("phase-n90-child-attachment-cache"),
+            renderer,
             composition.Configuration);
         await using var session = Assert.IsType<EditingSession>(attachment.Session);
         Assert.Equal(EditingSessionAttachStatus.Ready, attachment.Status);
@@ -193,9 +196,12 @@ public sealed class PhaseN90ActivityAttachmentScopeIntegrationTests
     public async Task NestedAttachmentAndOutgoingRouteRemainScopeLocalAcrossNavigation()
     {
         var composition = await BpmnModelerTestComposition.DemoFactory.CreateAsync();
+        var renderer = Renderer("phase-n90-nested-attachment-cache");
+        composition = BpmnModelerTestComposition.WithDocument(composition,
+            await BpmnModelerTestComposition.PrepareFreshDocumentAsync(composition.Document, composition.Configuration, renderer));
         var attachment = await EditingSession.AttachAsync(
             composition.Document,
-            Renderer("phase-n90-nested-attachment-cache"),
+            renderer,
             composition.Configuration);
         await using var session = Assert.IsType<EditingSession>(attachment.Session);
         Assert.Equal(EditingSessionAttachStatus.Ready, attachment.Status);
@@ -335,9 +341,12 @@ public sealed class PhaseN90ActivityAttachmentScopeIntegrationTests
     public async Task NavigationAndAttachmentMutationUndoRedoInOneExactChronology()
     {
         var composition = await BpmnModelerTestComposition.DemoFactory.CreateAsync();
+        var renderer = Renderer("phase-n90-mixed-scope-history");
+        composition = BpmnModelerTestComposition.WithDocument(composition,
+            await BpmnModelerTestComposition.PrepareFreshDocumentAsync(composition.Document, composition.Configuration, renderer));
         var attachment = await EditingSession.AttachAsync(
             composition.Document,
-            Renderer("phase-n90-mixed-scope-history"),
+            renderer,
             composition.Configuration);
         await using var session = Assert.IsType<EditingSession>(attachment.Session);
         Assert.Equal(EditingSessionAttachStatus.Ready, attachment.Status);

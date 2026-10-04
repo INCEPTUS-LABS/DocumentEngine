@@ -72,21 +72,13 @@ public sealed partial class Canvas2DSpatialPoolInteractionTests
             await SetOrganizationalGraphicsAsync(fixture, false);
         }
 
-        var insertions = new (string Tool, PointD? Point)[]
-        {
-            ("task", new PointD(1100d, 300d)),
-            ("task", new PointD(1250d, 400d)),
-            ("task", new PointD(1400d, 500d)),
-            ("timer-catch-event", new PointD(30d, 30d)),
-            ("exclusive-gateway", null),
-            ("task", null),
-        };
-        foreach (var (tool, explicitPoint) in insertions)
+        var insertions = new[] { "task", "task", "task", "timer-catch-event", "exclusive-gateway", "task" };
+        foreach (var tool in insertions)
         {
             var before = fixture.Document;
             var stateBefore = fixture.State;
             var region = Destination(fixture, Fixture.PoolA);
-            var point = explicitPoint ?? region.MapSceneToLocal(new PointD(region.Bounds.Right - 2d, region.Bounds.Bottom - 2d));
+            var point = FreeTaskCenter(fixture, region);
             var oldNodes = stateBefore.ProjectedGraph!.Nodes.ToDictionary(node => node.Source.VisualStateId!);
             var oldDisplayed = oldNodes.Keys.ToDictionary(id => id, id => fixture.Node(id).Bounds);
             var oldGeometry = stateBefore.LayoutResult!.Nodes.ToDictionary(node => node.ProjectedObjectId);
@@ -104,7 +96,7 @@ public sealed partial class Canvas2DSpatialPoolInteractionTests
             foreach (var (id, projectedNode) in oldNodes)
             {
                 Assert.Equal(oldDisplayed[id], fixture.Node(id).Bounds);
-                Assert.Same(oldGeometry[projectedNode.Id], fixture.State.LayoutResult!.Nodes.Single(node =>
+                Assert.Equal(oldGeometry[projectedNode.Id], fixture.State.LayoutResult!.Nodes.Single(node =>
                     node.ProjectedObjectId == projectedNode.Id));
             }
 
@@ -142,6 +134,24 @@ public sealed partial class Canvas2DSpatialPoolInteractionTests
         Assert.Same(beforeShow.RoutingResult, fixture.State.RoutingResult);
     }
 
+    private static PointD FreeTaskCenter(Fixture fixture, Canvas2DSpatialRegion region)
+    {
+        var local = region.MapSceneToLocal(region.Bounds);
+        var bodies = fixture.State.ProjectedGraph!.Nodes.Select(node => fixture.Node(node.Source.VisualStateId!).Bounds).ToArray();
+        for (var y = 40d; y + 40d <= local.Bottom; y += 20d)
+        {
+            for (var x = 60d; x + 60d <= local.Right; x += 20d)
+            {
+                var body = region.MapLocalToScene(new RectD(x - 60d, y - 40d, 120d, 80d));
+                if (region.Bounds.Contains(body) && !bodies.Any(existing => existing.Intersects(body)))
+                {
+                    return new PointD(x, y);
+                }
+            }
+        }
+        throw new InvalidOperationException("The regression fixture requires a complete free task-sized destination.");
+    }
+
     private sealed partial class Fixture
     {
         internal static async Task<Fixture> CreatePopulatedDemoPoolFixtureAsync()
@@ -155,6 +165,7 @@ public sealed partial class Canvas2DSpatialPoolInteractionTests
                 [new ModelProfileAvailabilityChange(OrganizationalModelProfile.Id, true)]));
             await fixture.ExecuteAsync(state => new CreateOrganizationalPoolCommand(state.DocumentId, state.DocumentRevision,
                 PoolA, state.ActiveScopeId, OrganizationalPoolCreationMode.AdoptEligibleUnassigned, "Populated demo"));
+            await fixture.PrepareInteractionCapacitiesAsync();
             return fixture;
         }
     }

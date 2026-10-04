@@ -175,7 +175,7 @@ public sealed partial class Canvas2DSpatialPoolInteractionTests
         var before = fixture.Document;
         var stateBefore = fixture.State;
         var displays = selected.ToDictionary(id => id, id => fixture.Node(id).Bounds);
-        var movement = new VectorD(40d, 20d);
+        var movement = new VectorD(24d, 20d);
         await fixture.DragAsync(fixture.NodePoint(selected[0]), movement);
 
         foreach (var id in selected)
@@ -223,26 +223,30 @@ public sealed partial class Canvas2DSpatialPoolInteractionTests
     }
 
     [Fact]
-    public async Task PoolGrowthMovesLowerPresentationOnlyAndKeepsCommonWidth()
+    public async Task ExplicitPoolHeightEditMovesLowerPresentationOnlyAndNodeMovementKeepsCommonWidth()
     {
         await using var fixture = await Fixture.CreateDragRegressionAsync();
+        await fixture.ExecuteAsync(state => new SetOrganizationalScopeWidthCommand(
+            state.DocumentId, state.DocumentRevision, state.ActiveScopeId, 900d));
         var id = Fixture.RegionNodes[1];
         var before = fixture.Document;
         var planBefore = fixture.State.CurrentScene!.SpatialPresentationPlan!;
         var regionABefore = planBefore.Regions.Single(region => region.ContainerSemanticElementId == Fixture.PoolA);
         var regionBBefore = planBefore.Regions.Single(region => region.ContainerSemanticElementId == Fixture.PoolB);
         var bDisplayed = fixture.Node(Fixture.RegionNodes[2]).Bounds;
-        // Keep the drop center inside the old body while extending the node's right/bottom edge.
+        await fixture.SetRegionHeightAsync(Fixture.PoolA, regionABefore.Bounds.Height + 60d);
+        // Capacity is authored before movement; neither axis grows implicitly with child geometry.
         var movement = new VectorD(90d, 60d);
         var displayedBefore = fixture.Node(id).Bounds;
-        await fixture.DragAsync(fixture.NodePoint(id), movement);
+        await fixture.ExecuteAsync(state => new MoveVisualStateCommand(state.DocumentId, state.DocumentRevision,
+            id, fixture.Visual(id).Position + movement, VisualPlacementMode.Pinned));
         var planAfter = fixture.State.CurrentScene!.SpatialPresentationPlan!;
         var regionAAfter = planAfter.Regions.Single(region => region.ContainerSemanticElementId == Fixture.PoolA);
         var regionBAfter = planAfter.Regions.Single(region => region.ContainerSemanticElementId == Fixture.PoolB);
 
         Assert.Equal(displayedBefore.Translate(movement), fixture.Node(id).Bounds);
         Assert.True(regionAAfter.Bounds.Height > regionABefore.Bounds.Height);
-        Assert.True(regionAAfter.Bounds.Width > regionABefore.Bounds.Width);
+        Assert.Equal(regionABefore.Bounds.Width, regionAAfter.Bounds.Width);
         Assert.Equal(regionAAfter.Bounds.Width, regionBAfter.Bounds.Width);
         Assert.Equal(regionAAfter.Bounds.Height - regionABefore.Bounds.Height,
             regionBAfter.Bounds.Top - regionBBefore.Bounds.Top);
@@ -405,6 +409,7 @@ public sealed partial class Canvas2DSpatialPoolInteractionTests
             await fixture.ExecuteAsync(state => new CreateOrganizationalPoolCommand(
                 state.DocumentId, state.DocumentRevision, PoolB, state.ActiveScopeId,
                 OrganizationalPoolCreationMode.Empty, "B"));
+            await fixture.PrepareInteractionCapacitiesAsync();
             foreach (var visualId in RegionNodes.Skip(2).Take(2))
             {
                 await fixture.ExecuteAsync(state => new AssignOrganizationalElementCommand(

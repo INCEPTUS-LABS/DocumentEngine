@@ -464,6 +464,8 @@ public sealed class PhaseN100OptionalProfilesCollaborationIntegrationTests
     {
         var composition = await BpmnModelerTestComposition.DemoFactory.CreateAsync();
         var renderer = await CreateRendererAsync("phase-n100-profile-view-state");
+        composition = BpmnModelerTestComposition.WithDocument(composition,
+            await BpmnModelerTestComposition.PrepareFreshDocumentAsync(composition.Document, composition.Configuration, renderer));
         var attachment = await EditingSession.AttachAsync(
             composition.Document,
             renderer,

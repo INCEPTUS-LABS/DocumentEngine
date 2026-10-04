@@ -4,6 +4,7 @@ using Inceptus.DocumentEngine.Bpmn.Profiles;
 using Inceptus.DocumentEngine.Bpmn.Semantics;
 using Inceptus.DocumentEngine.Bpmn.Validation;
 using Inceptus.DocumentEngine.Canvas2D.EditingSession;
+using Inceptus.DocumentEngine.Contracts.Canvas2D;
 using Inceptus.DocumentEngine.Contracts.Documents;
 using Inceptus.DocumentEngine.Contracts.Metadata;
 using Inceptus.DocumentEngine.Contracts.Profiles;
@@ -113,7 +114,15 @@ public sealed class PhaseN100OptionalProfilesAndCollaborationArchitectureTests
         Assert.Equal(prior.ProjectionRules, current.ProjectionRules);
         Assert.Equal(prior.LayoutAlgorithms, current.LayoutAlgorithms);
         Assert.Equal(prior.RoutingAlgorithms, current.RoutingAlgorithms);
-        Assert.Equal(prior.SceneContributors, current.SceneContributors);
+        // A1.2.14 retains the existing node-visual contribution and gives placement feedback
+        // an independently declared bounded contribution in the current production profile.
+        var nodes = Assert.Single(current.SceneContributors, contribution =>
+            contribution.Descriptor.PlacementDependency == Canvas2DScenePlacementDependency.Invariant);
+        Assert.Equal(Assert.Single(prior.SceneContributors).Descriptor.ContributorId,
+            nodes.Descriptor.ContributorId);
+        Assert.Single(current.SceneContributors, contribution =>
+            contribution.Descriptor.PlacementDependency == Canvas2DScenePlacementDependency.BoundedFeedbackOnly);
+        Assert.Equal(2, current.SceneContributors.Length);
         Assert.Equal(prior.ToolboxContributions, current.ToolboxContributions);
         Assert.Equal(prior.ToolboxPlacementRegistrations,
             current.ToolboxPlacementRegistrations);

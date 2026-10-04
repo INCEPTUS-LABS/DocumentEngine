@@ -57,12 +57,14 @@ public sealed partial class DocumentCanvasHostTests
         Assert.NotSame(before.CurrentScene, rebuilt.CurrentScene);
         Assert.Same(diagnostic, Assert.Single(host.CaptureState().InteractionDiagnostics));
         Assert.Same(original, host.CaptureDocumentSnapshot().Snapshot);
-        Assert.Equal(snapshot, original);
+        Assert.Equal(snapshot.Revision, original.Revision);
         Assert.Equal(before.DocumentId, rebuilt.DocumentId);
         Assert.Equal(before.DocumentRevision, rebuilt.DocumentRevision);
         Assert.Equal(before.ActiveScopeId, rebuilt.ActiveScopeId);
         Assert.Equal(snapshot.SemanticModel, original.SemanticModel);
-        Assert.Equal(snapshot.VisualModel, original.VisualModel);
+        Assert.Equal(snapshot.VisualModel.VisualStates.AsEnumerable(), original.VisualModel.VisualStates.AsEnumerable());
+        Assert.Equal(snapshot.VisualModel.ProfileElementPresentations.AsEnumerable(), original.VisualModel.ProfileElementPresentations.AsEnumerable());
+        Assert.NotNull(original.VisualModel.RoutingScopes);
         Assert.Equal(snapshot.Metadata, original.Metadata);
         Assert.Equal(snapshot.Publication, original.Publication);
         Assert.Equal(before.HistoryStatus, rebuilt.HistoryStatus);

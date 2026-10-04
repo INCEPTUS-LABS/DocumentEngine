@@ -62,6 +62,12 @@ public partial class InceptusBpmnModeler : IDisposable
     /// </summary>
     public BpmnModelerDocumentResult CaptureDocumentSnapshot() => Facade.CaptureDocumentSnapshot();
 
+    /// <summary>Current save comparison, or null while no coherent attachment is available.</summary>
+    public BpmnModelerNativeSaveStatus? NativeSaveStatus => Facade.NativeSaveStatus;
+
+    /// <summary>Acknowledges successful storage of an issued native export for this attachment.</summary>
+    public bool AcknowledgeNativeSave(BpmnModelerSaveCheckpoint checkpoint) => Facade.AcknowledgeNativeSave(checkpoint);
+
     /// <summary>Atomically opens a fresh empty Document without a browser confirmation dialog.</summary>
     public ValueTask<BpmnModelerDocumentResult> NewDocumentAsync(
         CancellationToken cancellationToken = default) => Facade.NewDocumentAsync(cancellationToken);
@@ -75,6 +81,12 @@ public partial class InceptusBpmnModeler : IDisposable
     public ValueTask<BpmnModelerDocumentResult> ImportNativeDocumentAsync(
         ReadOnlyMemory<byte> utf8Json,
         CancellationToken cancellationToken = default) => Facade.ImportNativeDocumentAsync(utf8Json, cancellationToken);
+
+    /// <summary>Imports supported v2 with an explicit opt-in for incompatible saved-state recovery.</summary>
+    public ValueTask<BpmnModelerDocumentResult> ImportNativeDocumentAsync(
+        ReadOnlyMemory<byte> utf8Json,
+        BpmnModelerNativeImportOptions options,
+        CancellationToken cancellationToken = default) => Facade.ImportNativeDocumentAsync(utf8Json, options, cancellationToken);
 
     /// <summary>Returns native Document bytes without initiating a browser download.</summary>
     public ValueTask<BpmnModelerFileResult> ExportNativeDocumentAsync(

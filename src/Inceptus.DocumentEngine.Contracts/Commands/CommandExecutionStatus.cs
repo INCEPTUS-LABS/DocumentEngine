@@ -9,4 +9,5 @@ public enum CommandExecutionStatus
     ProposedStateValidationFailed = 4,
     Cancelled = 5,
     InternalFailure = 6,
+    NoChange = 7,
 }

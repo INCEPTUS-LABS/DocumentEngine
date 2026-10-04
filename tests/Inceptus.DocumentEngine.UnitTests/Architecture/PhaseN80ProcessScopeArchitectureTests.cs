@@ -61,13 +61,17 @@ public sealed class PhaseN80ProcessScopeArchitectureTests
         {
             Assert.DoesNotContain(
                 type.GetProperties(BindingFlags.Public | BindingFlags.Instance |
-                    BindingFlags.DeclaredOnly),
+                    BindingFlags.DeclaredOnly).Where(static property => property.Name != nameof(VisualModelSnapshot.RoutingScopes)),
                 static property => ContainsContainmentName(property.Name));
             Assert.DoesNotContain(
                 type.GetConstructors(BindingFlags.Public | BindingFlags.Instance)
-                    .SelectMany(static constructor => constructor.GetParameters()),
+                    .SelectMany(static constructor => constructor.GetParameters())
+                    .Where(static parameter => parameter.Name != "routingScopes"),
                 static parameter => ContainsContainmentName(parameter.Name ?? string.Empty));
         }
+        // Saved geometry is keyed by the existing semantic scope; it owns no membership.
+        Assert.Equal(typeof(System.Collections.Immutable.ImmutableArray<Inceptus.DocumentEngine.Contracts.Routing.ScopeRoutingSnapshot>?),
+            typeof(VisualModelSnapshot).GetProperty(nameof(VisualModelSnapshot.RoutingScopes))!.PropertyType);
     }
 
     [Fact]

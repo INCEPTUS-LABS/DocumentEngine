@@ -9,4 +9,5 @@ public enum HistoryOperationStatus
     Cancelled = 4,
     InternalFailure = 5,
     Applied = 6,
+    NoChange = 7,
 }

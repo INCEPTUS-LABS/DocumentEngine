@@ -421,7 +421,8 @@ internal sealed class BpmnSnapshotRestoreCommandFactory : IHistoryCommandFactory
                 documentId,
                 expectedRevision,
                 _visualModel.VisualStates,
-                _visualModel.ProfileElementPresentations),
+                _visualModel.ProfileElementPresentations,
+                _visualModel.RoutingScopes),
             _pipelineInvalidation,
             _nodeGeometryImpact);
 }

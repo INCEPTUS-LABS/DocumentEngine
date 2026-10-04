@@ -26,7 +26,8 @@ public sealed partial class Canvas2DSceneBuilder
             VisualModelSnapshot visualModel,
             EditorStateSnapshot editorState,
             Canvas2DTextLayoutService layoutService,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ScopeGeometrySnapshot? savedGeometry = null)
     {
         var nodes = layout.Nodes.ToDictionary(static node => node.ProjectedObjectId);
         var visuals = visualModel.VisualStates.ToDictionary(static visual => visual.Id);
@@ -65,7 +66,9 @@ public sealed partial class Canvas2DSceneBuilder
                     ownerNode.Transform,
                     manualOverride!,
                     layoutService,
-                    cancellationToken).ConfigureAwait(false)
+                    cancellationToken,
+                    clampToDocument: savedGeometry?.Nodes.Any(node =>
+                        node.VisualStateId == label.Source.VisualStateId && node.RegionId is not null) != true).ConfigureAwait(false)
                 : await CreateMeasuredLabelBoxAsync(
                     label.Text,
                     ownerNode.Bounds,
@@ -164,11 +167,13 @@ public sealed partial class Canvas2DSceneBuilder
             Matrix2D ownerTransform,
             NodeLabelVisualOverride visualOverride,
             Canvas2DTextLayoutService layoutService,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            bool clampToDocument = true)
     {
         return await CreateMeasuredManualLabelBoxAsync(
             text,
-            DocumentGeometryBoundary.Clamp(visualOverride.ResolveBounds(ownerBounds)),
+            clampToDocument ? DocumentGeometryBoundary.Clamp(visualOverride.ResolveBounds(ownerBounds))
+                : visualOverride.ResolveBounds(ownerBounds),
             ownerTransform,
             layoutService,
             cancellationToken).ConfigureAwait(false);
@@ -210,21 +215,7 @@ public sealed partial class Canvas2DSceneBuilder
         Canvas2DTextLayoutService layoutService,
         CancellationToken cancellationToken)
     {
-        var contentBounds = placement.Kind == NodeLabelPlacementKind.InsideCentered
-            ? InsetSafely(
-                ownerBounds,
-                _nodeLabelLayout.HorizontalPadding,
-                _nodeLabelLayout.VerticalPadding)
-            : new RectD(
-                ownerBounds.Left +
-                    ((ownerBounds.Width - placement.MaximumWidth!.Value) / 2d),
-                ownerBounds.Bottom + placement.Gap,
-                placement.MaximumWidth.Value,
-                0d);
-        if (placement.Kind == NodeLabelPlacementKind.OutsideBelow)
-        {
-            contentBounds = DocumentGeometryBoundary.Clamp(contentBounds);
-        }
+        var contentBounds = ResolveAutomaticLabelContentBounds(ownerBounds, placement);
         var horizontalBasis = ownerTransform.TransformVector(new VectorD(1d, 0d));
         var horizontalScale = Length(horizontalBasis);
         var requestedLineHeight = NodeLabelStyle.FontSize *
@@ -241,6 +232,25 @@ public sealed partial class Canvas2DSceneBuilder
             return null;
         }
 
+        return ResolveMeasuredLabelBox(ownerBounds, ownerTransform, placement, contentBounds, textLayout);
+    }
+
+    private RectD ResolveAutomaticLabelContentBounds(RectD ownerBounds, NodeLabelPlacement placement,
+        bool clampToDocument = true)
+    {
+        var contentBounds = placement.Kind == NodeLabelPlacementKind.InsideCentered
+            ? InsetSafely(ownerBounds, _nodeLabelLayout.HorizontalPadding, _nodeLabelLayout.VerticalPadding)
+            : new RectD(ownerBounds.Left + ((ownerBounds.Width - placement.MaximumWidth!.Value) / 2d),
+                ownerBounds.Bottom + placement.Gap, placement.MaximumWidth.Value, 0d);
+        return clampToDocument && placement.Kind == NodeLabelPlacementKind.OutsideBelow
+            ? DocumentGeometryBoundary.Clamp(contentBounds)
+            : contentBounds;
+    }
+
+    private static Canvas2DMeasuredLabelBox ResolveMeasuredLabelBox(
+        RectD ownerBounds, Matrix2D ownerTransform, NodeLabelPlacement placement,
+        RectD contentBounds, Canvas2DTextLayout textLayout, bool clampToDocument = true)
+    {
         var verticalBasis = ownerTransform.TransformVector(new VectorD(0d, 1d));
         var verticalScale = Length(verticalBasis);
         var measuredBlockHeight = textLayout.Lines.Sum(line =>
@@ -252,7 +262,7 @@ public sealed partial class Canvas2DSceneBuilder
                 contentBounds.Y,
                 contentBounds.Width,
                 measuredBlockHeight);
-        if (placement.Kind == NodeLabelPlacementKind.OutsideBelow)
+        if (clampToDocument && placement.Kind == NodeLabelPlacementKind.OutsideBelow)
         {
             placementBounds = DocumentGeometryBoundary.Clamp(placementBounds);
         }

@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using Inceptus.DocumentEngine.Contracts.Primitives;
 using Inceptus.DocumentEngine.Contracts.Profiles;
+using Inceptus.DocumentEngine.Contracts.Routing;
 
 namespace Inceptus.DocumentEngine.Contracts.Visuals;
 
@@ -11,6 +12,16 @@ public sealed class VisualModelSnapshot : IVisualModelView, IEquatable<VisualMod
         DocumentRevision revision,
         IEnumerable<VisualStateSnapshot>? visualStates = null,
         IEnumerable<ModelProfileElementPresentationSnapshot>? profileElementPresentations = null)
+        : this(documentId, revision, visualStates, profileElementPresentations, null)
+    {
+    }
+
+    public VisualModelSnapshot(
+        DocumentId documentId,
+        DocumentRevision revision,
+        IEnumerable<VisualStateSnapshot>? visualStates,
+        IEnumerable<ModelProfileElementPresentationSnapshot>? profileElementPresentations,
+        IEnumerable<ScopeRoutingSnapshot>? routingScopes)
     {
         ArgumentNullException.ThrowIfNull(documentId);
 
@@ -18,6 +29,8 @@ public sealed class VisualModelSnapshot : IVisualModelView, IEquatable<VisualMod
         Revision = revision;
         VisualStates = CopyAndOrder(visualStates);
         ProfileElementPresentations = CopyAndOrderPresentations(profileElementPresentations);
+        RoutingScopes = routingScopes is null ? null : RoutingStateCollection.Unique(
+            routingScopes, static scope => scope.ScopeId.Value, nameof(routingScopes));
     }
 
     public DocumentId DocumentId { get; }
@@ -33,6 +46,12 @@ public sealed class VisualModelSnapshot : IVisualModelView, IEquatable<VisualMod
     /// not create Visual States or contribute to <see cref="Count"/>.
     /// </summary>
     public ImmutableArray<ModelProfileElementPresentationSnapshot> ProfileElementPresentations { get; }
+
+    /// <summary>
+    /// Gets complete saved expanded geometry and ordered connector records. Null identifies
+    /// fresh in-memory construction awaiting preparation, never a supported native file.
+    /// </summary>
+    public ImmutableArray<ScopeRoutingSnapshot>? RoutingScopes { get; }
 
     public bool TryGetVisualState(VisualStateId id, out VisualStateSnapshot? visualState)
     {
@@ -57,7 +76,10 @@ public sealed class VisualModelSnapshot : IVisualModelView, IEquatable<VisualMod
          DocumentId == other.DocumentId &&
          Revision == other.Revision &&
          VisualStates.AsSpan().SequenceEqual(other.VisualStates.AsSpan()) &&
-         ProfileElementPresentations.AsSpan().SequenceEqual(other.ProfileElementPresentations.AsSpan()));
+         ProfileElementPresentations.AsSpan().SequenceEqual(other.ProfileElementPresentations.AsSpan()) &&
+         RoutingScopes.HasValue == other.RoutingScopes.HasValue &&
+         RoutingScopes.GetValueOrDefault().AsSpan().SequenceEqual(
+             other.RoutingScopes.GetValueOrDefault().AsSpan()));
 
     public override bool Equals(object? obj) => Equals(obj as VisualModelSnapshot);
 
@@ -75,6 +97,15 @@ public sealed class VisualModelSnapshot : IVisualModelView, IEquatable<VisualMod
         foreach (var presentation in ProfileElementPresentations)
         {
             hash.Add(presentation);
+        }
+
+        hash.Add(RoutingScopes.HasValue);
+        if (RoutingScopes is { } scopes)
+        {
+            foreach (var scope in scopes)
+            {
+                hash.Add(scope);
+            }
         }
 
         return hash.ToHashCode();

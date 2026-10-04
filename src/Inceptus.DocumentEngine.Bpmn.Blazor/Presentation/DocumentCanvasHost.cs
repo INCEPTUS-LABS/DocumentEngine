@@ -740,9 +740,24 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                 state.CurrentScene.DocumentId != state.DocumentId ||
                 !state.EditorState.Selection.Contains(action.TargetVisualStateId) ||
                 GetSpatialRegionId(state, action.TargetVisualStateId) !=
-                    context.TargetPresentation?.Id ||
-                !session.TryCaptureDocumentSnapshot(out var document) ||
-                document is null ||
+                    context.TargetPresentation?.Id)
+            {
+                return null;
+            }
+
+            DocumentSnapshot? document;
+            try
+            {
+                document = await session.CaptureDocumentSnapshotAsync(linked.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (linked.IsCancellationRequested)
+            {
+                return HistoryOperationResult.CreateNotCommitted(context.SourceScene.DocumentId,
+                    UpdateConnectionRouteCommand.KnownTypeId,
+                    HistoryOperationStatus.Cancelled, context.DocumentRevision, session.CaptureState().HistoryStatus);
+            }
+
+            if (document is null ||
                 document.Revision != state.DocumentRevision ||
                 !document.VisualModel.TryGetVisualState(
                     action.TargetVisualStateId,
@@ -750,7 +765,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                 visualState is null ||
                 !action.TryResolveTargetRoute(
                     state.CurrentScene,
-                    visualState.Route,
+                    ResolveEditableConnectorRoute(document, visualState),
                     out var targetRoute))
             {
                 return null;
@@ -855,13 +870,26 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                 state.CurrentScene.DocumentId != state.DocumentId ||
                 !state.EditorState.Selection.Contains(action.TargetVisualStateId) ||
                 GetSpatialRegionId(state, action.TargetVisualStateId) !=
-                    context.TargetPresentation?.Id ||
-                !session.TryCaptureDocumentSnapshot(out var document) ||
-                document is null ||
+                    context.TargetPresentation?.Id)
+            {
+                return null;
+            }
+
+            DocumentSnapshot? document;
+            try
+            {
+                document = await session.CaptureDocumentSnapshotAsync(linked.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (linked.IsCancellationRequested)
+            {
+                return HistoryOperationResult.CreateNotCommitted(context.SourceScene.DocumentId,
+                    addRole is null ? RemoveConnectorAnchorCommand.KnownTypeId : AddConnectorAnchorCommand.KnownTypeId,
+                    HistoryOperationStatus.Cancelled, context.DocumentRevision, session.CaptureState().HistoryStatus);
+            }
+
+            if (document is null ||
                 document.Revision != state.DocumentRevision ||
-                !document.VisualModel.TryGetVisualState(
-                    action.TargetVisualStateId,
-                    out var visualState) ||
+                !document.VisualModel.TryGetVisualState(action.TargetVisualStateId, out var visualState) ||
                 visualState is null ||
                 !action.IsCurrent(state.CurrentScene, visualState))
             {
@@ -1442,16 +1470,17 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
 
             var dataChanged = draft.TryGetDirtyDataField(out var changedDataField);
             var boundsChanged = current.CanEditBounds && targetBounds != current.Bounds;
-            if (dataChanged && boundsChanged)
+            var routingChanged = current.CanEditRoutingType && draft.IsRoutingTypeDirty;
+            if ((dataChanged ? 1 : 0) + (boundsChanged ? 1 : 0) + (routingChanged ? 1 : 0) > 1)
             {
                 return new DocumentCanvasPropertiesApplyResult(
                     DocumentCanvasPropertiesApplyStatus.ValidationFailed,
                     current,
                     [],
-                    "Apply one Data field or visual bounds before editing another property group.");
+                    "Apply one Data field, routing type, or visual bounds before editing another property group.");
             }
 
-            if (!dataChanged && !boundsChanged)
+            if (!dataChanged && !boundsChanged && !routingChanged)
             {
                 lock (_sync)
                 {
@@ -1467,7 +1496,15 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
 
             ICommand command;
             HistoryOperationResult result;
-            if (dataChanged)
+            if (routingChanged)
+            {
+                if (!draft.TryParseRoutingType(out var routingType) || current.VisualStateId is null)
+                    return CreateApplyFailure(DocumentCanvasPropertiesApplyStatus.ValidationFailed,
+                        PropertiesApplyUnavailable, "Select a supported routing type.");
+                command = new SetConnectorRoutingTypeCommand(current.DocumentId, current.Revision,
+                    current.VisualStateId, routingType);
+            }
+            else if (dataChanged)
             {
                 if (changedDataField is null ||
                     !current.TryGetDataField(changedDataField.FieldId, out var currentField) ||
@@ -2148,7 +2185,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                 return null;
             }
 
-            var snapshot = DocumentCanvasModelViewPropertiesSnapshot.Create(state);
+            var snapshot = CaptureModelViewPropertiesSnapshot(session, state);
             lock (_sync)
             {
                 if (_disposed || !ReferenceEquals(session, _session))
@@ -2191,7 +2228,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                 return false;
             }
 
-            snapshot = DocumentCanvasModelViewPropertiesSnapshot.Create(state);
+            snapshot = CaptureModelViewPropertiesSnapshot(session, state);
             return true;
         }
     }
@@ -2304,7 +2341,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
 
                 return new DocumentCanvasModelViewPropertiesApplyResult(
                     DocumentCanvasModelViewPropertiesApplyStatus.NoChange,
-                    DocumentCanvasModelViewPropertiesSnapshot.Create(current),
+                    CaptureModelViewPropertiesSnapshot(session, current),
                     [],
                     null);
             }
@@ -2313,9 +2350,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
             if (!availabilityChanges.IsEmpty)
             {
                 var command = new SetModelProfileAvailabilityCommand(
-                    current.DocumentId,
-                    current.DocumentRevision,
-                    availabilityChanges);
+                    current.DocumentId, current.DocumentRevision, availabilityChanges);
                 var result = await session.ExecuteAsync(command, linked.Token)
                     .ConfigureAwait(false);
                 diagnostics = result.Diagnostics;
@@ -2323,7 +2358,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                 {
                     return new DocumentCanvasModelViewPropertiesApplyResult(
                         DocumentCanvasModelViewPropertiesApplyStatus.Failed,
-                        DocumentCanvasModelViewPropertiesSnapshot.Create(current),
+                        CaptureModelViewPropertiesSnapshot(session, current),
                         diagnostics,
                         diagnostics.FirstOrDefault()?.Message ??
                             "Model profile availability was not committed.");
@@ -2352,7 +2387,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                 {
                     return new DocumentCanvasModelViewPropertiesApplyResult(
                         DocumentCanvasModelViewPropertiesApplyStatus.Failed,
-                        DocumentCanvasModelViewPropertiesSnapshot.Create(current),
+                        CaptureModelViewPropertiesSnapshot(session, current),
                         diagnostics,
                         viewResult.Diagnostics.FirstOrDefault()?.Message ??
                             "Profile visibility could not be updated.");
@@ -2367,7 +2402,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
 
             return new DocumentCanvasModelViewPropertiesApplyResult(
                 DocumentCanvasModelViewPropertiesApplyStatus.Committed,
-                DocumentCanvasModelViewPropertiesSnapshot.Create(current),
+                CaptureModelViewPropertiesSnapshot(session, current),
                 diagnostics,
                 null);
         }
@@ -2528,9 +2563,12 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                 }
 
                 var session = attachment.Session!;
+                if (session.TryCaptureDocumentSnapshot(out var attachedSnapshot))
+                    notificationSource?.AcceptPreparedInitialSnapshot(attachedSnapshot);
                 lock (_sync)
                 {
                     _session = session;
+                    ResetNativeSaveAttachmentUnderLock();
                     checked { _documentSessionVersion++; }
                     _nativeDocumentCanvasElementId = canvasElementId;
                     _nativeDocumentStandbyCanvasElementId = standbyCanvasElementId;
@@ -2685,6 +2723,11 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
 
             if (controller is not null && session is not null)
             {
+                lock (_sync)
+                {
+                    _placementEvaluatedState = null;
+                    _placementPointerCssPoint = null;
+                }
                 notify |= await ToolboxPlacementController.ClearPreviewAsync(
                         session,
                         linked.Token)
@@ -2992,6 +3035,20 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
             }
 
             var beforeResize = session.CaptureState();
+            if (beforeResize.EditorState.TemporaryFeedback.Any(static feedback => feedback.SpatialResize is not null))
+            {
+                Canvas2DInteractionController? resizeController;
+                lock (_sync) { resizeController = _interactionController; }
+                if (resizeController is not null)
+                    await resizeController.CancelActiveGestureAsync(_lifetimeToken).ConfigureAwait(false);
+                await SetPointerCursorUnderGateAsync("default", _lifetimeToken).ConfigureAwait(false);
+                beforeResize = session.CaptureState();
+            }
+            if (beforeResize.EditorState.TemporaryFeedback.Any(static feedback => feedback.PlacementPreview is not null))
+            {
+                await SuspendPlacementPreviewUnderGateAsync(session, forgetPointer: true, _lifetimeToken)
+                    .ConfigureAwait(false);
+            }
             var sceneWillRebuild = beforeResize.EditorState.Viewport.VisibleDocumentRegion !=
                 Canvas2DSceneBuilder.CalculateVisibleDocumentRegion(
                     beforeResize.EditorState.Viewport,
@@ -3312,9 +3369,15 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
             }
 
             var canvasTranslation = input.ResolveCanvasTranslation(surfaceSize.Value);
+            if (_toolboxPlacementController?.IsPlacementActive == true)
+            {
+                await SuspendPlacementPreviewUnderGateAsync(session, forgetPointer: false, _lifetimeToken)
+                    .ConfigureAwait(false);
+            }
             _ = await session.PanViewportAsync(
                 canvasTranslation,
                 _lifetimeToken).ConfigureAwait(false);
+            await RefreshPlacementAtPointerUnderGateAsync(session, _lifetimeToken).ConfigureAwait(false);
         }
         finally
         {
@@ -3380,10 +3443,27 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
 
             if (TryConsumePlacementPointerBoundary(input))
             {
+                if (input.Kind == CanvasPointerEventKind.Cancel)
+                {
+                    await SuspendPlacementPreviewUnderGateAsync(session, forgetPointer: true, _lifetimeToken)
+                        .ConfigureAwait(false);
+                }
                 notify |= await SetPointerCursorUnderGateAsync(
-                    placementController?.IsPlacementActive == true ? "crosshair" : "default",
+                    input.Kind == CanvasPointerEventKind.Cancel ? "default" : PlacementCursor(session, placementController),
                     _lifetimeToken).ConfigureAwait(false);
                 return;
+            }
+
+            if (placementController?.IsPlacementActive == true &&
+                input.Kind is CanvasPointerEventKind.Cancel or CanvasPointerEventKind.Leave)
+            {
+                await SuspendPlacementPreviewUnderGateAsync(session, forgetPointer: true, _lifetimeToken)
+                    .ConfigureAwait(false);
+                lock (_sync)
+                {
+                    notify |= ReplaceInteractionDiagnosticsUnderLock([]);
+                }
+                notify = true;
             }
 
             if (await TryHandleViewportPanPointerUnderGateAsync(
@@ -3415,7 +3495,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                     session,
                     _lifetimeToken).ConfigureAwait(false);
                 notify |= await SetPointerCursorUnderGateAsync(
-                    "crosshair",
+                    "default",
                     _lifetimeToken).ConfigureAwait(false);
                 return;
             }
@@ -3510,6 +3590,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                 if (input.Kind == CanvasPointerEventKind.Move &&
                     placementController?.IsPlacementActive == true)
                 {
+                    lock (_sync) { _placementPointerCssPoint = cssPoint; }
                     var preview = await placementController.UpdatePreviewAtCssPointAsync(
                         session,
                         cssPoint,
@@ -3523,8 +3604,9 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                         }
                     }
 
+                    RememberPlacementEvaluation(session);
                     notify |= await SetPointerCursorUnderGateAsync(
-                        "crosshair",
+                        PlacementCursor(session, placementController),
                         _lifetimeToken).ConfigureAwait(false);
                     return;
                 }
@@ -3537,19 +3619,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                     lock (_sync)
                     {
                         _consumedPlacementPointerId = input.PointerId;
-                    }
-
-                    var preview = await placementController.UpdatePreviewAtCssPointAsync(
-                        session,
-                        cssPoint,
-                        _lifetimeToken).ConfigureAwait(false);
-                    if (preview.Handled && !preview.Diagnostics.IsEmpty)
-                    {
-                        lock (_sync)
-                        {
-                            notify |= ReplaceInteractionDiagnosticsUnderLock(
-                                preview.Diagnostics);
-                        }
+                        _placementPointerCssPoint = cssPoint;
                     }
 
                     var placement = await placementController.TryPlaceAtCssPointAsync(
@@ -3568,8 +3638,9 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                         }
                     }
 
+                    RememberPlacementEvaluation(session);
                     notify |= await SetPointerCursorUnderGateAsync(
-                        placementController.IsPlacementActive ? "crosshair" : "default",
+                        PlacementCursor(session, placementController),
                         _lifetimeToken).ConfigureAwait(false);
                     return;
                 }
@@ -3781,6 +3852,13 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                     input.PointerId,
                     input.CaptureGeneration,
                     cssPoint.Value);
+                _placementPointerCssPoint = cssPoint.Value;
+            }
+
+            if (placementController?.IsPlacementActive == true)
+            {
+                await SuspendPlacementPreviewUnderGateAsync(session, forgetPointer: false, _lifetimeToken)
+                    .ConfigureAwait(false);
             }
 
             _ = await SetPointerCursorUnderGateAsync(
@@ -3851,10 +3929,12 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                 {
                     _viewportPanGesture = null;
                 }
+                _placementPointerCssPoint = cssPoint.Value;
             }
 
+            await RefreshPlacementAtPointerUnderGateAsync(session, _lifetimeToken).ConfigureAwait(false);
             _ = await SetPointerCursorUnderGateAsync(
-                placementController?.IsPlacementActive == true ? "crosshair" : "default",
+                PlacementCursor(session, placementController),
                 _lifetimeToken).ConfigureAwait(false);
         }
 
@@ -4029,7 +4109,13 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                 targetPan,
                 currentViewport.VisibleDocumentRegion);
 
+            if (_toolboxPlacementController?.IsPlacementActive == true)
+            {
+                await SuspendPlacementPreviewUnderGateAsync(session, forgetPointer: false, linked.Token)
+                    .ConfigureAwait(false);
+            }
             await session.UpdateViewportAsync(viewport, linked.Token).ConfigureAwait(false);
+            await RefreshPlacementAtPointerUnderGateAsync(session, linked.Token).ConfigureAwait(false);
         }
         finally
         {
@@ -4108,6 +4194,20 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                 notify = await SetPointerCursorUnderGateAsync(
                     "default",
                     _lifetimeToken).ConfigureAwait(false);
+                if (forceCursorReset && current.EditorState.TemporaryFeedback.Any(
+                        static feedback => feedback.PlacementPreview is not null))
+                {
+                    await SuspendPlacementPreviewUnderGateAsync(session, forgetPointer: true, _lifetimeToken)
+                        .ConfigureAwait(false);
+                }
+                if (forceCursorReset && current.EditorState.TemporaryFeedback.Any(
+                        static feedback => feedback.SpatialResize is not null))
+                {
+                    Canvas2DInteractionController? resizeController;
+                    lock (_sync) { resizeController = _interactionController; }
+                    if (resizeController is not null)
+                        await resizeController.CancelActiveGestureAsync(_lifetimeToken).ConfigureAwait(false);
+                }
             }
 
             if (!releaseStillCurrent)
@@ -4312,7 +4412,11 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                 _observedDocumentRevision != eventArgs.State.DocumentRevision;
             forceCursorReset = (documentRevisionChanged &&
                 !activeBrowserBoundaryOwnsFinalCursor) ||
-                eventArgs.State.Status == EditingSessionStatus.RuntimeFaulted;
+                eventArgs.State.Status == EditingSessionStatus.RuntimeFaulted ||
+                (!eventArgs.State.IsCurrentScenePresented &&
+                 eventArgs.State.PresentationDiagnostics.Any(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error) &&
+                 eventArgs.State.EditorState.TemporaryFeedback.Any(static feedback => feedback.SpatialResize is not null)) ||
+                PlacementContextChanged(eventArgs.State);
             if (documentRevisionChanged)
             {
                 _ = ReplaceInteractionDiagnosticsUnderLock([]);

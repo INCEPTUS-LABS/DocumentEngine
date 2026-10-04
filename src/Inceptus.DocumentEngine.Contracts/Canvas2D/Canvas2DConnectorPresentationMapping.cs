@@ -5,13 +5,14 @@ namespace Inceptus.DocumentEngine.Contracts.Canvas2D;
 
 /// <summary>
 /// Preserves the exact reversible relationship between displayed editable connector guidance
-/// and canonical Process-local guidance. Displayed endpoints may use different visual regions;
-/// internal editable points always use the one canonical-guidance transform.
+/// and its declared source space. Legacy Process-local guidance retains its translation contract;
+/// saved scope-logical guidance uses the reversible compact spatial coordinate map.
 /// </summary>
 public sealed class Canvas2DConnectorPresentationMapping :
     IEquatable<Canvas2DConnectorPresentationMapping>
 {
     private readonly Matrix2D _sceneToCanonicalGuidanceTransform;
+    private readonly Matrix2D _canonicalGuidanceToSceneTransform;
 
     public Canvas2DConnectorPresentationMapping(
         IEnumerable<PointD> canonicalEditablePath,
@@ -53,7 +54,50 @@ public sealed class Canvas2DConnectorPresentationMapping :
             }
         }
 
-        CanonicalGuidanceToSceneTransform = canonicalGuidanceToSceneTransform;
+        _canonicalGuidanceToSceneTransform = canonicalGuidanceToSceneTransform;
+        SourceSpace = Canvas2DConnectorPresentationSourceSpace.CanonicalProcess;
+        CoordinateMap = Canvas2DSpatialCoordinateMap.Identity;
+        SourceRegionId = sourceRegionId;
+        TargetRegionId = targetRegionId;
+    }
+
+    /// <summary>
+    /// Creates the exact editable-vertex mapping from saved expanded scope coordinates.
+    /// Rendered automatic segment breakpoints are deliberately not part of these arrays.
+    /// </summary>
+    public Canvas2DConnectorPresentationMapping(
+        IEnumerable<PointD> scopeLogicalEditablePath,
+        IEnumerable<PointD> displayedEditablePath,
+        Canvas2DSpatialCoordinateMap coordinateMap,
+        Canvas2DSpatialRegionId? sourceRegionId,
+        Canvas2DSpatialRegionId? targetRegionId)
+    {
+        ArgumentNullException.ThrowIfNull(scopeLogicalEditablePath);
+        ArgumentNullException.ThrowIfNull(displayedEditablePath);
+        ArgumentNullException.ThrowIfNull(coordinateMap);
+        CanonicalEditablePath = scopeLogicalEditablePath.ToImmutableArray();
+        DisplayedEditablePath = displayedEditablePath.ToImmutableArray();
+        if (CanonicalEditablePath.Length < 2 ||
+            DisplayedEditablePath.Length != CanonicalEditablePath.Length)
+        {
+            throw new ArgumentException(
+                "Logical and displayed editable paths require the same two-or-more point shape.",
+                nameof(displayedEditablePath));
+        }
+        for (var index = 0; index < CanonicalEditablePath.Length; index++)
+        {
+            if (coordinateMap.MapLogicalToScene(CanonicalEditablePath[index]) != DisplayedEditablePath[index])
+            {
+                throw new ArgumentException(
+                    "Every displayed editable vertex must match the declared logical coordinate map.",
+                    nameof(displayedEditablePath));
+            }
+        }
+
+        _canonicalGuidanceToSceneTransform = Matrix2D.Identity;
+        _sceneToCanonicalGuidanceTransform = Matrix2D.Identity;
+        SourceSpace = Canvas2DConnectorPresentationSourceSpace.ScopeLogical;
+        CoordinateMap = coordinateMap;
         SourceRegionId = sourceRegionId;
         TargetRegionId = targetRegionId;
     }
@@ -62,7 +106,16 @@ public sealed class Canvas2DConnectorPresentationMapping :
 
     public ImmutableArray<PointD> DisplayedEditablePath { get; }
 
-    public Matrix2D CanonicalGuidanceToSceneTransform { get; }
+    /// <summary>Gets the complete translation, if one can represent this mapping.</summary>
+    /// <exception cref="InvalidOperationException">The mapping is nonuniform.</exception>
+    public Matrix2D CanonicalGuidanceToSceneTransform =>
+        TryGetCanonicalGuidanceToSceneTransform(out var transform)
+            ? transform
+            : throw new InvalidOperationException("A nonuniform coordinate map cannot be represented by one matrix.");
+
+    public Canvas2DConnectorPresentationSourceSpace SourceSpace { get; }
+
+    public Canvas2DSpatialCoordinateMap CoordinateMap { get; }
 
     public Canvas2DSpatialRegionId? SourceRegionId { get; }
 
@@ -72,10 +125,35 @@ public sealed class Canvas2DConnectorPresentationMapping :
         SourceRegionId is not null && SourceRegionId == TargetRegionId;
 
     public PointD MapCanonicalGuidanceToScene(PointD point) =>
-        CanonicalGuidanceToSceneTransform.TransformPoint(point);
+        MapLogicalToScene(point);
 
     public PointD MapSceneGuidanceToCanonical(PointD point) =>
-        _sceneToCanonicalGuidanceTransform.TransformPoint(point);
+        MapSceneToLogical(point);
+
+    public PointD MapLogicalToScene(PointD point) =>
+        SourceSpace == Canvas2DConnectorPresentationSourceSpace.ScopeLogical
+            ? CoordinateMap.MapLogicalToScene(point)
+            : _canonicalGuidanceToSceneTransform.TransformPoint(point);
+
+    public PointD MapSceneToLogical(PointD point)
+    {
+        if (SourceSpace != Canvas2DConnectorPresentationSourceSpace.ScopeLogical)
+            return _sceneToCanonicalGuidanceTransform.TransformPoint(point);
+        // An unchanged authored handle must recover its original saved double values, without
+        // introducing an inverse-interpolation rounding edit or changing routing priority.
+        var vertex = DisplayedEditablePath.IndexOf(point);
+        return vertex >= 0 ? CanonicalEditablePath[vertex] : CoordinateMap.MapSceneToLogical(point);
+    }
+
+    public bool TryGetCanonicalGuidanceToSceneTransform(out Matrix2D transform)
+    {
+        if (SourceSpace == Canvas2DConnectorPresentationSourceSpace.ScopeLogical)
+        {
+            return CoordinateMap.TryGetTranslation(out transform);
+        }
+        transform = _canonicalGuidanceToSceneTransform;
+        return true;
+    }
 
     /// <summary>
     /// Maps an edited internal displayed point back to canonical route guidance. Connector
@@ -99,7 +177,9 @@ public sealed class Canvas2DConnectorPresentationMapping :
     public bool Equals(Canvas2DConnectorPresentationMapping? other) =>
         ReferenceEquals(this, other) ||
         other is not null &&
-        CanonicalGuidanceToSceneTransform == other.CanonicalGuidanceToSceneTransform &&
+        SourceSpace == other.SourceSpace &&
+        _canonicalGuidanceToSceneTransform == other._canonicalGuidanceToSceneTransform &&
+        CoordinateMap.Equals(other.CoordinateMap) &&
         SourceRegionId == other.SourceRegionId &&
         TargetRegionId == other.TargetRegionId &&
         CanonicalEditablePath.AsSpan().SequenceEqual(other.CanonicalEditablePath.AsSpan()) &&
@@ -111,7 +191,9 @@ public sealed class Canvas2DConnectorPresentationMapping :
     public override int GetHashCode()
     {
         var hash = new HashCode();
-        hash.Add(CanonicalGuidanceToSceneTransform);
+        hash.Add(SourceSpace);
+        hash.Add(_canonicalGuidanceToSceneTransform);
+        hash.Add(CoordinateMap);
         hash.Add(SourceRegionId);
         hash.Add(TargetRegionId);
         foreach (var point in CanonicalEditablePath)

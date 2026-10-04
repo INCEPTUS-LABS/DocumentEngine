@@ -63,7 +63,12 @@ public sealed partial class OrganizationalPoolSceneContributorBoundsTests
         {
             var hidden = ContributeVisibility(fixture, available: true, visible: false, collapsed);
             var hiddenPlan = Assert.IsType<Canvas2DSpatialPresentationPlan>(hidden.SpatialPresentationPlan);
-            Assert.Equal(visiblePlan, hiddenPlan);
+            Assert.Equal(visiblePlan.Regions.AsEnumerable(), hiddenPlan.Regions.AsEnumerable());
+            Assert.Equal(visiblePlan.VisualPlacements.AsEnumerable(), hiddenPlan.VisualPlacements.AsEnumerable());
+            Assert.Equal(visiblePlan.CoordinateMap, hiddenPlan.CoordinateMap);
+            Assert.Equal(visiblePlan.CanonicalGuidanceToSceneTransform, hiddenPlan.CanonicalGuidanceToSceneTransform);
+            Assert.Equal(visiblePlan.MovementBottomBoundaryRegionId, hiddenPlan.MovementBottomBoundaryRegionId);
+            Assert.Empty(hiddenPlan.ResizeTargets);
             Assert.Equal(visibleExclusions, hidden.Items.ToArray());
             Assert.DoesNotContain(hidden.Items, IsPainted);
             Assert.All(hidden.Items, AssertStructuralExclusion);
@@ -109,6 +114,11 @@ public sealed partial class OrganizationalPoolSceneContributorBoundsTests
             source.DocumentId, source.Revision, semantic.Elements, semantic.Relationships,
             semantic.NestedScopes, semantic.ScopeMemberships, modelProfiles, semantic.ProfileAssignments),
             source.VisualModel, source.Metadata);
+        if (collapsed && available)
+        {
+            var activeFixture = fixture with { Document = document };
+            document = InstallGeometry(activeFixture, PrepareGeometry(activeFixture));
+        }
         var viewState = ModelProfileViewStateSnapshot.Empty.WithPreferredVisibility(
             OrganizationalModelProfile.Id, visible);
         var collapseState = ModelProfileElementViewStateSnapshot.Empty.WithCollapsed(
@@ -122,7 +132,7 @@ public sealed partial class OrganizationalPoolSceneContributorBoundsTests
         Assert.True(result.Succeeded);
         Assert.Equal(semantic.Elements.ToArray(), document.SemanticModel.Elements.ToArray());
         Assert.Equal(semantic.ProfileAssignments.ToArray(), document.SemanticModel.ProfileAssignments.ToArray());
-        Assert.Same(source.VisualModel, document.VisualModel);
+        Assert.Equal(source.VisualModel.VisualStates.ToArray(), document.VisualModel.VisualStates.ToArray());
         Assert.Equal(source.Revision, document.Revision);
         return Assert.IsType<Canvas2DSceneContribution>(result.Contribution);
     }

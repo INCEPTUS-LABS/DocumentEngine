@@ -88,8 +88,12 @@ public sealed class PhaseM2BpmnArchitectureTests
             new[] { typeof(ProjectedGraph), typeof(LayoutContext), typeof(CancellationToken) },
             layoutMethod.GetParameters().Select(static parameter => parameter.ParameterType));
 
-        var routingMethod = Assert.Single(typeof(BpmnRoutingAlgorithm).GetMethods(
-            BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly));
+        var routingMethods = typeof(BpmnRoutingAlgorithm).GetMethods(
+            BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly);
+        Assert.Equal([nameof(IStableConnectorRoutingPolicy.Assess), nameof(IRoutingAlgorithm.Route), nameof(IStableConnectorRoutingPolicy.RouteAffected)],
+            routingMethods.Select(static method => method.Name).Order(StringComparer.Ordinal));
+        Assert.True(typeof(IStableConnectorRoutingPolicy).IsAssignableFrom(typeof(BpmnRoutingAlgorithm)));
+        var routingMethod = Assert.Single(routingMethods, static method => method.Name == nameof(IRoutingAlgorithm.Route));
         Assert.Equal(nameof(IRoutingAlgorithm.Route), routingMethod.Name);
         Assert.Equal(typeof(RoutingAlgorithmResult), routingMethod.ReturnType);
         Assert.Equal(

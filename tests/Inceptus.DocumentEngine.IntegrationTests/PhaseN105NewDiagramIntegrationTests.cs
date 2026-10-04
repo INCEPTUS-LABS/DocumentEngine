@@ -8,6 +8,7 @@ using Inceptus.DocumentEngine.Canvas2D.EditingSession;
 using Inceptus.DocumentEngine.Canvas2D.Rendering;
 using Inceptus.DocumentEngine.Contracts.Canvas2D;
 using Inceptus.DocumentEngine.Contracts.Commands;
+using Inceptus.DocumentEngine.Contracts.Routing;
 using Inceptus.DocumentEngine.Contracts.EditorState;
 using Inceptus.DocumentEngine.Contracts.Geometry;
 using Inceptus.DocumentEngine.Contracts.Primitives;
@@ -56,11 +57,10 @@ public sealed class PhaseN105NewDiagramIntegrationTests
             oldDocument.SemanticModel.RootScopeId,
             OrganizationalPoolCreationMode.Empty,
             "Fulfilment"));
-        var rootState = oldSession.CaptureState();
-        var edge = rootState.ProjectedGraph!.Edges.Single(candidate =>
-            candidate.Source.SemanticElementId == BpmnDemoPipeline.FirstSequenceFlowId);
-        var route = rootState.RoutingResult!.Routes.Single(candidate =>
-            candidate.ProjectedEdgeId == edge.Id).Path;
+        await BpmnModelerTestComposition.SetRoutingTypeAsync(oldSession,
+            BpmnDemoPipeline.FirstSequenceFlowVisualId, ConnectorRoutingType.Manual);
+        var route = BpmnModelerTestComposition.SavedRoute(oldDocument.CaptureSnapshot(),
+            BpmnDemoPipeline.FirstSequenceFlowVisualId).Path;
         await CommitAsync(oldSession, new UpdateConnectionRouteCommand(
             oldDocument.DocumentId,
             oldDocument.Revision,
@@ -91,8 +91,9 @@ public sealed class PhaseN105NewDiagramIntegrationTests
         Assert.NotEmpty(oldDocument.SemanticModel.NestedScopes);
         Assert.NotEmpty(oldDocument.SemanticModel.ProfileAssignments);
         Assert.NotEmpty(oldDocument.VisualModel.ProfileElementPresentations);
-        Assert.Contains(oldDocument.VisualModel.VisualStates, static visual =>
-            !visual.Route.IsEmpty);
+        Assert.Contains(oldDocument.CaptureSnapshot().VisualModel.RoutingScopes!.Value.SelectMany(scope => scope.Connectors),
+            static record => record.RoutingType == ConnectorRoutingType.Manual && !record.ManualDefinition!.Value.IsEmpty);
+        Assert.All(oldDocument.VisualModel.VisualStates, static visual => Assert.Empty(visual.Route));
         Assert.NotEqual(oldDocument.SemanticModel.RootScopeId, oldState.ActiveScopeId);
         Assert.True(oldState.HistoryStatus.EntryCount >= 5);
 

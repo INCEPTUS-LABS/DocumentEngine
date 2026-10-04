@@ -42,6 +42,8 @@ public sealed class PhaseN106PublicationIntegrationTests
         Assert.True((await renderer.InitializeAsync(
             "phase-n106",
             new Canvas2DSurfaceSize(1400d, 900d, 1d))).Succeeded);
+        composition = BpmnModelerTestComposition.WithDocument(composition,
+            await BpmnModelerTestComposition.PrepareFreshDocumentAsync(composition.Document, composition.Configuration, renderer));
         var attached = await EditingSession.AttachAsync(
             composition.Document,
             renderer,

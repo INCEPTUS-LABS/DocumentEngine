@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using Inceptus.DocumentEngine.Blazor.Demo;
 using Inceptus.DocumentEngine.Bpmn;
+using Inceptus.DocumentEngine.Bpmn.Blazor.Composition;
 using Inceptus.DocumentEngine.Bpmn.Semantics;
 using Inceptus.DocumentEngine.Canvas2D.EditingSession;
 using Inceptus.DocumentEngine.Canvas2D.Rendering;
@@ -14,6 +15,7 @@ using Inceptus.DocumentEngine.Contracts.Metadata;
 using Inceptus.DocumentEngine.Contracts.Primitives;
 using Inceptus.DocumentEngine.Contracts.Profiles;
 using Inceptus.DocumentEngine.Contracts.Properties;
+using Inceptus.DocumentEngine.Contracts.Routing;
 using Inceptus.DocumentEngine.Contracts.Semantics;
 using Inceptus.DocumentEngine.Contracts.Visuals;
 using Inceptus.DocumentEngine.Organizational.Commands;
@@ -68,9 +70,9 @@ public sealed class PhaseN102NativeDocumentImportExportIntegrationTests
         new("inceptus:n10.2:anchor:target");
 
     [Fact]
-    public void CompleteBpmnOrganizationalDocumentRoundTripsEveryPersistentAuthorityExactly()
+    public async Task CompleteBpmnOrganizationalDocumentRoundTripsEveryPersistentAuthorityExactly()
     {
-        var source = CreateCompleteDocument();
+        var source = await CreateCompleteDocumentAsync();
         var expected = source.CaptureSnapshot();
 
         var payload = NativeDocumentSerializer.Export(source);
@@ -79,7 +81,7 @@ public sealed class PhaseN102NativeDocumentImportExportIntegrationTests
             ConnectorAnchorPolicies());
 
         Assert.Equal("Inceptus.Document", NativeDocumentSerializer.FormatIdentifier);
-        Assert.Equal(1, NativeDocumentSerializer.FormatVersion);
+        Assert.Equal(2, NativeDocumentSerializer.FormatVersion);
         Assert.NotEmpty(payload);
         Assert.True(imported.Succeeded, Diagnostics(imported.Diagnostics));
         Assert.Empty(imported.Diagnostics);
@@ -135,12 +137,14 @@ public sealed class PhaseN102NativeDocumentImportExportIntegrationTests
             static visual => visual.SemanticElementId == SequenceFlowId);
         Assert.Equal(SourceAnchorId, connector.SourceAnchorId);
         Assert.Equal(TargetAnchorId, connector.TargetAnchorId);
-        Assert.True(connector.Route.AsSpan().SequenceEqual(
-        [
-            new PointD(260d, 150d),
-            new PointD(340d, 150d),
-            new PointD(420d, 150d),
-        ]));
+        Assert.Empty(connector.Route);
+        var savedConnector = actual.VisualModel.RoutingScopes!.Value.SelectMany(static scope => scope.Connectors)
+            .Single(record => record.VisualStateId == connector.Id);
+        Assert.Equal(ConnectorRoutingType.Manual, savedConnector.RoutingType);
+        Assert.Equal([new PointD(340d, 150d)], savedConnector.ManualDefinition!.Value.AsEnumerable());
+        Assert.Equal(3, savedConnector.Path.Length);
+        Assert.Equal(expected.SemanticModel.EnumerateScopeForest().Select(static scope => scope.Id),
+            actual.VisualModel.RoutingScopes.Value.Select(static scope => scope.ScopeId));
         Assert.True(ConnectorLabelPlacement.TryRead(connector.Properties, out _));
         var sourceVisual = Assert.Single(
             actual.VisualModel.VisualStates,
@@ -190,10 +194,12 @@ public sealed class PhaseN102NativeDocumentImportExportIntegrationTests
     public async Task NativeIoExcludesTransientSessionStateAndLeavesTheAttachedSessionAndHistoryUntouched()
     {
         var composition = await BpmnModelerTestComposition.DemoFactory.CreateAsync();
-        var document = composition.Document;
+        var renderer = await CreateRendererAsync();
+        var document = await BpmnModelerTestComposition.PrepareFreshDocumentAsync(composition.Document,
+            composition.Configuration, renderer);
         var attachment = await EditingSession.AttachAsync(
             document,
-            await CreateRendererAsync(),
+            renderer,
             composition.Configuration);
         Assert.Equal(EditingSessionAttachStatus.Ready, attachment.Status);
         await using var session = Assert.IsType<EditingSession>(attachment.Session);
@@ -219,6 +225,13 @@ public sealed class PhaseN102NativeDocumentImportExportIntegrationTests
                 "Native I/O session pool"));
         var assignmentToUnassign = document.SemanticModel.ProfileAssignments.First(
             static assignment => assignment.ProfileId == OrganizationalModelProfile.Id);
+        var scope = document.CaptureSnapshot().VisualModel.RoutingScopes!.Value
+            .Single(candidate => candidate.ScopeId == rootState.ActiveScopeId);
+        var unassigned = scope.Geometry.Regions.Single(static region => region.ContainerSemanticElementId is null);
+        var pool = scope.Geometry.Regions.Single(region => region.ContainerSemanticElementId == poolId);
+        if (unassigned.ExpandedHeight < pool.ExpandedHeight)
+            await ExecuteCommittedAsync(session, new SetOrganizationalRegionExpandedHeightCommand(
+                document.DocumentId, document.Revision, scope.ScopeId, unassigned.Id, pool.ExpandedHeight));
         await ExecuteCommittedAsync(
             session,
             new UnassignOrganizationalElementCommand(
@@ -299,7 +312,7 @@ public sealed class PhaseN102NativeDocumentImportExportIntegrationTests
         Assert.Same(authoritative, document.CaptureSnapshot());
     }
 
-    private static Document CreateCompleteDocument()
+    private static async Task<Document> CreateCompleteDocumentAsync()
     {
         var sourceTask = WithAdditionalProperties(
             BpmnSemanticFactory.CreateTask(
@@ -493,11 +506,7 @@ public sealed class PhaseN102NativeDocumentImportExportIntegrationTests
                     default,
                     default,
                     VisualPlacementMode.Manual,
-                    [
-                        new PointD(260d, 150d),
-                        new PointD(340d, 150d),
-                        new PointD(420d, 150d),
-                    ],
+                    [],
                     connectorLabelProperties,
                     sourceAnchorId: SourceAnchorId,
                     targetAnchorId: TargetAnchorId),
@@ -516,7 +525,7 @@ public sealed class PhaseN102NativeDocumentImportExportIntegrationTests
             CompleteDocumentId,
             CompleteRevision,
             [
-                new("native:schema", PropertyValue.FromText("N10.2/v1")),
+                new("native:schema", PropertyValue.FromText("N10.2/v2")),
                 new("native:sequence", PropertyValue.FromInteger(long.MinValue)),
             ],
             [
@@ -524,9 +533,20 @@ public sealed class PhaseN102NativeDocumentImportExportIntegrationTests
                 new("native:scale", PropertyValue.FromNumber(0.125d)),
             ]);
 
-        return RequireSuccess(DocumentReconstructor.Reconstruct(
-            new DocumentSnapshot(semanticModel, visualModel, metadata),
-            ConnectorAnchorPolicies()));
+        var source = new DocumentSnapshot(semanticModel, visualModel, metadata);
+        var document = RequireSuccess(DocumentReconstructor.Reconstruct(source, ConnectorAnchorPolicies()));
+        var composition = BpmnModelerComposition.Create(document);
+        await using var renderer = await CreateRendererAsync();
+        var flowVisualId = new VisualStateId("inceptus:n10.2:visual:flow");
+        var prepared = await new ConnectorRoutingStatePreparer(composition.Configuration, renderer).PrepareAsync(
+            new ConnectorRoutingStatePreparationRequest(source, source,
+                [ConnectorRoutingIntent.Initialize(flowVisualId, ConnectorRoutingType.Manual),
+                    ConnectorRoutingIntent.ReplaceManualDefinition(flowVisualId, [new PointD(340d, 150d)])],
+                [], null, false, ConnectorRoutingPreparationPurpose.InitialConstruction), CancellationToken.None);
+        Assert.True(prepared.Succeeded, Diagnostics(prepared.Diagnostics));
+        return RequireSuccess(DocumentReconstructor.Reconstruct(new DocumentSnapshot(source.SemanticModel,
+            new VisualModelSnapshot(source.DocumentId, source.Revision, source.VisualModel.VisualStates,
+                source.VisualModel.ProfileElementPresentations, prepared.RoutingScopes), source.Metadata), ConnectorAnchorPolicies()));
     }
 
     private static SemanticElementSnapshot WithAdditionalProperties(
@@ -592,7 +612,8 @@ public sealed class PhaseN102NativeDocumentImportExportIntegrationTests
     private static async ValueTask WaitForReadyAsync(EditingSession session)
     {
         await session.WaitForIdleAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(10));
-        Assert.Equal(EditingSessionStatus.Ready, session.CaptureState().Status);
+        var state = session.CaptureState();
+        Assert.True(state.Status == EditingSessionStatus.Ready, Diagnostics(state.RuntimeDiagnostics.Concat(state.PresentationDiagnostics)));
     }
 
     private static string Diagnostics(IEnumerable<Diagnostic> diagnostics) =>

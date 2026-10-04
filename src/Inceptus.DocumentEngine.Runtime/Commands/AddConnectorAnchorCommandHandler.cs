@@ -145,7 +145,8 @@ internal sealed class AddConnectorAnchorCommandHandler : ICommandHandler
                 document.Revision,
                 document.VisualModel.VisualStates.Select(visualState =>
                     visualState.Id == replacement.Id ? replacement : visualState),
-                document.VisualModel.ProfileElementPresentations),
+                document.VisualModel.ProfileElementPresentations,
+                document.VisualModel.RoutingScopes),
             document.Metadata,
             document.Publication);
 

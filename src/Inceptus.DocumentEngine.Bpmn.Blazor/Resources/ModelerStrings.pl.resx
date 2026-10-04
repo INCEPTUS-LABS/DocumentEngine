@@ -162,4 +162,16 @@
   <data name="Validation_MinHeight" xml:space="preserve"><value>Wysokość musi wynosić co najmniej {0}.</value></data>
   <data name="Validation_Bounds" xml:space="preserve"><value>Podane wymiary muszą być skończone i możliwe do wyświetlenia.</value></data>
   <data name="Validation_Finite" xml:space="preserve"><value>Pole „{0}” musi zawierać liczbę skończoną.</value></data>
+  <data name="Status_PlacementAllowed" xml:space="preserve"><value>Można wstawić element. Kliknij, aby wstawić; Escape anuluje.</value></data>
+  <data name="Status_PlacementRejected" xml:space="preserve"><value>Nie można wstawić elementu. Wybierz inne miejsce lub naciśnij Escape.</value></data>
+  <data name="Properties_RoutingType" xml:space="preserve"><value>Typ trasowania</value></data>
+  <data name="RoutingType_Automatic" xml:space="preserve"><value>Automatyczny</value></data>
+  <data name="RoutingType_Straight" xml:space="preserve"><value>Prosty</value></data>
+  <data name="RoutingType_Manual" xml:space="preserve"><value>Ręczny</value></data>
+  <data name="Properties_RoutingApplyRule" xml:space="preserve"><value>Zastosuj nazwę i typ trasowania osobno.</value></data>
+  <data name="Validation_RoutingType" xml:space="preserve"><value>Wybierz obsługiwany typ trasowania.</value></data>
+  <data name="Status_RegionHeight" xml:space="preserve"><value>Wysokość</value></data>
+  <data name="Status_RegionWidth" xml:space="preserve"><value>Szerokość układu</value></data>
+  <data name="Status_RegionResizeAllowed" xml:space="preserve"><value>{0}: {1} (minimum {2}). Przeciągnij, aby zmienić; Escape anuluje.</value></data>
+  <data name="Status_RegionResizeRejected" xml:space="preserve"><value>{0}: {1} — odrzucono (minimum {2}). Całe elementy muszą się mieścić; Escape anuluje.</value></data>
 </root>

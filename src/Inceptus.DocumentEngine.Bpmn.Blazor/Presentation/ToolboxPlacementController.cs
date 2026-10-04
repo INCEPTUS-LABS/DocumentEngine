@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Diagnostics;
 using Inceptus.DocumentEngine.Canvas2D.EditingSession;
 using Inceptus.DocumentEngine.Canvas2D.Rendering;
 using Inceptus.DocumentEngine.Canvas2D.Scene;
@@ -24,6 +25,8 @@ internal sealed class ToolboxPlacementController
     private const string PlacementCandidateFailed = "TOOLBOX_PLACEMENT_CANDIDATE_FAILED";
     private const string PlacementCommandRejected = "TOOLBOX_PLACEMENT_COMMAND_REJECTED";
     private const string PlacementSelectionFailed = "TOOLBOX_PLACEMENT_SELECTION_FAILED";
+    private const string PlacementBlocked = "TOOLBOX_PLACEMENT_BLOCKED";
+    private const string PlacementOutsideRegion = "TOOLBOX_PLACEMENT_OUTSIDE_REGION";
     private const string PlacementPreviewId = "inceptus:toolbox-placement-candidate";
 
     private readonly ToolboxPlacementCatalog _catalog;
@@ -62,6 +65,8 @@ internal sealed class ToolboxPlacementController
 
     internal bool IsPlacementInFlight => Volatile.Read(ref _placementInFlight) != 0;
 
+    internal ToolboxPlacementEvaluationMetrics? LastEvaluationMetrics { get; private set; }
+
     internal bool Cancel() =>
         ActiveItemId is { } activeItemId && _selection.Clear(activeItemId);
 
@@ -79,54 +84,40 @@ internal sealed class ToolboxPlacementController
         }
 
         var observed = session.CaptureState();
-        if (!TryCreatePlacementRequest(
-                observed,
-                session,
-                itemId,
-                cssPoint,
-                candidate: null,
-                out var request,
-                out var presentation,
-                out var failure))
+        if (!TryEvaluate(observed, session, itemId, registration, cssPoint,
+                out var evaluation, out var failure))
         {
+            await ClearPreviewAsync(session, cancellationToken).ConfigureAwait(false);
             return failure!;
         }
 
-        ToolboxPlacementCandidate? candidate = null;
-        if (registration.CandidateProvider is not null)
+        return await PresentEvaluationAsync(session, observed, evaluation!, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static async ValueTask<ToolboxPlacementControllerResult> PresentEvaluationAsync(
+        EditingSession session,
+        EditingSessionState observed,
+        PlacementEvaluation evaluation,
+        CancellationToken cancellationToken)
+    {
+        if (!IsSameAuthoritativeState(observed, session.CaptureState()))
         {
-            try
-            {
-                candidate = registration.CandidateProvider.ResolveCandidate(request!);
-            }
-            catch (Exception exception) when (IsNonFatal(exception))
-            {
-                return Failure(
-                    PlacementCandidateFailed,
-                    "The registered Toolbox placement candidate provider could not resolve a preview.",
-                    itemId.Value,
-                    exception);
-            }
+            return Failure(PlacementStale,
+                "The Toolbox preview became stale before it could be presented.",
+                evaluation.Request.ToolboxItemId.Value);
         }
 
-        var feedback = candidate is null
-            ? null
-            : new EditorFeedbackSnapshot(
-                PlacementPreviewId,
-                candidate.FeedbackKind,
-                presentation?.MapLocalToScene(candidate.PreviewBounds) ?? candidate.PreviewBounds,
-                properties: candidate.Properties,
-                presentationMode: candidate.FeedbackPresentationMode);
-        var updated = CopyEditorState(observed.EditorState, feedback);
+        var updated = CopyEditorState(observed.EditorState, evaluation.Feedback);
         if (observed.EditorState.Equals(updated))
         {
-            return ToolboxPlacementControllerResult.HandledWithoutCommit();
+            return ToolboxPlacementControllerResult.HandledWithoutCommit(evaluation.Diagnostics);
         }
 
         var update = await session.UpdateEditorStateAsync(updated, cancellationToken)
             .ConfigureAwait(false);
         return update.Succeeded
-            ? ToolboxPlacementControllerResult.HandledWithoutCommit()
+            ? ToolboxPlacementControllerResult.HandledWithoutCommit(evaluation.Diagnostics)
             : ToolboxPlacementControllerResult.HandledWithoutCommit(update.Diagnostics);
     }
 
@@ -170,45 +161,29 @@ internal sealed class ToolboxPlacementController
         try
         {
             var observed = session.CaptureState();
-            if (!TryCreatePlacementRequest(
-                    observed,
-                    session,
-                    itemId,
-                    cssPoint,
-                    candidate: null,
-                    out var request,
-                    out var presentation,
-                    out var requestFailure))
+            // The final click owns a fresh evaluation. A previously green feedback item is
+            // presentation only and is never permission to execute a persistent command.
+            if (!TryEvaluate(observed, session, itemId, registration, cssPoint,
+                    out var evaluation, out var requestFailure))
             {
+                await ClearPreviewAsync(session, cancellationToken).ConfigureAwait(false);
                 return requestFailure!;
             }
 
-            ToolboxPlacementCandidate? candidate = null;
-            if (registration.CandidateProvider is not null)
+            if (!evaluation!.IsAllowed)
             {
-                try
-                {
-                    candidate = registration.CandidateProvider.ResolveCandidate(request!);
-                }
-                catch (Exception exception) when (IsNonFatal(exception))
-                {
-                    return Failure(
-                        PlacementCandidateFailed,
-                        "The registered Toolbox placement candidate provider could not resolve a candidate.",
-                        itemId.Value,
-                        exception);
-                }
+                return await PresentEvaluationAsync(session, observed, evaluation, cancellationToken)
+                    .ConfigureAwait(false);
             }
 
-            request = new ToolboxPlacementRequest(
-                request!.ToolboxItemId,
-                request.Document,
-                request.ExpectedRevision,
-                request.DocumentPoint,
-                request.IdentityProvider,
-                request.TargetScopeId,
-                request.VisibleTargets,
-                candidate);
+            var request = evaluation.Request;
+            var presentation = evaluation.Region;
+            if (_selection.SelectedItemId != itemId ||
+                !IsSameAuthoritativeState(observed, session.CaptureState()))
+            {
+                return Failure(PlacementStale,
+                    "The Toolbox placement became stale before command planning.", itemId.Value);
+            }
 
             ToolboxPlacementPlanResult planned;
             try
@@ -365,18 +340,19 @@ internal sealed class ToolboxPlacementController
         state.LayoutResult is not null &&
         state.EditorState.ActiveGesture is null;
 
-    private bool TryCreatePlacementRequest(
+    private bool TryEvaluate(
         EditingSessionState observed,
         EditingSession session,
         ToolboxItemId itemId,
+        ToolboxPlacementRegistration registration,
         PointD cssPoint,
-        ToolboxPlacementCandidate? candidate,
-        out ToolboxPlacementRequest? request,
-        out Canvas2DSpatialRegion? presentation,
+        out PlacementEvaluation? evaluation,
         out ToolboxPlacementControllerResult? failure)
     {
-        request = null;
-        presentation = null;
+        var evaluationStarted = Stopwatch.GetTimestamp();
+        var allocationStarted = GC.GetAllocatedBytesForCurrentThread();
+        LastEvaluationMetrics = null;
+        evaluation = null;
         failure = null;
         if (!IsAuthoritativeReadyState(observed) ||
             !session.TryCaptureDocumentSnapshot(out var document) ||
@@ -408,14 +384,14 @@ internal sealed class ToolboxPlacementController
             return false;
         }
 
-        if (!TryResolvePlacementTarget(
+        var destinationAllowed = TryResolvePlacementTarget(
                 observed.CurrentScene!,
                 observed.ActiveScopeId,
                 scenePoint,
                 out var documentPoint,
                 out var targetScopeId,
-                out presentation) ||
-            !observed.TryGetCurrentProcessInteraction(out var scopeScene) ||
+                out var presentation);
+        if (!observed.TryGetCurrentProcessInteraction(out var scopeScene) ||
             scopeScene is null || scopeScene.ActiveScopeId != targetScopeId)
         {
             failure = Failure(
@@ -425,42 +401,167 @@ internal sealed class ToolboxPlacementController
             return false;
         }
 
-        var geometryById = scopeScene.LayoutResult!.Nodes.ToDictionary(
-            static geometry => geometry.ProjectedObjectId);
-        var targetRegionId = presentation?.Id;
-        var targets = scopeScene.ProjectedGraph!.Nodes
-            .Where(node =>
-                node.Source.SemanticElementId is not null &&
-                node.Source.VisualStateId is not null &&
-                observed.CurrentScene!.Items.Any(item => item.IsVisible &&
-                    item.Origin.VisualStateId == node.Source.VisualStateId &&
-                    item.SpatialRegion?.Id == targetRegionId &&
-                    (item.Origin.Categories & Canvas2DSceneOriginCategory.EditorState) == 0) &&
-                geometryById.TryGetValue(node.Id, out var geometry) &&
-                !geometry.Bounds.IsEmpty &&
-                document.SemanticModel.TryGetElement(
-                    node.Source.SemanticElementId,
-                    out _))
-            .Select(node => new ToolboxPlacementTarget(
-                node.Source.SemanticElementId!,
-                document.SemanticModel.Elements.Single(
-                    element => element.Id == node.Source.SemanticElementId).TypeId,
-                node.Source.VisualStateId!,
-                node.Id,
-                geometryById[node.Id].Bounds))
-            .OrderBy(static target => target.VisualStateId.Value, StringComparer.Ordinal)
-            .ToArray();
-        request = new ToolboxPlacementRequest(
+        if (!destinationAllowed && registration.PreviewProvider is null)
+        {
+            failure = Failure(PlacementUnavailable,
+                "Toolbox placement requires a visible editable Process presentation at this point.",
+                observed.ActiveScopeId.Value);
+            return false;
+        }
+
+        // Outside a destination, preview geometry remains in Scene coordinates and follows the
+        // pointer. It cannot become an attachment target or an executable canonical proposal.
+        if (!destinationAllowed)
+        {
+            documentPoint = scenePoint;
+            presentation = null;
+        }
+
+        var nodeBodyIds = scopeScene.ProjectedGraph!.Nodes.Select(static node =>
+            Canvas2DSceneObjectIdentity.ForProjected(node.Id, "node")).ToHashSet();
+        var bodies = observed.CurrentScene!.Items.Where(item =>
+            item.IsVisible && !item.Bounds.IsEmpty &&
+            item.Origin.ProjectedObjectId is not null && nodeBodyIds.Contains(item.Id) &&
+            (item.Origin.Categories & Canvas2DSceneOriginCategory.EditorState) == 0).ToArray();
+        var targets = new List<ToolboxPlacementTarget>();
+        if (destinationAllowed)
+        {
+            foreach (var body in bodies)
+            {
+                if (body.SpatialRegion?.Id == presentation?.Id &&
+                    body.Origin.SemanticElementId is { } semanticId &&
+                    body.Origin.VisualStateId is { } visualId &&
+                    document.SemanticModel.TryGetElement(semanticId, out var semantic) &&
+                    semantic is not null)
+                {
+                    targets.Add(new ToolboxPlacementTarget(semanticId, semantic.TypeId,
+                        visualId, body.Origin.ProjectedObjectId!,
+                        presentation?.MapSceneToLocal(body.Bounds) ?? body.Bounds));
+                }
+            }
+        }
+
+        var request = new ToolboxPlacementRequest(
             itemId,
             document,
             observed.DocumentRevision,
             documentPoint,
             _identityProvider,
             targetScopeId,
-            targets,
-            candidate);
+            targets);
+        try
+        {
+            ToolboxPlacementPreview? preview = null;
+            ToolboxPlacementCandidate? candidate;
+            EditorFeedbackSnapshot? feedback;
+            if (registration.PreviewProvider is { } provider)
+            {
+                var providerStarted = Stopwatch.GetTimestamp();
+                preview = provider.Evaluate(new ToolboxPlacementPreviewRequest(itemId, document,
+                    documentPoint, targetScopeId, targets));
+                var providerElapsed = Stopwatch.GetElapsedTime(providerStarted);
+                if (preview is null || preview.ToolboxItemId != itemId)
+                {
+                    failure = Failure(PlacementCandidateFailed,
+                        "The registered Toolbox preview provider returned an invalid proposal.", itemId.Value);
+                    return false;
+                }
+
+                candidate = preview.AttachmentCandidate;
+                var displayedBounds = presentation?.MapLocalToScene(preview.Bounds) ?? preview.Bounds;
+                var diagnostics = preview.Diagnostics.ToBuilder();
+                if (!destinationAllowed)
+                {
+                    diagnostics.Add(Rejection(PlacementOutsideRegion,
+                        "Choose an editable destination region for the complete element.", itemId));
+                }
+                else if (!DocumentGeometryBoundary.Contains(preview.Bounds))
+                {
+                    if (!diagnostics.Any(static diagnostic => diagnostic.Code == "CMD_VISUAL_STATE_GEOMETRY_INVALID"))
+                    {
+                        diagnostics.Add(Rejection("CMD_VISUAL_STATE_GEOMETRY_INVALID",
+                            "The complete element must remain inside the Document boundary.", itemId));
+                    }
+                }
+                else if ((presentation is not null && !presentation.Bounds.Contains(displayedBounds)) ||
+                    observed.CurrentScene.Items.Any(item => item.IsVisible &&
+                        Canvas2DSemanticSceneInteractionMetadata.BlocksPlacement(item) &&
+                        item.Bounds.Intersects(displayedBounds)))
+                {
+                    diagnostics.Add(Rejection(PlacementOutsideRegion,
+                        "The complete element must fit inside the editable destination region.", itemId));
+                }
+
+                // Only canonical body items obstruct placement. Labels, connectors, profile
+                // decoration and transient feedback never enter this set. Bounds.Intersects
+                // rejects positive-area overlap and permits exact boundary contact.
+                var collisionStarted = Stopwatch.GetTimestamp();
+                var bodiesConsidered = 0;
+                var hasCollision = false;
+                foreach (var body in bodies)
+                {
+                    bodiesConsidered++;
+                    if ((candidate is null || body.Origin.VisualStateId != candidate.Target.VisualStateId) &&
+                        body.Bounds.Intersects(displayedBounds))
+                    {
+                        hasCollision = true;
+                        break;
+                    }
+                }
+                var collisionElapsed = Stopwatch.GetElapsedTime(collisionStarted);
+                if (hasCollision)
+                {
+                    diagnostics.Add(Rejection(PlacementBlocked,
+                        "The element overlaps an existing node body.", itemId));
+                }
+
+                preview = new ToolboxPlacementPreview(preview.ToolboxItemId, preview.SemanticTypeId,
+                    preview.Bounds, preview.Hotspot, preview.Label, preview.LabelPlacement,
+                    candidate, preview.IsAllowed && diagnostics.Count == preview.Diagnostics.Length,
+                    diagnostics);
+                feedback = new EditorFeedbackSnapshot(PlacementPreviewId, displayedBounds, preview);
+                LastEvaluationMetrics = new ToolboxPlacementEvaluationMetrics(
+                    bodies.Length, bodiesConsidered, providerElapsed, collisionElapsed,
+                    Stopwatch.GetElapsedTime(evaluationStarted),
+                    GC.GetAllocatedBytesForCurrentThread() - allocationStarted);
+            }
+            else
+            {
+                // Registered tools without the optional preview capability retain their
+                // original candidate/factory behavior and never show an invented green body.
+                candidate = registration.CandidateProvider?.ResolveCandidate(request);
+                feedback = candidate is null ? null : new EditorFeedbackSnapshot(
+                    PlacementPreviewId, candidate.FeedbackKind,
+                    presentation?.MapLocalToScene(candidate.PreviewBounds) ?? candidate.PreviewBounds,
+                    properties: candidate.Properties,
+                    presentationMode: candidate.FeedbackPresentationMode);
+            }
+
+            request = new ToolboxPlacementRequest(itemId, document, observed.DocumentRevision,
+                documentPoint, _identityProvider, targetScopeId, targets, candidate);
+            evaluation = new PlacementEvaluation(request, presentation, feedback,
+                preview?.IsAllowed ?? true, preview?.Diagnostics ?? []);
+        }
+        catch (Exception exception) when (IsNonFatal(exception))
+        {
+            failure = Failure(PlacementCandidateFailed,
+                "The registered Toolbox placement provider could not evaluate a proposal.",
+                itemId.Value, exception);
+            return false;
+        }
+
         return true;
     }
+
+    private static Diagnostic Rejection(string code, string message, ToolboxItemId itemId) =>
+        new(code, DiagnosticSeverity.Error, message, itemId.Value);
+
+    private sealed record PlacementEvaluation(
+        ToolboxPlacementRequest Request,
+        Canvas2DSpatialRegion? Region,
+        EditorFeedbackSnapshot? Feedback,
+        bool IsAllowed,
+        ImmutableArray<Diagnostic> Diagnostics);
 
     private static EditorStateSnapshot CopyEditorState(
         EditorStateSnapshot source,
@@ -569,6 +670,14 @@ internal sealed class ToolboxPlacementController
         not StackOverflowException and
         not AccessViolationException;
 }
+
+internal sealed record ToolboxPlacementEvaluationMetrics(
+    int ApplicableBodyCount,
+    int CollisionBodiesConsidered,
+    TimeSpan ProviderElapsed,
+    TimeSpan CollisionElapsed,
+    TimeSpan EvaluationElapsed,
+    long AllocatedBytes);
 
 internal sealed record ToolboxPlacementControllerResult(
     bool Handled,

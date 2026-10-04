@@ -480,7 +480,7 @@ public sealed class CommandContractArchitectureTests
     }
 
     [Fact]
-    public void ExecutionResultIsAnImmutableCommittedOrFailureDescription()
+    public void ExecutionResultIsAnImmutableCommittedNoChangeOrFailureDescription()
     {
         var expectedProperties = new Dictionary<string, Type>(StringComparer.Ordinal)
         {
@@ -515,6 +515,7 @@ public sealed class CommandContractArchitectureTests
                 "ProposedStateValidationFailed",
                 "Cancelled",
                 "InternalFailure",
+                "NoChange",
             ],
             Enum.GetNames<CommandExecutionStatus>());
     }

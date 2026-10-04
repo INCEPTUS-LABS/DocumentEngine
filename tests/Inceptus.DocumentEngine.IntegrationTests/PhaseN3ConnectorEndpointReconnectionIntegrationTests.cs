@@ -6,6 +6,7 @@ using Inceptus.DocumentEngine.Canvas2D.Interaction;
 using Inceptus.DocumentEngine.Canvas2D.Scene;
 using Inceptus.DocumentEngine.Contracts.Canvas2D;
 using Inceptus.DocumentEngine.Contracts.Commands;
+using Inceptus.DocumentEngine.Contracts.Routing;
 using Inceptus.DocumentEngine.Contracts.ConnectionCreation;
 using Inceptus.DocumentEngine.Contracts.Creation;
 using Inceptus.DocumentEngine.Contracts.Diagnostics;
@@ -498,30 +499,36 @@ public sealed class PhaseN3ConnectorEndpointReconnectionIntegrationTests
             VisualPlacementMode.Pinned));
         AssertReconnectedBindingAndScene(harness);
 
-        var route = harness.PrimaryVisual.Route.ToArray();
-        var added = route.Take(2)
-            .Append(new PointD(route[1].X + 19d, route[1].Y + 13d))
-            .Concat(route.Skip(2)).ToArray();
+        await BpmnModelerTestComposition.SetRoutingTypeAsync(harness.Placement.Session,
+            harness.PrimaryVisual.Id, ConnectorRoutingType.Manual);
+        var historyBeforeBends = harness.State.HistoryStatus;
+        var route = BpmnModelerTestComposition.SavedRoute(harness.Document, harness.PrimaryVisual.Id).Path.ToArray();
+        var added = route.Take(1)
+            .Append(new PointD((route[0].X + route[^1].X) / 2d, Math.Max(route[0].Y, route[^1].Y) + 60d))
+            .Concat(route.Skip(1)).ToArray();
         await ExecuteAuthoritativeAsync(harness, RouteCommand(harness, added));
         AssertReconnectedBindingAndScene(harness);
 
         var moved = added.ToArray();
-        moved[2] = moved[2] + new VectorD(17d, -11d);
+        moved[1] = moved[1] + new VectorD(17d, -11d);
         await ExecuteAuthoritativeAsync(harness, RouteCommand(harness, moved));
         AssertReconnectedBindingAndScene(harness);
+        Assert.Equal(historyBeforeBends, harness.State.HistoryStatus);
         Assert.True((await harness.Placement.Session.UndoAsync()).IsCommitted);
         await harness.Placement.WaitForIdleAsync();
         AssertReconnectedBindingAndScene(harness);
-        Assert.Equal(added, harness.PrimaryVisual.Route);
+        Assert.Equal(ConnectorRoutingType.Automatic,
+            BpmnModelerTestComposition.SavedRoute(harness.Document, harness.PrimaryVisual.Id).RoutingType);
         Assert.True((await harness.Placement.Session.RedoAsync()).IsCommitted);
         await harness.Placement.WaitForIdleAsync();
         AssertReconnectedBindingAndScene(harness);
-        Assert.Equal(moved, harness.PrimaryVisual.Route);
+        Assert.Equal(moved, BpmnModelerTestComposition.SavedRoute(harness.Document, harness.PrimaryVisual.Id).Path);
 
-        var deleted = moved.Where((_, index) => index != 2).ToArray();
+        var deleted = moved.Where((_, index) => index != 1).ToArray();
         await ExecuteAuthoritativeAsync(harness, RouteCommand(harness, deleted));
         AssertReconnectedBindingAndScene(harness);
-        Assert.Equal(deleted, harness.PrimaryVisual.Route);
+        Assert.Equal(deleted, BpmnModelerTestComposition.SavedRoute(harness.Document, harness.PrimaryVisual.Id).Path);
+        Assert.Empty(harness.PrimaryVisual.Route);
     }
 
     [Fact]

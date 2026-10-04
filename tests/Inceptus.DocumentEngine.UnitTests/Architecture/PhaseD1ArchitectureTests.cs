@@ -7,6 +7,7 @@ using Inceptus.DocumentEngine.Contracts.Geometry;
 using Inceptus.DocumentEngine.Contracts.History;
 using Inceptus.DocumentEngine.Contracts.Primitives;
 using Inceptus.DocumentEngine.Contracts.Properties;
+using Inceptus.DocumentEngine.Contracts.Toolbox;
 using Inceptus.DocumentEngine.Runtime.Commands;
 using Inceptus.DocumentEngine.Runtime.Documents;
 using Inceptus.DocumentEngine.Runtime.EditorState;
@@ -204,6 +205,8 @@ public sealed class PhaseD1ArchitectureTests
                 [nameof(EditorFeedbackSnapshot.Properties)] = typeof(PropertyMap),
                 [nameof(EditorFeedbackSnapshot.PresentationMode)] =
                     typeof(EditorFeedbackPresentationMode),
+                [nameof(EditorFeedbackSnapshot.PlacementPreview)] = typeof(ToolboxPlacementPreview),
+                [nameof(EditorFeedbackSnapshot.SpatialResize)] = typeof(Canvas2DSpatialResizeFeedback),
             });
         AssertImmutableShape(
             typeof(EditorStateSnapshot),
@@ -234,14 +237,17 @@ public sealed class PhaseD1ArchitectureTests
             typeof(PointD),
             typeof(PointD),
             typeof(IEnumerable<KeyValuePair<string, PropertyValue>>));
-        AssertSingleConstructor(
-            typeof(EditorFeedbackSnapshot),
+        Assert.Equal(3, typeof(EditorFeedbackSnapshot).GetConstructors().Length);
+        Assert.NotNull(typeof(EditorFeedbackSnapshot).GetConstructor([typeof(string), typeof(Canvas2DSpatialResizeFeedback)]));
+        Assert.NotNull(typeof(EditorFeedbackSnapshot).GetConstructor([
             typeof(string),
             typeof(string),
             typeof(RectD?),
             typeof(IEnumerable<PointD>),
             typeof(IEnumerable<KeyValuePair<string, PropertyValue>>),
-            typeof(EditorFeedbackPresentationMode));
+            typeof(EditorFeedbackPresentationMode)]));
+        Assert.NotNull(typeof(EditorFeedbackSnapshot).GetConstructor([
+            typeof(string), typeof(RectD), typeof(ToolboxPlacementPreview)]));
         AssertSingleConstructor(
             typeof(EditorStateSnapshot),
             typeof(IEnumerable<VisualStateId>),

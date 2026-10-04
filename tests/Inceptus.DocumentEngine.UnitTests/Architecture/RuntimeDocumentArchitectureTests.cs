@@ -104,7 +104,10 @@ public sealed class RuntimeDocumentArchitectureTests
     [Fact]
     public void CommandProcessorExposesOnlyTheApprovedExecutionSurface()
     {
-        var constructor = Assert.Single(typeof(CommandProcessor).GetConstructors());
+        var constructors = typeof(CommandProcessor).GetConstructors();
+        Assert.Equal(2, constructors.Length);
+        var constructor = Assert.Single(constructors, candidate => candidate.GetParameters().Length == 5);
+        var preparedConstructor = Assert.Single(constructors, candidate => candidate.GetParameters().Length == 6);
         var constructorParameters = constructor.GetParameters();
         var methods = typeof(CommandProcessor).GetMethods(
             BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly);
@@ -124,6 +127,11 @@ public sealed class RuntimeDocumentArchitectureTests
             ],
             constructorParameters.Select(parameter => parameter.ParameterType));
         Assert.All(constructorParameters, parameter => Assert.True(parameter.IsOptional));
+        Assert.Equal(constructorParameters.Select(parameter => parameter.ParameterType),
+            preparedConstructor.GetParameters().Take(5).Select(parameter => parameter.ParameterType));
+        Assert.Equal(typeof(Inceptus.DocumentEngine.Contracts.Routing.IConnectorRoutingStatePreparer),
+            preparedConstructor.GetParameters()[^1].ParameterType);
+        Assert.All(preparedConstructor.GetParameters(), parameter => Assert.False(parameter.IsOptional));
         Assert.Equal(nameof(CommandProcessor.ExecuteAsync), execute.Name);
         Assert.Equal(typeof(ValueTask<CommandExecutionResult>), execute.ReturnType);
         Assert.Equal(

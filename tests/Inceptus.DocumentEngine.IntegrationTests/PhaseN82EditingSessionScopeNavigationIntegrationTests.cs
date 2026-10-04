@@ -39,6 +39,8 @@ public sealed class PhaseN82EditingSessionScopeNavigationIntegrationTests
             "phase-n82-editing-session-scope-navigation",
             new Canvas2DSurfaceSize(1000d, 700d, 1.25d));
         Assert.True(initialization.Succeeded, Diagnostics(initialization.Diagnostics));
+        composition = BpmnModelerTestComposition.WithDocument(composition,
+            await BpmnModelerTestComposition.PrepareFreshDocumentAsync(composition.Document, composition.Configuration, renderer));
         var attachment = await EditingSession.AttachAsync(
             composition.Document,
             renderer,
@@ -176,6 +178,8 @@ public sealed class PhaseN82EditingSessionScopeNavigationIntegrationTests
             "phase-n82-recursive-scope-deletion",
             new Canvas2DSurfaceSize(1000d, 700d, 1.25d));
         Assert.True(initialization.Succeeded, Diagnostics(initialization.Diagnostics));
+        composition = BpmnModelerTestComposition.WithDocument(composition,
+            await BpmnModelerTestComposition.PrepareFreshDocumentAsync(composition.Document, composition.Configuration, renderer));
         var attachment = await EditingSession.AttachAsync(
             composition.Document,
             renderer,

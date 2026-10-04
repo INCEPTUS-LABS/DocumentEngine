@@ -30,7 +30,8 @@ internal static class DocumentSnapshotCloner
             source.DocumentId,
             revision,
             source.VisualModel.VisualStates.Select(CloneVisualState),
-            source.VisualModel.ProfileElementPresentations);
+            source.VisualModel.ProfileElementPresentations,
+            source.VisualModel.RoutingScopes);
         var metadata = new DocumentMetadataSnapshot(
             source.DocumentId,
             revision,

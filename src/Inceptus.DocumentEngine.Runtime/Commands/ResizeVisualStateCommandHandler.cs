@@ -111,7 +111,8 @@ internal sealed class ResizeVisualStateCommandHandler : ICommandHandler
                 replacements.TryGetValue(visualState.Id, out var synchronized)
                     ? synchronized
                     : visualState),
-            document.VisualModel.ProfileElementPresentations);
+            document.VisualModel.ProfileElementPresentations,
+            document.VisualModel.RoutingScopes);
         var proposedDocument = new DocumentSnapshot(
             document.SemanticModel,
             proposedVisualModel,

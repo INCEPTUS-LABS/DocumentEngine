@@ -24,7 +24,7 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
         // It must not disappear from the usable band when that first Event becomes its content.
         var timer = await PlaceInUnassignedAsync(fixture, "timer-catch-event", new PointD(80d, 40d), identity);
         Assert.Equal(new SizeD(36d, 36d), timer.Size);
-        var task = await PlaceInUnassignedAsync(fixture, "task", new PointD(320d, 160d), identity);
+        var task = await PlaceInUnassignedAsync(fixture, "task", new PointD(320d, 140d), identity);
         await MoveToRegionAsync(fixture, DragFixture.TaskIds[0], null, new PointD(500d, 40d), identity);
         await PlaceInUnassignedAsync(fixture, "exclusive-gateway", new PointD(640d, 180d), identity);
         await MoveToRegionAsync(fixture, DragFixture.TaskIds[2], null, new PointD(40d, 180d), identity);
@@ -65,7 +65,7 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
         AssertReusableDestination(fixture, identity);
 
         await PlaceInUnassignedAsync(fixture, "timer-catch-event", new PointD(80d, 40d), identity);
-        await PlaceInUnassignedAsync(fixture, "task", new PointD(320d, 160d), identity);
+        await PlaceInUnassignedAsync(fixture, "task", new PointD(320d, 140d), identity);
         await MoveToRegionAsync(fixture, DragFixture.TaskIds[2], null, new PointD(500d, 80d), identity);
     }
 
@@ -163,22 +163,23 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
     private static async Task MoveToRegionAsync(
         DragFixture fixture, VisualStateId visualId, SemanticElementId? poolId,
         PointD canonicalTopLeft, Canvas2DSpatialRegionId identity,
-        VisualStateId? additionallyAffectedVisualId = null)
+        VisualStateId? additionallyAffectedVisualId = null, VectorD? grabOffset = null)
     {
         var before = fixture.Document;
         var beforeState = fixture.State;
         var original = fixture.Visual(visualId);
         var region = fixture.State.CurrentScene!.SpatialPresentationPlan!.Regions.Single(
             candidate => candidate.ContainerSemanticElementId == poolId);
-        var start = fixture.Node(visualId).Bounds.TopLeft + DragFixture.GrabOffset;
-        var destination = region.MapLocalToScene(canonicalTopLeft + DragFixture.GrabOffset);
+        var offset = grabOffset ?? DragFixture.GrabOffset;
+        var start = fixture.Node(visualId).Bounds.TopLeft + offset;
+        var destination = region.MapLocalToScene(canonicalTopLeft + offset);
         Assert.True(region.Bounds.Contains(destination));
         await fixture.DragAsync(start, destination);
         Assert.Equal(canonicalTopLeft, fixture.Visual(visualId).Position);
         Assert.Equal(original.Id, fixture.Visual(visualId).Id);
         Assert.Equal(original.SemanticElementId, fixture.Visual(visualId).SemanticElementId);
         Assert.Equal(poolId, AssignedPool(fixture.Document, original.SemanticElementId));
-        Assert.Equal(destination - DragFixture.GrabOffset, fixture.Node(visualId).Bounds.TopLeft);
+        Assert.Equal(destination - offset, fixture.Node(visualId).Bounds.TopLeft);
         AssertUnrelatedVisualsUnchanged(before, fixture.Document, visualId, additionallyAffectedVisualId);
         AssertSuccessfulSpatialMutation(fixture, beforeState, identity);
     }

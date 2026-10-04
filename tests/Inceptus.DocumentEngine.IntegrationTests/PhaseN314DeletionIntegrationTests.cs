@@ -4,6 +4,7 @@ using Inceptus.DocumentEngine.Bpmn.Semantics;
 using Inceptus.DocumentEngine.Canvas2D.Scene;
 using Inceptus.DocumentEngine.Contracts.Canvas2D;
 using Inceptus.DocumentEngine.Contracts.Commands;
+using Inceptus.DocumentEngine.Contracts.Routing;
 using Inceptus.DocumentEngine.Contracts.Deletion;
 using Inceptus.DocumentEngine.Contracts.Geometry;
 using Inceptus.DocumentEngine.Contracts.Primitives;
@@ -153,6 +154,8 @@ public sealed class PhaseN314DeletionIntegrationTests
             (source.X + target.X) / 2d,
             Math.Max(0d, Math.Min(source.Y, target.Y) - 60d));
         var manualRoute = new[] { source, bend, target };
+        await BpmnModelerTestComposition.SetRoutingTypeAsync(harness.Session,
+            BpmnDemoPipeline.ThirdSequenceFlowVisualId, ConnectorRoutingType.Manual);
         var routeUpdate = await harness.Session.ExecuteAsync(
             new UpdateConnectionRouteCommand(
                 harness.Composition.Document.DocumentId,
@@ -194,8 +197,8 @@ public sealed class PhaseN314DeletionIntegrationTests
         var restored = harness.Composition.Document.CaptureSnapshot();
         Assert.Equal(
             manualRoute.AsEnumerable(),
-            restored.VisualModel.VisualStates.Single(candidate =>
-                candidate.Id == visual.Id).Route.AsEnumerable());
+            BpmnModelerTestComposition.SavedRoute(restored, visual.Id).Path.AsEnumerable());
+        Assert.Empty(restored.VisualModel.VisualStates.Single(candidate => candidate.Id == visual.Id).Route);
         Assert.True((await harness.Session.RedoAsync()).IsCommitted);
         await harness.Session.WaitForIdleAsync();
         afterDelete = harness.Composition.Document.CaptureSnapshot();

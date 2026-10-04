@@ -16,7 +16,7 @@ internal static class Canvas2DConnectorLineJumpGeometry
     internal const double Height = 4d;
 
     private const int SampleIntervalCount = 8;
-    private const double StrictInteriorTolerance = 1e-9;
+    private const double StrictInteriorTolerance = Canvas2DSegmentGeometry.Tolerance;
 
     internal static ImmutableArray<PointD> Create(
         IReadOnlyList<PointD> logicalPath,
@@ -176,11 +176,14 @@ internal static class Canvas2DConnectorLineJumpGeometry
         }
     }
 
+    // CSS/viewport and spatial-map round trips can leave an orthogonal Manual
+    // segment a few ULPs off its axis. Use the existing geometric tolerance;
+    // this affects derived decoration only, never saved connector points.
     private static bool IsHorizontal(PointD start, PointD end) =>
-        start.Y.Equals(end.Y) && !start.X.Equals(end.X);
+        Canvas2DSegmentGeometry.Orientation(start, end) == Canvas2DSegmentOrientation.Horizontal;
 
     private static bool IsVertical(PointD start, PointD end) =>
-        start.X.Equals(end.X) && !start.Y.Equals(end.Y);
+        Canvas2DSegmentGeometry.Orientation(start, end) == Canvas2DSegmentOrientation.Vertical;
 
     private static bool IsStrictlyBetween(double value, double first, double second) =>
         value > Math.Min(first, second) + StrictInteriorTolerance &&

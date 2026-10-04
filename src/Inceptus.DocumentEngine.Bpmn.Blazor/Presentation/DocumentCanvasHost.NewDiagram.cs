@@ -112,7 +112,7 @@ internal sealed partial class DocumentCanvasHost
             {
                 DocumentSessionReplacementStatus.Succeeded => NewDiagramHostResult.Success with
                 {
-                    Snapshot = construction.Document.CaptureSnapshot(),
+                    Snapshot = replacement.Snapshot,
                 },
                 DocumentSessionReplacementStatus.Unavailable => NewDiagramHostResult.Failure(
                     NewDiagramHostOperationStatus.Unavailable,

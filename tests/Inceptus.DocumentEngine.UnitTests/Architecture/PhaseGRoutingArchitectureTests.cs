@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Immutable;
 using System.Reflection;
 using Inceptus.DocumentEngine.Contracts.Commands;
+using Inceptus.DocumentEngine.Contracts.Canvas2D;
 using Inceptus.DocumentEngine.Contracts.Documents;
 using Inceptus.DocumentEngine.Contracts.EditorState;
 using Inceptus.DocumentEngine.Contracts.History;
@@ -51,7 +52,10 @@ public sealed class PhaseGRoutingArchitectureTests
             constructor.GetParameters().Select(parameter => parameter.ParameterType));
         Assert.True(constructor.GetParameters()[0].IsOptional);
 
-        var route = Assert.Single(typeof(RoutingEngine).GetMethods(DeclaredPublicMembers));
+        var methods = typeof(RoutingEngine).GetMethods(DeclaredPublicMembers);
+        Assert.Equal([nameof(RoutingEngine.Route), nameof(RoutingEngine.TryGetStablePolicy)],
+            methods.Select(static method => method.Name).Order(StringComparer.Ordinal));
+        var route = Assert.Single(methods, static method => method.Name == nameof(RoutingEngine.Route));
         Assert.Equal(nameof(RoutingEngine.Route), route.Name);
         Assert.Equal(typeof(RoutingExecutionResult), route.ReturnType);
         Assert.Equal(
@@ -178,16 +182,22 @@ public sealed class PhaseGRoutingArchitectureTests
             type == typeof(EditorStateSnapshot) ||
             type == typeof(HistoryStatus) ||
             type == typeof(Document));
-        // A1.2.11 explicitly permits the pure upstream preparer to inspect an immutable
-        // snapshot. The engine, algorithm and prepared output retain the original boundary.
+        // A1.2.16 adds an immutable before/proposed request at the pre-install boundary.
+        // The engine and algorithm still cannot receive a mutable Document or execute Commands.
         Assert.DoesNotContain(routingTypes
-            .Where(type => type != typeof(IRoutingInputPreparer))
+            .Where(type => type != typeof(IRoutingInputPreparer) && type != typeof(ConnectorRoutingStatePreparationRequest))
             .SelectMany(GetAllDeclaredSignatureTypes), type => type == typeof(DocumentSnapshot));
         var prepare = Assert.Single(typeof(IRoutingInputPreparer).GetMethods());
         Assert.Equal(typeof(PreparedRoutingInput), prepare.ReturnType);
         Assert.Equal(new[] { typeof(DocumentSnapshot), typeof(DocumentScopeId), typeof(ProjectedGraph),
             typeof(LayoutResult), typeof(CancellationToken) }, prepare.GetParameters().Select(parameter => parameter.ParameterType));
-        Assert.DoesNotContain(signatureTypes.Where(type => type != typeof(DocumentSnapshot)), IsForbiddenRoutingDependency);
+        Type[] approvedPreparationInputs =
+        [
+            typeof(DocumentSnapshot), typeof(ConnectorRoutingIntent), typeof(SpatialRegionHeightIntent), typeof(SpatialScopeWidthIntent),
+            typeof(NodeGeometryPipelineImpact), typeof(Canvas2DSceneConfiguration),
+            typeof(Canvas2DSceneContributorDescriptor), typeof(Canvas2DSceneContributionStage),
+        ];
+        Assert.DoesNotContain(signatureTypes.Where(type => !approvedPreparationInputs.Contains(type)), IsForbiddenRoutingDependency);
         Assert.DoesNotContain(routingTypes, type => ContainsAny(
             type.Name,
             "CommandProcessor",
@@ -215,10 +225,29 @@ public sealed class PhaseGRoutingArchitectureTests
             .SelectMany(GetAllDeclaredSignatureTypes)
             .ToArray();
 
-        Assert.DoesNotContain(signatureTypes, type =>
+        // History owns type deltas and the exact node geometry changed by an edit.
+        // Effective paths, derived RoutingResult and priority remain outside History.
+        // ExpandType already visits each ref element, including record Deconstruct outputs.
+        Type[] policyInspectionTypes =
+        [
+            typeof(ConnectorRoutingRecord), typeof(ScopeRoutingSnapshot),
+            typeof(ScopeGeometrySnapshot), typeof(SpatialRegionGeometrySnapshot), typeof(SpatialScopeWidthSnapshot),
+        ];
+        Assert.DoesNotContain(signatureTypes.Where(type => !type.IsByRef && type != typeof(ConnectorRoutingType) &&
+            type != typeof(ScopeNodeGeometrySnapshot) && !policyInspectionTypes.Contains(type)), type =>
             type.Namespace?.StartsWith(
                 "Inceptus.DocumentEngine.Contracts.Routing",
                 StringComparison.Ordinal) == true);
+        // Policies may inspect saved scopes while preparing owned deltas. Their temporary
+        // LINQ closures are not History storage. Actual state fields cannot retain records,
+        // aggregate scopes, capacities or paths, including inside generic collections.
+        var retainedFieldTypes = authoritativeAndSessionTypes
+            .Where(type => !type.IsDefined(typeof(System.Runtime.CompilerServices.CompilerGeneratedAttribute), false))
+            .SelectMany(type => type.GetFields(BindingFlags.Public | BindingFlags.NonPublic |
+                BindingFlags.Instance | BindingFlags.Static))
+            .Where(field => !typeof(Delegate).IsAssignableFrom(field.FieldType))
+            .SelectMany(field => ExpandType(field.FieldType));
+        Assert.DoesNotContain(retainedFieldTypes, policyInspectionTypes.Contains);
     }
 
     [Fact]

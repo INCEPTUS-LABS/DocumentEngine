@@ -18,7 +18,7 @@ namespace Inceptus.DocumentEngine.Canvas2D.EditingSession;
 
 internal sealed partial class EditingSessionPipeline : ISessionPipelineProcessing
 {
-    public ValueTask<EditingSessionPipelineResult> RebuildSceneForTransientPresentationAsync(
+    public async ValueTask<EditingSessionPipelineResult> RebuildSceneForTransientPresentationAsync(
         Canvas2DScene previousScene,
         DocumentSnapshot document,
         EditingSessionPipelineArtifacts artifacts,
@@ -27,6 +27,32 @@ internal sealed partial class EditingSessionPipeline : ISessionPipelineProcessin
         ModelProfileElementViewStateSnapshot modelProfileElementViewState,
         CancellationToken cancellationToken)
     {
+        if (previousScene.BoundedPresentation?.RouteBend is not null)
+        {
+            var routeScene = _configuration.SceneBuilder.TryReuseForRouteBend(previousScene, document,
+                artifacts.ScopeId, modelProfileViewState, modelProfileElementViewState,
+                artifacts.ProjectedGraph, artifacts.LayoutResult, artifacts.RoutingResult, editorState, cancellationToken);
+            return routeScene is null
+                ? await RebuildSceneAsync(document, artifacts, editorState, modelProfileViewState,
+                    modelProfileElementViewState, cancellationToken).ConfigureAwait(false)
+                : EditingSessionPipelineResult.Success(artifacts, routeScene,
+                    artifacts.LayoutResult.Diagnostics.Concat(artifacts.RoutingResult.Diagnostics).Concat(routeScene.Diagnostics),
+                    reusedRouteBendContent: true);
+        }
+        // A label gesture has a base with its installed label suppressed. Other
+        // gesture families must never reuse that base when the label drag retires.
+        if (previousScene.BoundedPresentation?.NodeLabelMove is not null)
+        {
+            var labelScene = _configuration.SceneBuilder.TryReuseForNodeLabelMove(previousScene, document,
+                artifacts.ScopeId, modelProfileViewState, modelProfileElementViewState,
+                artifacts.ProjectedGraph, artifacts.LayoutResult, artifacts.RoutingResult, editorState, cancellationToken);
+            return labelScene is null
+                ? await RebuildSceneAsync(document, artifacts, editorState, modelProfileViewState,
+                    modelProfileElementViewState, cancellationToken).ConfigureAwait(false)
+                : EditingSessionPipelineResult.Success(artifacts, labelScene,
+                    artifacts.LayoutResult.Diagnostics.Concat(artifacts.RoutingResult.Diagnostics).Concat(labelScene.Diagnostics),
+                    reusedNodeLabelMoveContent: true);
+        }
         var scene = _configuration.SceneBuilder.TryReuseForMovePreview(
             previousScene, document, artifacts.ScopeId, modelProfileViewState,
             modelProfileElementViewState, artifacts.ProjectedGraph, artifacts.LayoutResult,
@@ -36,13 +62,34 @@ internal sealed partial class EditingSessionPipeline : ISessionPipelineProcessin
             previousScene, document, artifacts.ScopeId, modelProfileViewState,
             modelProfileElementViewState, artifacts.ProjectedGraph, artifacts.LayoutResult,
             artifacts.RoutingResult, editorState, cancellationToken);
+        var reusedSelection = !reusedMove && scene is not null;
+        var reusedPlacement = false;
+        if (scene is null)
+        {
+            (scene, reusedSelection) = await _configuration.SceneBuilder.TryReuseForPlacementPreviewAsync(
+                previousScene, document, artifacts.ScopeId, modelProfileViewState,
+                modelProfileElementViewState, artifacts.ProjectedGraph, artifacts.LayoutResult,
+                artifacts.RoutingResult, editorState, _renderer,
+                _renderer is null ? null : _renderer.CreateTextMeasurementRequest,
+                cancellationToken).ConfigureAwait(false);
+            reusedPlacement = scene is not null;
+        }
+        var reusedSpatialResize = false;
+        if (scene is null)
+        {
+            scene = _configuration.SceneBuilder.TryReuseForSpatialResize(previousScene, document, artifacts.ScopeId,
+                modelProfileViewState, modelProfileElementViewState, artifacts.ProjectedGraph, artifacts.LayoutResult,
+                artifacts.RoutingResult, editorState, cancellationToken);
+            reusedSpatialResize = scene is not null;
+        }
         return scene is null
-            ? RebuildSceneAsync(document, artifacts, editorState, modelProfileViewState,
-                modelProfileElementViewState, cancellationToken)
-            : ValueTask.FromResult(EditingSessionPipelineResult.Success(
+            ? await RebuildSceneAsync(document, artifacts, editorState, modelProfileViewState,
+                modelProfileElementViewState, cancellationToken).ConfigureAwait(false)
+            : EditingSessionPipelineResult.Success(
                 artifacts, scene, artifacts.LayoutResult.Diagnostics
                     .Concat(artifacts.RoutingResult.Diagnostics).Concat(scene.Diagnostics),
-                reusedMoveContent: reusedMove, reusedSelectionContent: !reusedMove));
+                reusedMoveContent: reusedMove, reusedSelectionContent: reusedSelection,
+                reusedPlacementContent: reusedPlacement, reusedSpatialResizeContent: reusedSpatialResize);
     }
 
     public bool CanDeferPanPresentation(
@@ -369,6 +416,24 @@ internal sealed partial class EditingSessionPipeline : ISessionPipelineProcessin
         }
 
         cancellationToken.ThrowIfCancellationRequested();
+        if (document.VisualModel.RoutingScopes is { } savedScopes)
+        {
+            var scope = savedScopes.SingleOrDefault(candidate => candidate.ScopeId == activeScopeId);
+            if (scope is null)
+                return FromStageFailure(false, [new Diagnostic("INCEPTUS.ROUTING.SAVED_STATE.INCOMPATIBLE",
+                    DiagnosticSeverity.Error, "The current scope has no prepared saved geometry.", activeScopeId.Value)]);
+            var savedLayout = ConnectorRoutingStatePreparer.RestoreLocalLayout(projection.Graph, scope.Geometry);
+            _configuration.RoutingEngine.TryGetStablePolicy(_configuration.RoutingAlgorithmId, out var savedPolicy);
+            var savedRouting = ConnectorRoutingStatePreparer.RestoreRouting(projection.Graph, savedLayout, scope,
+                _configuration.RoutingAlgorithmId, savedPolicy);
+            var savedArtifacts = new EditingSessionPipelineArtifacts(activeScopeId, projection.Graph, savedLayout, savedRouting);
+            var savedScene = await BuildSceneAsync(projection.Graph, savedLayout, savedRouting, document.VisualModel,
+                editorState, document, activeScopeId, modelProfileViewState, modelProfileElementViewState, cancellationToken).ConfigureAwait(false);
+            var savedDiagnostics = projection.Diagnostics.Concat(savedRouting.Diagnostics).Concat(savedScene.Diagnostics);
+            return savedScene.Succeeded && savedScene.Scene is not null
+                ? EditingSessionPipelineResult.Success(savedArtifacts, savedScene.Scene, savedDiagnostics)
+                : EditingSessionPipelineResult.Failure(savedDiagnostics);
+        }
         var scopedNodeGeometryImpact = ResolveScopedNodeGeometryImpact(
             document,
             activeScopeId,

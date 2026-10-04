@@ -87,6 +87,15 @@ public sealed class BpmnModelerFileResult
         BpmnModelerOperationStatus status,
         BpmnModelerFileArtifact? artifact,
         ImmutableArray<Diagnostic> diagnostics)
+        : this(status, artifact, diagnostics, null)
+    {
+    }
+
+    public BpmnModelerFileResult(
+        BpmnModelerOperationStatus status,
+        BpmnModelerFileArtifact? artifact,
+        ImmutableArray<Diagnostic> diagnostics,
+        BpmnModelerSaveCheckpoint? saveCheckpoint)
     {
         if (!Enum.IsDefined(status))
         {
@@ -103,6 +112,11 @@ public sealed class BpmnModelerFileResult
         Status = status;
         Artifact = artifact;
         Diagnostics = BpmnModelerResultDiagnostics.Copy(diagnostics);
+        if (saveCheckpoint is not null && status != BpmnModelerOperationStatus.Succeeded)
+        {
+            throw new ArgumentException("Only successful native export can return a save checkpoint.", nameof(saveCheckpoint));
+        }
+        SaveCheckpoint = saveCheckpoint;
     }
 
     public BpmnModelerOperationStatus Status { get; }
@@ -110,6 +124,9 @@ public sealed class BpmnModelerFileResult
     public bool Succeeded => Status == BpmnModelerOperationStatus.Succeeded;
 
     public BpmnModelerFileArtifact? Artifact { get; }
+
+    /// <summary>Exact native capture; acknowledge only after the consumer successfully stores its bytes.</summary>
+    public BpmnModelerSaveCheckpoint? SaveCheckpoint { get; }
 
     public ImmutableArray<Diagnostic> Diagnostics { get; }
 }

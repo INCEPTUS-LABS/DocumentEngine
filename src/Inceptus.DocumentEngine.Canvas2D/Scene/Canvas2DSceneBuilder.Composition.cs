@@ -38,8 +38,14 @@ public sealed partial class Canvas2DSceneBuilder
     {
         var visualsById = visualModel.VisualStates.ToDictionary(static visual => visual.Id);
         var nodeGeometry = layout.Nodes.ToDictionary(static geometry => geometry.ProjectedObjectId);
+        var routeNodeGeometry = routing.LogicalGeometry?.Layout.Nodes
+            .ToDictionary(static geometry => geometry.ProjectedObjectId) ?? nodeGeometry;
         var groupGeometry = layout.Groups.ToDictionary(static geometry => geometry.ProjectedObjectId);
         var routes = routing.Routes.ToDictionary(static route => route.ProjectedEdgeId);
+        var savedRecords = routing.LogicalGeometry is { } logicalGeometry
+            ? visualModel.RoutingScopes.GetValueOrDefault().Single(scope => scope.ScopeId == logicalGeometry.ScopeId)
+                .Connectors.ToDictionary(static record => record.VisualStateId)
+            : null;
         var noRouteEdgeIds = routing.NoRouteEdgeIds.ToHashSet();
         var portsById = graph.Ports.ToDictionary(static port => port.Id);
 
@@ -99,7 +105,7 @@ public sealed partial class Canvas2DSceneBuilder
 
             var logicalPath = isRouted
                 ? route!.Path
-                : CreateNoRouteFallbackPath(edge, nodeGeometry, portsById);
+                : CreateNoRouteFallbackPath(edge, routeNodeGeometry, portsById);
             var sourceAnchor = logicalPath[0];
             var targetAnchor = logicalPath[^1];
 
@@ -180,7 +186,8 @@ public sealed partial class Canvas2DSceneBuilder
                     sourceAnchor,
                     targetAnchor,
                     route?.Metadata,
-                    isNoRouteFallback)));
+                    isNoRouteFallback, edge.Source.VisualStateId is { } visualId
+                        ? savedRecords?.GetValueOrDefault(visualId) : null)));
 
             var targetArrow = Canvas2DConnectorArrowGeometry.Create(logicalPath);
             if (targetArrow is not null)
@@ -363,7 +370,8 @@ public sealed partial class Canvas2DSceneBuilder
         IReadOnlyDictionary<ProjectedObjectId, Canvas2DMeasuredNodeLabel>? measuredLabels,
         IReadOnlyDictionary<ProjectedObjectId, Canvas2DMeasuredConnectorLabel>?
             measuredConnectorLabels,
-        Canvas2DEditorOverlayInputs? overlayInputs = null)
+        Canvas2DEditorOverlayInputs? overlayInputs = null,
+        bool? hasLineJumpsOverride = null)
     {
         ComposeDocumentBoundaryGuides(editorState, items);
 
@@ -404,7 +412,7 @@ public sealed partial class Canvas2DSceneBuilder
         }
 
         var persistentItems = items.ToArray();
-        var hasLineJumps = persistentItems.Any(
+        var hasLineJumps = hasLineJumpsOverride ?? persistentItems.Any(
             Canvas2DConnectorLineJumpMetadata.HasHitTarget);
         overlayInputs ??= CreateEditorOverlayInputs(graph, visualModel);
         var visualStatesById = overlayInputs.Visuals;
@@ -604,7 +612,8 @@ public sealed partial class Canvas2DSceneBuilder
             }
         }
 
-        if (editorState.ActiveGesture is not null)
+        ComposeSpatialResizeFeedback(editorState, items);
+        if (editorState.ActiveGesture is not null && editorState.ActiveGesture.Kind != Canvas2DSpatialResizeFeedback.FeedbackKind)
         {
             var gesture = editorState.ActiveGesture;
             if (!ComposeConnectorEndpointReconnectionGesturePreview(
@@ -1135,7 +1144,8 @@ public sealed partial class Canvas2DSceneBuilder
         PointD sourceAnchor,
         PointD targetAnchor,
         PropertyMap? routeMetadata,
-        bool isNoRouteFallback)
+        bool isNoRouteFallback,
+        ConnectorRoutingRecord? savedRecord = null)
     {
         if (routeMetadata is not null)
         {
@@ -1152,7 +1162,11 @@ public sealed partial class Canvas2DSceneBuilder
         }
 
         IReadOnlyList<PointD>? editablePath = null;
-        if (edge.PersistentRoute.Length >= 2)
+        if (savedRecord?.RoutingType == ConnectorRoutingType.Manual)
+        {
+            editablePath = savedRecord.Path;
+        }
+        else if (savedRecord is null && edge.PersistentRoute.Length >= 2)
         {
             editablePath = CreateEditableConnectorPath(
                 edge.PersistentRoute,

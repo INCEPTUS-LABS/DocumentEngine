@@ -1,6 +1,5 @@
 using Inceptus.DocumentEngine.Bpmn.Blazor.Composition;
 using Inceptus.DocumentEngine.Bpmn.Commands;
-using Inceptus.DocumentEngine.Bpmn.Routing;
 using Inceptus.DocumentEngine.Bpmn.Semantics;
 using Inceptus.DocumentEngine.Canvas2D.EditingSession;
 using Inceptus.DocumentEngine.Contracts.Commands;
@@ -10,6 +9,7 @@ using Inceptus.DocumentEngine.Contracts.Primitives;
 using Inceptus.DocumentEngine.Contracts.Profiles;
 using Inceptus.DocumentEngine.Contracts.Projection;
 using Inceptus.DocumentEngine.Contracts.Routing;
+using Inceptus.DocumentEngine.Contracts.Toolbox;
 using Inceptus.DocumentEngine.Contracts.Visuals;
 using Inceptus.DocumentEngine.Organizational.Commands;
 using Inceptus.DocumentEngine.Organizational;
@@ -40,9 +40,12 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
             cross: scenario == "cross", unassigned: scenario == "unassigned-endpoints");
         if (guidance)
         {
+            await fixture.ExecuteAsync(state => new SetConnectorRoutingTypeCommand(
+                state.DocumentId, state.DocumentRevision, IsolationFlow, ConnectorRoutingType.Manual));
+            var path = fixture.SavedRoute(IsolationFlow).Path;
             await fixture.ExecuteAsync(state => new UpdateConnectionRouteCommand(
                 state.DocumentId, state.DocumentRevision, IsolationFlow,
-                [new(76, 100), new(120, 160), new(320, 160), new(360, 100)]));
+                [path[0], new(120, 160), new(320, 160), path[^1]]));
         }
         var beforeDocument = fixture.Document;
         var beforeRouting = fixture.State.RoutingResult!;
@@ -56,6 +59,25 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
         };
         var center = new PointD(coversEndpoint ? 340 : 220, guidance ? 150 : 100);
 
+        if (scenario == "same" && coversEndpoint)
+        {
+            // A1.2.14 rejects an overlapping body before planning a persistent edit.
+            // The other-domain case still exercises isolation for equal local geometry.
+            var before = fixture.State;
+            fixture.ToolboxSelection.Select(new ToolboxItemId("bpmn:toolbox:task"));
+            var region = PlacementRegion(fixture, pool);
+            var rejected = await fixture.Placement.TryPlaceAtCssPointAsync(fixture.Session,
+                fixture.Css(region.MapLocalToScene(center)));
+            Assert.False(rejected.IsCommitted);
+            Assert.Null(rejected.CreatedVisualStateId);
+            Assert.Contains(rejected.Diagnostics, diagnostic => diagnostic.Code == "TOOLBOX_PLACEMENT_BLOCKED");
+            Assert.Same(beforeDocument, fixture.Document);
+            Assert.Equal(before.HistoryStatus, fixture.State.HistoryStatus);
+            Assert.Same(beforeRouting, fixture.State.RoutingResult);
+            Assert.Equal(beforeDisplayed, PlacementConnectorPath(fixture, IsolationFlow));
+            return;
+        }
+
         var added = await AddStableToolboxElementAsync(fixture, pool, "task", center);
 
         AssertUnrelatedVisualsUnchanged(beforeDocument, fixture.Document);
@@ -66,27 +88,21 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
         var afterRouting = fixture.State.RoutingResult!;
         var afterDocument = fixture.Document;
         var afterDisplayed = PlacementConnectorPath(fixture, IsolationFlow);
-        if (scenario is "same" or "cross")
+        if (scenario == "same")
         {
-            var complete = new BpmnRoutingAlgorithm().Route(fixture.State.ProjectedGraph!,
-                fixture.State.LayoutResult!, RoutingContext.Empty, CancellationToken.None);
-            Assert.Equal(complete.Computation, afterRouting.Computation);
-            AssertIsolationDiagnostics(complete.Diagnostics, afterRouting.Diagnostics);
-            if (coversEndpoint)
-            {
-                Assert.Single(afterRouting.NoRouteEdgeIds);
-                Assert.Single(afterRouting.Diagnostics);
-            }
-            else
-            {
-                Assert.Empty(afterRouting.NoRouteEdgeIds);
-                Assert.Equal(new PointD[] { new(76, 100), new(150, 100), new(150, 50),
-                    new(290, 50), new(290, 100), new(360, 100) }, CanonicalIsolationPath(fixture));
-            }
-            if (scenario == "cross")
-            {
+            Assert.Empty(afterRouting.NoRouteEdgeIds);
+            var region = PlacementRegion(fixture, PoolAId);
+            Assert.Equal(new PointD[] { new(76, 100), new(150, 100), new(150, 50),
+                new(290, 50), new(290, 100), new(360, 100) }.Select(region.MapLocalToScene),
+                CanonicalIsolationPath(fixture));
+            Assert.False(IsolationPathCrossesBody(afterDisplayed, fixture.Node(added.Id).Bounds));
+        }
+        else if (scenario == "cross")
+        {
+            Assert.Empty(afterRouting.NoRouteEdgeIds);
+            Assert.False(IsolationPathCrossesBody(afterDisplayed, fixture.Node(added.Id).Bounds));
+            if (!IsolationPathCrossesBody(beforeDisplayed, fixture.Node(added.Id).Bounds))
                 Assert.Equal(beforeDisplayed, afterDisplayed);
-            }
         }
         else
         {
@@ -101,9 +117,10 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
         Assert.True((await fixture.Session.UndoAsync()).IsCommitted);
         await WaitForReadyAsync(fixture.Session);
         AssertEquivalentIgnoringRevision(beforeDocument, fixture.Document);
-        Assert.Equal(beforeRouting.Computation, fixture.State.RoutingResult!.Computation);
-        AssertIsolationDiagnostics(beforeRouting.Diagnostics, fixture.State.RoutingResult.Diagnostics);
-        Assert.Equal(beforeDisplayed, PlacementConnectorPath(fixture, IsolationFlow));
+        // Undo removes the new obstacle but does not optimise an already valid saved detour.
+        Assert.Equal(afterRouting.Computation, fixture.State.RoutingResult!.Computation);
+        AssertIsolationDiagnostics(afterRouting.Diagnostics, fixture.State.RoutingResult.Diagnostics);
+        Assert.Equal(afterDisplayed, PlacementConnectorPath(fixture, IsolationFlow));
         Assert.True((await fixture.Session.RedoAsync()).IsCommitted);
         await WaitForReadyAsync(fixture.Session);
         AssertEquivalentIgnoringRevision(afterDocument, fixture.Document);
@@ -116,12 +133,12 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
     public async Task RoutingIsolationPersistentMoveInSecondPoolPreservesUnrelatedRouteAndHistory()
     {
         await using var fixture = await DragFixture.CreateRoutingIsolationAsync();
-        var added = await AddStableToolboxElementAsync(fixture, PoolBId, "task", new PointD(220, 175));
+        var added = await AddStableToolboxElementAsync(fixture, PoolBId, "task", new PointD(220, 140));
         var beforeDocument = fixture.Document;
         var before = fixture.State;
         var path = PlacementConnectorPath(fixture, IsolationFlow);
 
-        await fixture.DragNodeAsync(added.Id, new VectorD(0, -75));
+        await fixture.DragNodeAsync(added.Id, new VectorD(0, -40));
 
         var afterDocument = fixture.Document;
         Assert.Equal(new PointD(160, 60), fixture.Visual(added.Id).Position);
@@ -146,6 +163,13 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
         var route = Assert.Single(fixture.State.RoutingResult!.Routes);
         return [.. route.Path];
     }
+
+    private static bool IsolationPathCrossesBody(PointD[] path, RectD body) =>
+        path.Zip(path.Skip(1)).Any(segment => segment.First.X == segment.Second.X
+            ? segment.First.X > body.Left && segment.First.X < body.Right &&
+              Math.Max(segment.First.Y, segment.Second.Y) > body.Top && Math.Min(segment.First.Y, segment.Second.Y) < body.Bottom
+            : segment.First.Y == segment.Second.Y && segment.First.Y > body.Top && segment.First.Y < body.Bottom &&
+              Math.Max(segment.First.X, segment.Second.X) > body.Left && Math.Min(segment.First.X, segment.Second.X) < body.Right);
 
     [Fact]
     public async Task RoutingIsolationUsesAttachmentInheritanceAndKeepsUnassignedDistinct()
@@ -187,7 +211,8 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
             localInput.EdgeDomains[localEdge.Id].NodeIds);
         Assert.Same(document, fixture.Document);
         Assert.Equal(state.HistoryStatus, fixture.State.HistoryStatus);
-        Assert.Equal(new PointD[] { new(76, 100), new(360, 100) }, CanonicalIsolationPath(fixture));
+        Assert.Equal(new PointD[] { new(76, 100), new(360, 100) }.Select(PlacementRegion(fixture, PoolAId).MapLocalToScene),
+            CanonicalIsolationPath(fixture));
     }
 
     private static void AssertIsolationDiagnostics(IEnumerable<Diagnostic> expected, IEnumerable<Diagnostic> actual) =>
