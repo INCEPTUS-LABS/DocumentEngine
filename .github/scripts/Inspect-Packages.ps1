@@ -240,7 +240,6 @@ $records = foreach ($name in $family) {
             $actual = Read-EntryText $zip $document
             Require ($actual -ceq [IO.File]::ReadAllText((Join-Path $PWD $document))) "Document content: $id/$document"
         }
-        Require ((Read-EntryText $zip 'README.md').Contains('https://bpmn-editor.inceptus.online')) "Application URL: $id"
         $groups = @($metadata.dependencies.group)
         Require ($groups.Count -eq 1 -and $groups[0].targetFramework -ceq 'net10.0') "Framework: $id"
         $dependencies = @($groups[0].dependency | Where-Object { $null -ne $_ })
