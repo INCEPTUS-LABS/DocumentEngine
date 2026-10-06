@@ -24,7 +24,8 @@ internal sealed class EditingSessionPipelineResult
         bool reusedPlacementContent = false,
         bool reusedSpatialResizeContent = false,
         bool reusedNodeLabelMoveContent = false,
-        bool reusedRouteBendContent = false)
+        bool reusedRouteBendContent = false,
+        bool reusedConnectorLabelMoveContent = false)
     {
         Status = status;
         Artifacts = artifacts;
@@ -36,6 +37,7 @@ internal sealed class EditingSessionPipelineResult
         ReusedSpatialResizeContent = reusedSpatialResizeContent;
         ReusedNodeLabelMoveContent = reusedNodeLabelMoveContent;
         ReusedRouteBendContent = reusedRouteBendContent;
+        ReusedConnectorLabelMoveContent = reusedConnectorLabelMoveContent;
         Diagnostics = EditingSessionDiagnosticCollection.CopyAndOrder(
             diagnostics,
             nameof(diagnostics));
@@ -57,6 +59,7 @@ internal sealed class EditingSessionPipelineResult
     internal bool ReusedSpatialResizeContent { get; }
     internal bool ReusedNodeLabelMoveContent { get; }
     internal bool ReusedRouteBendContent { get; }
+    internal bool ReusedConnectorLabelMoveContent { get; }
 
     internal ImmutableArray<Diagnostic> Diagnostics { get; }
 
@@ -70,7 +73,8 @@ internal sealed class EditingSessionPipelineResult
         bool reusedPlacementContent = false,
         bool reusedSpatialResizeContent = false,
         bool reusedNodeLabelMoveContent = false,
-        bool reusedRouteBendContent = false)
+        bool reusedRouteBendContent = false,
+        bool reusedConnectorLabelMoveContent = false)
     {
         ArgumentNullException.ThrowIfNull(artifacts);
         ArgumentNullException.ThrowIfNull(scene);
@@ -82,7 +86,8 @@ internal sealed class EditingSessionPipelineResult
             reusedPanContent,
             reusedMoveContent,
             reusedSelectionContent,
-            reusedPlacementContent, reusedSpatialResizeContent, reusedNodeLabelMoveContent, reusedRouteBendContent);
+            reusedPlacementContent, reusedSpatialResizeContent, reusedNodeLabelMoveContent, reusedRouteBendContent,
+            reusedConnectorLabelMoveContent);
     }
 
     internal static EditingSessionPipelineResult Failure(IEnumerable<Diagnostic> diagnostics) =>

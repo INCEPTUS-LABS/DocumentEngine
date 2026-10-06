@@ -168,7 +168,6 @@
   <data name="RoutingType_Automatic" xml:space="preserve"><value>Automatic</value></data>
   <data name="RoutingType_Straight" xml:space="preserve"><value>Straight</value></data>
   <data name="RoutingType_Manual" xml:space="preserve"><value>Manual</value></data>
-  <data name="Properties_RoutingApplyRule" xml:space="preserve"><value>Apply Name and Routing type separately.</value></data>
   <data name="Validation_RoutingType" xml:space="preserve"><value>Select a supported routing type.</value></data>
   <data name="Status_RegionHeight" xml:space="preserve"><value>Height</value></data>
   <data name="Status_RegionWidth" xml:space="preserve"><value>Stack width</value></data>

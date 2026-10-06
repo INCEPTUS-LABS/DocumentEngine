@@ -95,7 +95,7 @@ public sealed class StableRoutingPreparationTests
     }
 
     [Fact]
-    public async Task ManualPointsSurviveUnrelatedSnapshotHistoryWhileTypeHistoryOwnsOnlyMode()
+    public async Task ExternalManualPointsSurviveTypeHistoryWhichOwnsOnlyMode()
     {
         var fixture = await Fixture.CreateAsync();
         var history = new HistoryManager(fixture.Document);
@@ -106,9 +106,10 @@ public sealed class StableRoutingPreparationTests
         var scope = Assert.Single(fixture.Document.CaptureSnapshot().VisualModel.RoutingScopes!.Value);
         var record = scope.Connectors.Single(item => item.VisualStateId == id);
         PointD[] changedPath = [record.Path[0], new PointD(270, 150), record.Path[^1]];
-        var manual = await history.ExecuteAsync(fixture.Processor, new UpdateConnectionRouteCommand(
+        // A core command outside the session has no History entry. Mode replay must not own it.
+        var manual = await fixture.Processor.ExecuteAsync(fixture.Document, new UpdateConnectionRouteCommand(
             fixture.Document.DocumentId, fixture.Document.Revision, id, changedPath));
-        Assert.True(manual.Succeeded);
+        Assert.True(manual.IsCommitted);
         Assert.True((await history.UndoAsync(fixture.Processor)).Succeeded);
         var automatic = Assert.Single(fixture.Document.CaptureSnapshot().VisualModel.RoutingScopes!.Value)
             .Connectors.Single(item => item.VisualStateId == id);

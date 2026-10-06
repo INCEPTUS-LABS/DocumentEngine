@@ -96,11 +96,12 @@ public sealed partial class Canvas2DSceneBuilder
                 new ScenePresentationInput(document, scopeId, profileViewState, profileElementViewState)));
     }
 
-    private static void SuppressInstalledMovingLabel(EditorStateSnapshot state, IList<Canvas2DSceneItem> items)
+    private static void SuppressInstalledNodeLabelGesture(EditorStateSnapshot state, IList<Canvas2DSceneItem> items)
     {
         if (state.ActiveGesture is not { Kind: Canvas2DNodeLabelGestureMetadata.Kind } gesture ||
             !TryGetNodeLabelGestureTarget(gesture, out _, out _, out var labelId, out var owner,
-                out var operation, out _) || operation != Canvas2DNodeLabelGestureOperation.Move)
+                out var operation, out _) ||
+            operation is not (Canvas2DNodeLabelGestureOperation.Move or Canvas2DNodeLabelGestureOperation.Resize))
             return;
         // Keep installed identity/bounds for gesture currency checks, but render only the
         // complete current preview family. Activation uploads this immutable base once.

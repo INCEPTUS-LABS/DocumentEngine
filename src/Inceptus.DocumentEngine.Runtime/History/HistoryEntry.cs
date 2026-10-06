@@ -1,6 +1,7 @@
 using Inceptus.DocumentEngine.Contracts.History;
 using Inceptus.DocumentEngine.Contracts.Primitives;
 using System.Collections.Immutable;
+using Inceptus.DocumentEngine.Contracts.Commands;
 
 namespace Inceptus.DocumentEngine.Runtime.History;
 
@@ -16,7 +17,8 @@ internal sealed class HistoryEntry
         ImmutableArray<ConnectorRoutingTypeHistoryDelta> routingTypeDeltas = default,
         ImmutableArray<SpatialRegionHeightHistoryDelta> spatialHeightDeltas = default,
         ImmutableArray<NodeGeometryHistoryDelta> nodeGeometryDeltas = default,
-        ImmutableArray<SpatialScopeWidthHistoryDelta> spatialWidthDeltas = default)
+        ImmutableArray<SpatialScopeWidthHistoryDelta> spatialWidthDeltas = default,
+        ImmutableArray<ManualRouteHistoryDelta> manualRouteDeltas = default)
     {
         ArgumentNullException.ThrowIfNull(sourceCommandTypeId);
         ArgumentNullException.ThrowIfNull(undoFactory);
@@ -28,6 +30,7 @@ internal sealed class HistoryEntry
         SpatialHeightDeltas = spatialHeightDeltas.IsDefault ? [] : spatialHeightDeltas;
         SpatialWidthDeltas = spatialWidthDeltas.IsDefault ? [] : spatialWidthDeltas;
         NodeGeometryDeltas = nodeGeometryDeltas.IsDefault ? [] : nodeGeometryDeltas;
+        ManualRouteDeltas = manualRouteDeltas.IsDefault ? [] : manualRouteDeltas;
         Kind = HistoryEntryKind.DocumentMutation;
     }
 
@@ -42,6 +45,11 @@ internal sealed class HistoryEntry
 
     internal CommandTypeId? SourceCommandTypeId { get; }
 
+    internal ConnectorRoutingHistoryOperation? RoutingOperation =>
+        SourceCommandTypeId == SetConnectorRoutingTypeCommand.KnownTypeId
+            ? ConnectorRoutingHistoryOperation.ChangeRoutingMode
+            : (UndoFactory as UpdateConnectionRouteHistoryCommandFactory)?.Operation;
+
     internal IHistoryCommandFactory? UndoFactory { get; }
 
     internal IHistoryCommandFactory? RedoFactory { get; }
@@ -54,6 +62,8 @@ internal sealed class HistoryEntry
     internal ImmutableArray<SpatialScopeWidthHistoryDelta> SpatialWidthDeltas { get; } = [];
 
     internal ImmutableArray<NodeGeometryHistoryDelta> NodeGeometryDeltas { get; } = [];
+
+    internal ImmutableArray<ManualRouteHistoryDelta> ManualRouteDeltas { get; } = [];
 }
 
 internal enum HistoryEntryKind

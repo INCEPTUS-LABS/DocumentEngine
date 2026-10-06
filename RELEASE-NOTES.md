@@ -1,5 +1,35 @@
 # Release notes
 
+## 0.1.8
+
+- Makes explicit Manual connector route-point edits participate correctly in the
+  single global EditingSession History. Add, move and remove route-point
+  operations, together with routing-mode changes, Undo/Redo exactly while
+  derived Automatic routing work remains non-authoring and does not create
+  separate History entries.
+- Stabilizes context-menu presentation for its open lifetime. Available actions
+  are captured when the menu opens and no longer appear or disappear because of
+  transient pointer/session state; execution still validates the current state.
+- Improves Gateway external-label resizing with a 20 x 20 logical-unit minimum,
+  exact anchoring across all resize directions and live orange-boundary feedback
+  that follows the clamped transient preview without a stale outline.
+- Allows connector Properties to apply Name and Routing type together in one
+  atomic Apply. The combined edit produces one revision, one History entry and
+  one committed event; invalid or stale combinations reject atomically, and
+  Undo/Redo restores the exact previous authored Manual route when applicable.
+- Optimizes connector-label movement through bounded previews and Scene-only
+  commits. Steady drag no longer performs full Scene composition, contributor
+  execution, unrelated caption measurement or full-content uploads, while the
+  connector route remains read-only input and its identities, anchors, order
+  and saved/authored/calculated paths remain unchanged.
+- Extends the existing contributor dependency contract with conservative,
+  opt-in connector-label-move dependency metadata so bounded reuse is used only
+  for audited invariant contributors; Unknown or dependent contributors retain
+  the full-composition fallback.
+- Retains native document format v2, PublishedProcess format v1, the coordinated
+  six-package family targeting net10.0, and the existing Source Link and
+  portable-symbol release requirements. No new persistence format is introduced.
+
 ## 0.1.7
 
 - Adds stable persisted connector routing. Complete connector paths, routing

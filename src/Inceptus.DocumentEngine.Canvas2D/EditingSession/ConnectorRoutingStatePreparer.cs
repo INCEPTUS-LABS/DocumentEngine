@@ -54,7 +54,9 @@ public sealed partial class ConnectorRoutingStatePreparer : IConnectorRoutingSta
             return Fail("INCEPTUS.ROUTING.LEGACY_GUIDANCE.UNSUPPORTED", "Untyped connector guidance cannot coexist with saved typed paths.");
         try
         {
-            if (TryPrepareLabelTranslation(request, out var labelOnly))
+            if (TryPreserveConnectorLabelRouting(request) is { } connectorLabelOnly)
+                return ConnectorRoutingStatePreparationResult.Success(connectorLabelOnly);
+            if (await TryPrepareLabelUpdateAsync(request, cancellationToken).ConfigureAwait(false) is { } labelOnly)
                 return ConnectorRoutingStatePreparationResult.Success(labelOnly);
             var output = new List<ScopeRoutingSnapshot>();
             var diagnostics = new List<Diagnostic>();

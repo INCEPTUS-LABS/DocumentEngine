@@ -500,7 +500,7 @@ public sealed class PhaseM323BpmnManualGatewayLabelIntegrationTests
         var widenedLines = GatewayTextLines(harness.Scene);
 
         Assert.True(widenedLines.Length < initialLines.Length);
-        Assert.Equal(initialOverride.Height, widenedOverride.Height, precision: 8);
+        Assert.Equal(Math.Max(20d, initialOverride.Height), widenedOverride.Height, precision: 8);
         Assert.Equal(initialOverride.Width + 150d, widenedOverride.Width, precision: 8);
         Assert.All(widenedLines, line =>
         {
@@ -871,18 +871,18 @@ public sealed class PhaseM323BpmnManualGatewayLabelIntegrationTests
     private static RectD ResizeBounds(RectD original, string role, VectorD delta)
     {
         var left = role is "west" or "northwest" or "southwest"
-            ? Math.Min(original.Left + delta.X, original.Right - 1d)
+            ? Math.Min(original.Left + delta.X, original.Right - 20d)
             : original.Left;
         var right = role is "east" or "northeast" or "southeast"
-            ? Math.Max(original.Right + delta.X, original.Left + 1d)
+            ? Math.Max(original.Right + delta.X, original.Left + 20d)
             : original.Right;
         var top = role is "north" or "northwest" or "northeast"
-            ? Math.Min(original.Top + delta.Y, original.Bottom - 1d)
+            ? Math.Min(original.Top + delta.Y, original.Bottom - 20d)
             : original.Top;
         var bottom = role is "south" or "southwest" or "southeast"
-            ? Math.Max(original.Bottom + delta.Y, original.Top + 1d)
+            ? Math.Max(original.Bottom + delta.Y, original.Top + 20d)
             : original.Bottom;
-        return new RectD(left, top, right - left, bottom - top);
+        return new RectD(left, top, Math.Max(20d, right - left), Math.Max(20d, bottom - top));
     }
 
     private static void AssertAutomaticOutsideBelow(Canvas2DScene scene)

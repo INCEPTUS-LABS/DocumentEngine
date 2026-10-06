@@ -474,11 +474,7 @@ public sealed class PhaseA11SequenceFlowLabelIntegrationTests
             await session.WaitForIdleAsync();
             Assert.Equal(EditingSessionStatus.Ready, State.Status);
             Assert.Equal(revision.Increment(), Revision);
-            if (command is UpdateConnectionRouteCommand)
-            {
-                Assert.Equal(history, State.HistoryStatus.EntryCount);
-            }
-            else if (!truncatesRedo)
+            if (!truncatesRedo)
             {
                 Assert.Equal(history + 1, State.HistoryStatus.EntryCount);
             }

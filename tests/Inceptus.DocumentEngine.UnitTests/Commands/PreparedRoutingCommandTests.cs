@@ -87,7 +87,7 @@ public sealed class PreparedRoutingCommandTests
     }
 
     [Fact]
-    public async Task ManualPointEditPreservesBothHistoryBranchesAndSurvivesOrdinaryReplay()
+    public async Task ManualPointEditTruncatesRedoAndReplaysItsOwnDefinition()
     {
         var document = CreateDocument(ConnectorRoutingType.Manual);
         var preparer = new RecordingPreparer();
@@ -102,16 +102,16 @@ public sealed class PreparedRoutingCommandTests
 
         Assert.True((await history.ExecuteAsync(processor, Route(document, [newPoint]))).IsCommitted);
 
-        Assert.Equal(branches, history.CaptureStatus());
-        Assert.Equal(newPoint, Assert.Single(CurrentRoute(document).ManualDefinition!.Value));
-        Assert.True((await history.RedoAsync(processor)).IsCommitted);
+        Assert.Equal(new HistoryStatus(2, true, false), history.CaptureStatus());
         Assert.Equal(newPoint, Assert.Single(CurrentRoute(document).ManualDefinition!.Value));
         Assert.True((await history.UndoAsync(processor)).IsCommitted);
+        Assert.Equal(new PointD(80, 70), Assert.Single(CurrentRoute(document).ManualDefinition!.Value));
+        Assert.True((await history.RedoAsync(processor)).IsCommitted);
         Assert.Equal(newPoint, Assert.Single(CurrentRoute(document).ManualDefinition!.Value));
     }
 
     [Fact]
-    public async Task TypeHistoryReplaysOnlyModeAndRetainsLaterManualDefinition()
+    public async Task PointHistoryReplaysBeforeEarlierTypeHistory()
     {
         var document = CreateDocument(ConnectorRoutingType.Straight);
         var processor = Processor(new RecordingPreparer());
@@ -119,13 +119,17 @@ public sealed class PreparedRoutingCommandTests
         Assert.True((await history.ExecuteAsync(processor, SetType(document, ConnectorRoutingType.Manual))).IsCommitted);
         var point = new PointD(88, 66);
         Assert.True((await history.ExecuteAsync(processor, Route(document, [point]))).IsCommitted);
-        Assert.Equal(1, history.CaptureStatus().EntryCount);
+        Assert.Equal(2, history.CaptureStatus().EntryCount);
 
         Assert.True((await history.UndoAsync(processor)).IsCommitted);
+        Assert.Equal(ConnectorRoutingType.Manual, CurrentRoute(document).RoutingType);
+        Assert.Empty(CurrentRoute(document).ManualDefinition!.Value);
+        Assert.True((await history.UndoAsync(processor)).IsCommitted);
         Assert.Equal(ConnectorRoutingType.Straight, CurrentRoute(document).RoutingType);
-        Assert.Equal(point, Assert.Single(CurrentRoute(document).ManualDefinition!.Value));
+        Assert.Empty(CurrentRoute(document).ManualDefinition!.Value);
         Assert.True((await history.RedoAsync(processor)).IsCommitted);
         Assert.Equal(ConnectorRoutingType.Manual, CurrentRoute(document).RoutingType);
+        Assert.True((await history.RedoAsync(processor)).IsCommitted);
         Assert.Equal(point, Assert.Single(CurrentRoute(document).ManualDefinition!.Value));
     }
 
@@ -251,7 +255,7 @@ public sealed class PreparedRoutingCommandTests
     }
 
     [Fact]
-    public async Task MixedCompoundRestorationKeepsCurrentManualDefinitionAndReplaysItsOwnedMode()
+    public async Task MixedCompoundRestorationKeepsExternalManualDefinitionAndReplaysItsOwnedMode()
     {
         var document = CreateDocument(ConnectorRoutingType.Straight);
         var preparer = new RecordingPreparer();
@@ -264,7 +268,7 @@ public sealed class PreparedRoutingCommandTests
         Assert.Single(preparer.Requests);
         Assert.Equal(1, history.CaptureStatus().EntryCount);
         var point = new PointD(90, 77);
-        Assert.True((await history.ExecuteAsync(processor, Route(document, [point]))).IsCommitted);
+        Assert.True((await processor.ExecuteAsync(document, Route(document, [point]))).IsCommitted);
 
         Assert.True((await history.UndoAsync(processor)).IsCommitted);
         Assert.Equal(ConnectorRoutingType.Straight, CurrentRoute(document).RoutingType);

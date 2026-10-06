@@ -100,7 +100,7 @@ public sealed class StableRoutingHistoryIntegrationTests
     }
 
     [Fact]
-    public async Task HeightUndoRedoOwnsHeightWhileManualEditsPreserveBothBranches()
+    public async Task ManualEditTruncatesHeightRedoAndEachUndoOwnsOnlyItsState()
     {
         var fixture = await StableRoutingPreparationTests.Fixture.CreateAsync();
         await EnableSpatialRegions(fixture);
@@ -112,10 +112,15 @@ public sealed class StableRoutingHistoryIntegrationTests
         var branches = history.CaptureStatus();
         Assert.True(branches.CanUndo && branches.CanRedo);
         AssertCommitted(await history.ExecuteAsync(fixture.Processor, Manual(fixture, FlowA, new PointD(290, 160))));
-        Assert.Equal(branches, history.CaptureStatus());
+        Assert.Equal(new HistoryStatus(2, true, false), history.CaptureStatus());
         var definition = Record(fixture, FlowA).ManualDefinition;
+        AssertCommitted(await history.UndoAsync(fixture.Processor));
+        Assert.Equal(600, Unassigned(fixture).ExpandedHeight);
+        AssertCommitted(await history.UndoAsync(fixture.Processor));
         AssertCommitted(await history.RedoAsync(fixture.Processor));
-        Assert.Equal(700, Unassigned(fixture).ExpandedHeight);
+        Assert.Equal(600, Unassigned(fixture).ExpandedHeight);
+        AssertCommitted(await history.RedoAsync(fixture.Processor));
+        Assert.Equal(600, Unassigned(fixture).ExpandedHeight);
         Assert.Equal(definition!.Value.AsEnumerable(), Record(fixture, FlowA).ManualDefinition!.Value.AsEnumerable());
     }
 
@@ -273,11 +278,14 @@ public sealed class StableRoutingHistoryIntegrationTests
         var fixture = await StableRoutingPreparationTests.Fixture.CreateAsync();
         await Execute(fixture, Type(fixture, FlowA, ConnectorRoutingType.Manual));
         var history = new HistoryManager(fixture.Document);
+        var original = Record(fixture, FlowA);
         var result = await history.ExecuteAsync(fixture.Processor, new CompoundDocumentCommand(
             fixture.Document.DocumentId, fixture.Document.Revision,
             [CreateNode(fixture, "compound-node"), Manual(fixture, FlowA, new PointD(285, 150))]));
         AssertCommitted(result);
         AssertCommitted(await history.UndoAsync(fixture.Processor));
+        Assert.Equal(original, Record(fixture, FlowA));
+        AssertCommitted(await history.RedoAsync(fixture.Processor));
         Assert.Equal([new PointD(285, 150)], Record(fixture, FlowA).ManualDefinition!.Value.AsEnumerable());
     }
 

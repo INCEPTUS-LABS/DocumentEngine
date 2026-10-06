@@ -5625,6 +5625,14 @@ public sealed partial class DocumentCanvasHostTests
                     "The test could not advance the document revision.");
             }
 
+            // Complete the intervening revision before returning the stale plan.
+            // A commit receipt alone does not drain its outside-gate notifications;
+            // a late revision notification can otherwise clear the tested diagnostic.
+            CommandProcessor.WaitForEventDispatchIdleAsync(AttachedDocument(session()))
+                .WaitAsync(TimeSpan.FromSeconds(10)).GetAwaiter().GetResult();
+            session().WaitForIdleAsync().AsTask()
+                .WaitAsync(TimeSpan.FromSeconds(10)).GetAwaiter().GetResult();
+
             return plan;
         }
     }

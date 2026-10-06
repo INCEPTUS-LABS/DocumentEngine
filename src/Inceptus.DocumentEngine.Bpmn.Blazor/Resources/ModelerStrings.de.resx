@@ -168,7 +168,6 @@
   <data name="RoutingType_Automatic" xml:space="preserve"><value>Automatisch</value></data>
   <data name="RoutingType_Straight" xml:space="preserve"><value>Gerade</value></data>
   <data name="RoutingType_Manual" xml:space="preserve"><value>Manuell</value></data>
-  <data name="Properties_RoutingApplyRule" xml:space="preserve"><value>Name und Linienführung getrennt übernehmen.</value></data>
   <data name="Validation_RoutingType" xml:space="preserve"><value>Wählen Sie eine unterstützte Linienführung.</value></data>
   <data name="Status_RegionHeight" xml:space="preserve"><value>Höhe</value></data>
   <data name="Status_RegionWidth" xml:space="preserve"><value>Stapelbreite</value></data>

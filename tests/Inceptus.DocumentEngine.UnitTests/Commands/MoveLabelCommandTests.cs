@@ -28,6 +28,7 @@ public sealed class MoveLabelCommandTests
             AuthoritativeDocumentComponent.VisualModel,
             command.AffectedComponents);
         Assert.Equal(visualId, command.TargetVisualStateId);
+        Assert.Equal(PipelineInvalidation.Scene, CommandPipelineInvalidation.Resolve(command));
         Assert.Equal(placement, command.TargetPlacement);
         Assert.Null(new MoveLabelCommand(
             documentId,

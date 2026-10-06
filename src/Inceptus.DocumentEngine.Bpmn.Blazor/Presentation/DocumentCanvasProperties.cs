@@ -51,6 +51,10 @@ internal sealed record DocumentCanvasContextMenuState(
     Canvas2DSpatialRegion? TargetPresentation,
     DocumentCanvasConnectorLabelContextAction? ConnectorLabelAction = null)
 {
+    // Presentation applicability belongs to this open instance. Execution still
+    // validates current authoritative state through the existing host path.
+    internal bool PropertiesAvailable { get; init; }
+
     private const double HorizontalInset = 8d;
     private const double VerticalInset = 8d;
     private const double ExpectedWidth = 240d;
@@ -648,7 +652,11 @@ internal sealed class DocumentCanvasPropertiesDraft
     internal bool IsBoundsDirty => Authoritative.CanEditBounds &&
         (!TryParseBounds(out var bounds, out _) || bounds != Authoritative.Bounds);
 
-    internal bool HasConflictingChanges =>
+    internal bool IsCombinedConnectorNameAndRoutingChange =>
+        IsRoutingTypeDirty && !IsBoundsDirty && TryGetDirtyDataField(out var dataField) &&
+        ModelerPropertyEditing.CanEditMissingValue(Authoritative.TypeId, dataField!.Definition);
+
+    internal bool HasConflictingChanges => !IsCombinedConnectorNameAndRoutingChange &&
         SemanticDirtyFieldCount + (IsBoundsDirty ? 1 : 0) + (IsRoutingTypeDirty ? 1 : 0) > 1;
 
     internal bool IsDirty => IsSemanticDirty || IsBoundsDirty || IsRoutingTypeDirty;

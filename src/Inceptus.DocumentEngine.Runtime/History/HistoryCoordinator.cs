@@ -108,7 +108,8 @@ internal sealed class HistoryCoordinator
             preparation.RedoFactory,
             preparation.RoutingTypeDeltas,
             preparation.SpatialHeightDeltas,
-            CaptureNodeGeometryDeltas(before, committed), preparation.SpatialWidthDeltas);
+            CaptureNodeGeometryDeltas(before, committed), preparation.SpatialWidthDeltas,
+            ManualRouteHistoryDelta.Capture(command, before, committed));
         var record = store.PrepareRecord(entry);
         return !record.Succeeded || preparation.Diagnostics.IsEmpty
             ? record

@@ -328,11 +328,12 @@ public sealed class PhaseA122PanSceneReuseIntegrationTests
             Assert.NotEqual(BpmnModelerTestComposition.SavedRoute(before, visual.Id), changedRoute);
         }
         else Assert.NotEqual(original, changed);
-        Assert.Equal(history + (bend ? 0 : 1), test.State.HistoryStatus.EntryCount);
+        Assert.Equal(history + 1, test.State.HistoryStatus.EntryCount);
         Assert.True((await test.Session.UndoAsync()).IsCommitted);
         await test.Session.WaitForIdleAsync();
         if (bend)
-            Assert.Equal(ConnectorRoutingType.Automatic, BpmnModelerTestComposition.SavedRoute(test.Snapshot, visual.Id).RoutingType);
+            Assert.Equal(BpmnModelerTestComposition.SavedRoute(before, visual.Id),
+                BpmnModelerTestComposition.SavedRoute(test.Snapshot, visual.Id));
         else Assert.Equal(original, test.Snapshot.VisualModel.VisualStates.Single(item => item.Id == visual.Id));
         Assert.True((await test.Session.RedoAsync()).IsCommitted);
         await test.Session.WaitForIdleAsync();
@@ -507,17 +508,27 @@ public sealed class PhaseA122PanSceneReuseIntegrationTests
         ICanvas2DScopeGeometryContributor geometry, Canvas2DScenePlacementDependency placementDependency)
         : ContributionProbe(inner, placementDependency), ICanvas2DScopeGeometryContributor
     {
-        public Canvas2DScopeGeometryBaseResult PrepareBase(Canvas2DScopeGeometryBaseContext context) =>
-            geometry.PrepareBase(context);
+        internal int BasePreparations { get; private set; }
+        internal int PresentationPreparations { get; private set; }
 
-        public Canvas2DScopeGeometryPresentationResult PreparePresentation(Canvas2DScopeGeometryPresentationContext context) =>
-            geometry.PreparePresentation(context);
+        public Canvas2DScopeGeometryBaseResult PrepareBase(Canvas2DScopeGeometryBaseContext context)
+        {
+            BasePreparations++;
+            return geometry.PrepareBase(context);
+        }
+
+        public Canvas2DScopeGeometryPresentationResult PreparePresentation(Canvas2DScopeGeometryPresentationContext context)
+        {
+            PresentationPreparations++;
+            return geometry.PreparePresentation(context);
+        }
     }
 
     internal sealed class PipelineProbe(ISessionPipelineProcessing inner) : ISessionPipelineProcessing
     {
         internal int Reuses { get; private set; }
         internal int MoveReuses { get; private set; }
+        internal int ConnectorLabelMoveReuses { get; private set; }
         internal int SelectionReuses { get; private set; }
         internal int PlacementReuses { get; private set; }
         internal int SpatialResizeReuses { get; private set; }
@@ -539,6 +550,7 @@ public sealed class PhaseA122PanSceneReuseIntegrationTests
             var started = Stopwatch.GetTimestamp();
             var result = await inner.RebuildSceneForTransientPresentationAsync(previousScene, document, artifacts, editorState, view, elements, cancellationToken);
             if (result.ReusedMoveContent) { MoveReuses++; }
+            else if (result.ReusedConnectorLabelMoveContent) { ConnectorLabelMoveReuses++; }
             else if (result.ReusedSelectionContent) { SelectionReuses++; }
             else if (result.ReusedSpatialResizeContent) { SpatialResizeReuses++; }
             else if (result.ReusedPlacementContent)

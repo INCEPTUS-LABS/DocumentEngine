@@ -27,6 +27,25 @@ internal sealed partial class EditingSessionPipeline : ISessionPipelineProcessin
         ModelProfileElementViewStateSnapshot modelProfileElementViewState,
         CancellationToken cancellationToken)
     {
+        if (previousScene.BoundedPresentation?.ConnectorLabelMove is not null)
+        {
+            var labelScene = _configuration.SceneBuilder.TryReuseForConnectorLabelMove(previousScene, document,
+                artifacts.ScopeId, modelProfileViewState, modelProfileElementViewState,
+                artifacts.ProjectedGraph, artifacts.LayoutResult, artifacts.RoutingResult, editorState, cancellationToken);
+            return labelScene is null
+                ? await RebuildSceneAsync(document, artifacts, editorState, modelProfileViewState,
+                    modelProfileElementViewState, cancellationToken).ConfigureAwait(false)
+                : EditingSessionPipelineResult.Success(artifacts, labelScene,
+                    artifacts.LayoutResult.Diagnostics.Concat(artifacts.RoutingResult.Diagnostics).Concat(labelScene.Diagnostics),
+                    reusedConnectorLabelMoveContent: true);
+        }
+        if (previousScene.BoundedPresentation is { NodeLabelResize: true })
+        {
+            var rebuilt = await RebuildSceneAsync(document, artifacts, editorState, modelProfileViewState,
+                modelProfileElementViewState, cancellationToken).ConfigureAwait(false);
+            return rebuilt.Scene is not { } current ? rebuilt : EditingSessionPipelineResult.Success(
+                rebuilt.Artifacts!, Canvas2DSceneBuilder.ReuseEqualNodeLabelResizeContent(previousScene, current), rebuilt.Diagnostics);
+        }
         if (previousScene.BoundedPresentation?.RouteBend is not null)
         {
             var routeScene = _configuration.SceneBuilder.TryReuseForRouteBend(previousScene, document,

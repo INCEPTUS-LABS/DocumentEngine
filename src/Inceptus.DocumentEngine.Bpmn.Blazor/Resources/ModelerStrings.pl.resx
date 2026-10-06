@@ -168,7 +168,6 @@
   <data name="RoutingType_Automatic" xml:space="preserve"><value>Automatyczny</value></data>
   <data name="RoutingType_Straight" xml:space="preserve"><value>Prosty</value></data>
   <data name="RoutingType_Manual" xml:space="preserve"><value>Ręczny</value></data>
-  <data name="Properties_RoutingApplyRule" xml:space="preserve"><value>Zastosuj nazwę i typ trasowania osobno.</value></data>
   <data name="Validation_RoutingType" xml:space="preserve"><value>Wybierz obsługiwany typ trasowania.</value></data>
   <data name="Status_RegionHeight" xml:space="preserve"><value>Wysokość</value></data>
   <data name="Status_RegionWidth" xml:space="preserve"><value>Szerokość układu</value></data>

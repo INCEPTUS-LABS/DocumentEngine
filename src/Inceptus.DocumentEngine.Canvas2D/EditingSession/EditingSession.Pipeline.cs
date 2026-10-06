@@ -556,7 +556,7 @@ public sealed partial class EditingSession
                      (!EditorState.CaptureSnapshot().Equals(editorState) ||
                       ((result.ReusedPanContent || result.ReusedMoveContent || result.ReusedSelectionContent ||
                         result.ReusedPlacementContent || result.ReusedSpatialResizeContent || result.ReusedNodeLabelMoveContent ||
-                        result.ReusedRouteBendContent) &&
+                        result.ReusedRouteBendContent || result.ReusedConnectorLabelMoveContent) &&
                        surfaceGeneration != _surfaceGeneration)))
             {
                 sceneToDispose = result.Scene;
@@ -681,7 +681,8 @@ public sealed partial class EditingSession
             await RenderLastKnownGoodSceneAsync(generation, staleToRender)
                 .ConfigureAwait(false);
         }
-        if (stateChanged)
+        if (stateChanged && !(operationStatus == EditingSessionOperationStatus.Succeeded &&
+            result.ReusedConnectorLabelMoveContent))
         {
             NotifyStateChanged();
         }

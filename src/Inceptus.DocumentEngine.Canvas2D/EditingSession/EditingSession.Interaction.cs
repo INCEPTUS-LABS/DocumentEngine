@@ -211,6 +211,7 @@ public sealed partial class EditingSession
         ArgumentNullException.ThrowIfNull(expectedScene);
         ArgumentNullException.ThrowIfNull(expectedEditorState);
         ArgumentNullException.ThrowIfNull(updatedEditorState);
+        var deferPreviewNotification = false;
         if (cancellationToken.IsCancellationRequested ||
             !await TryEnterCommandAsync(cancellationToken).ConfigureAwait(false))
         {
@@ -304,6 +305,8 @@ public sealed partial class EditingSession
                 // from the observed current scene are one session-critical operation. A
                 // committed event cannot interleave and leave transient state installed from
                 // a scene that has already become stale.
+                deferPreviewNotification = Canvas2DSceneBuilder.IsBoundedConnectorLabelMoveTransition(
+                    expectedScene, updatedEditorState);
                 var started = BeginRun(
                     snapshot,
                     artifacts,
@@ -320,7 +323,9 @@ public sealed partial class EditingSession
             _commandGate.Release();
         }
 
-        NotifyStateChanged();
+        // Certified steady label samples publish their completed frame once. Activation,
+        // fallback, failures, cancellation and retirement retain normal notifications.
+        if (!deferPreviewNotification) NotifyStateChanged();
         return await runTask.ConfigureAwait(false);
     }
 

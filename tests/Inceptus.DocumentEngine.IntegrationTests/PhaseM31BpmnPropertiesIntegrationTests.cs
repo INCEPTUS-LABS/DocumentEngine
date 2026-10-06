@@ -730,6 +730,7 @@ public sealed class PhaseM31BpmnPropertiesIntegrationTests
 
     internal sealed class RecordingRenderExecution : ICanvas2DRenderExecution
     {
+        internal List<Canvas2DTextMeasurementRequestData> MeasurementRequests { get; } = [];
         internal int RenderCount { get; private set; }
         internal int FullUploadCount { get; private set; }
         internal int ViewportRenderCount { get; private set; }
@@ -774,6 +775,7 @@ public sealed class PhaseM31BpmnPropertiesIntegrationTests
         public ValueTask<Canvas2DTextMeasurementInteropResult> MeasureTextAsync(
             Canvas2DTextMeasurementRequestData request)
         {
+            MeasurementRequests.Add(request);
             var width = request.Text.Sum(character => character switch
             {
                 ' ' => request.FontSize * 0.33d,

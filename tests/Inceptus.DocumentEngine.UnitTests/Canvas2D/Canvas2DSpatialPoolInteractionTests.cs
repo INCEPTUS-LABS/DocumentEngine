@@ -278,7 +278,7 @@ public sealed partial class Canvas2DSpatialPoolInteractionTests
         var bendMovement = new VectorD(0d, 34d);
         await fixture.DragAsync(Center(bend.Bounds), bendMovement);
         Assert.Equal(route[1] + bendMovement, fixture.SavedRoute(flowId).Path[1]);
-        Assert.Equal(beforeRoute.HistoryStatus.EntryCount, fixture.State.HistoryStatus.EntryCount);
+        Assert.Equal(beforeRoute.HistoryStatus.EntryCount + 2, fixture.State.HistoryStatus.EntryCount);
         Assert.Equal(initial.ActiveScopeId, fixture.State.ActiveScopeId);
         fixture.AssertReady();
     }
@@ -357,7 +357,7 @@ public sealed partial class Canvas2DSpatialPoolInteractionTests
         await fixture.DragAsync(Center(zone.Bounds), new VectorD(24d, 0d));
         Assert.True(NodeLabelVisualOverride.TryRead(fixture.Visual(gatewayVisualId).Properties, out var resized));
         Assert.Equal(moved!.Width + 24d, resized!.Width);
-        Assert.Equal(moved.Height, resized.Height);
+        Assert.Equal(Math.Max(20d, moved.Height), resized.Height);
         Assert.Equal(visualBefore.Position, fixture.Visual(gatewayVisualId).Position);
         Assert.Equal(visualBefore.Size, fixture.Visual(gatewayVisualId).Size);
         Assert.Equal(before.ActiveScopeId, fixture.State.ActiveScopeId);

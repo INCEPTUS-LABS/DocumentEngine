@@ -554,7 +554,8 @@ public sealed partial class Canvas2DSceneBuilder
         ComposePlacementLabels(editorState, placementLabelLayouts ?? [], items);
         var placementFamily = placementContributorItems.Concat(items.Skip(placementLabelStart)).ToImmutableArray();
         AssociateEditorOverlaysWithSpatialPresentation(items, editorOverlayStartIndex);
-        SuppressInstalledMovingLabel(editorState, items);
+        SuppressInstalledNodeLabelGesture(editorState, items);
+        SuppressInstalledConnectorLabelGesture(editorState, items);
         var moveOverlayItems = items.Skip(editorOverlayStartIndex)
             .Where(static item => !IsDocumentBoundaryGuide(item))
             .Concat(placementContributorItems).ToArray();

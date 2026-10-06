@@ -1281,11 +1281,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
         lock (_sync)
         {
             return !_disposed && _initialized &&
-                _contextMenu is { Kind: DocumentCanvasContextMenuKind.Element } context &&
-                _session is { } session && _propertiesSchemaCatalog is { } catalog &&
-                TryCaptureSelectedProperties(session, context.TargetVisualStateId,
-                    context.TargetSemanticElementId, requireReady: true, catalog, out _,
-                    context.TargetSceneObjectId, context.TargetPresentation?.Id);
+                _contextMenu is { Kind: DocumentCanvasContextMenuKind.Element, PropertiesAvailable: true };
         }
     }
 
@@ -1471,7 +1467,8 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
             var dataChanged = draft.TryGetDirtyDataField(out var changedDataField);
             var boundsChanged = current.CanEditBounds && targetBounds != current.Bounds;
             var routingChanged = current.CanEditRoutingType && draft.IsRoutingTypeDirty;
-            if ((dataChanged ? 1 : 0) + (boundsChanged ? 1 : 0) + (routingChanged ? 1 : 0) > 1)
+            if ((dataChanged ? 1 : 0) + (boundsChanged ? 1 : 0) + (routingChanged ? 1 : 0) > 1 &&
+                !draft.IsCombinedConnectorNameAndRoutingChange)
             {
                 return new DocumentCanvasPropertiesApplyResult(
                     DocumentCanvasPropertiesApplyStatus.ValidationFailed,
@@ -1496,7 +1493,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
 
             ICommand command;
             HistoryOperationResult result;
-            if (routingChanged)
+            if (routingChanged && !dataChanged)
             {
                 if (!draft.TryParseRoutingType(out var routingType) || current.VisualStateId is null)
                     return CreateApplyFailure(DocumentCanvasPropertiesApplyStatus.ValidationFailed,
@@ -1559,6 +1556,17 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                         visualStateId,
                         targetBounds,
                         VisualPlacementMode.Pinned);
+            }
+            if (dataChanged && routingChanged)
+            {
+                if (!draft.TryParseRoutingType(out var routingType) || current.VisualStateId is null)
+                    return CreateApplyFailure(DocumentCanvasPropertiesApplyStatus.ValidationFailed,
+                        PropertiesApplyUnavailable, "Select a supported routing type.");
+                // Child handlers prepare Name, then routing intent, against one base
+                // revision. The Command Processor installs and records the whole edit once.
+                command = new CompoundDocumentCommand(current.DocumentId, current.Revision,
+                    [command, new SetConnectorRoutingTypeCommand(current.DocumentId, current.Revision,
+                        current.VisualStateId, routingType)]);
             }
             if (current.SourceScene is null ||
                 current.SessionGeneration is not { } currentGeneration ||
@@ -3023,6 +3031,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                                 contextMenu.SemanticViewActions,
                                 contextMenu.SemanticCommandActions,
                                 contextMenu.TargetPresentation);
+                    _contextMenu = _contextMenu with { PropertiesAvailable = contextMenu.PropertiesAvailable };
                 }
 
                 _surfaceRenderPending = true;
@@ -3678,6 +3687,17 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                                 _semanticSceneCommandActionCatalog,
                                 _documentCreationIdentityProvider)
                             : null;
+                        if (contextMenu is { Kind: DocumentCanvasContextMenuKind.Element } &&
+                            _propertiesSchemaCatalog is { } catalog)
+                        {
+                            contextMenu = contextMenu with
+                            {
+                                PropertiesAvailable = TryCaptureSelectedProperties(
+                                    session, contextMenu.TargetVisualStateId,
+                                    contextMenu.TargetSemanticElementId, requireReady: true, catalog, out _,
+                                    contextMenu.TargetSceneObjectId, contextMenu.TargetPresentation?.Id),
+                            };
+                        }
                         notify |= !Equals(_contextMenu, contextMenu);
                         _contextMenu = contextMenu;
                     }

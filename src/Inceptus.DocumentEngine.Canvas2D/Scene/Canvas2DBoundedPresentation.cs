@@ -26,7 +26,9 @@ internal sealed record Canvas2DBoundedPresentation(
     ImmutableArray<Canvas2DPlacementLabelLayout> PlacementLabelLayouts = default,
     ImmutableArray<Canvas2DSceneItem> PlacementItems = default,
     Canvas2DMeasuredNodeLabel? NodeLabelMove = null,
-    Canvas2DBoundedRouteBend? RouteBend = null)
+    Canvas2DBoundedRouteBend? RouteBend = null,
+    bool NodeLabelResize = false,
+    Canvas2DBoundedConnectorLabelMove? ConnectorLabelMove = null)
 {
     internal const int MaximumItems = 128;
 }

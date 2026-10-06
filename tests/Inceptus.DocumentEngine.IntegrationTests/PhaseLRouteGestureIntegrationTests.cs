@@ -29,7 +29,7 @@ namespace Inceptus.DocumentEngine.IntegrationTests;
 public sealed class PhaseLRouteGestureIntegrationTests
 {
     [Fact]
-    public async Task SavedManualBendCommitsOncePreservesBothHistoryBranchesAndUsesCurrentEndpoints()
+    public async Task SavedManualBendCommitsOnceTruncatesRedoAndUsesCurrentEndpoints()
     {
         var context = await AttachPreparedAsync();
         await using var session = context.Session;
@@ -77,17 +77,16 @@ public sealed class PhaseLRouteGestureIntegrationTests
         await WaitForCommittedEventAndSessionIdleAsync(document, session);
         Assert.Equal(Canvas2DInteractionStatus.Committed, released.Status);
         Assert.Equal(before.Revision.Value + 1, document.Revision.Value);
-        Assert.Equal(branches, session.CaptureState().HistoryStatus);
+        Assert.Equal(new HistoryStatus(branches.EntryCount, true, false), session.CaptureState().HistoryStatus);
         Assert.Single(context.Events.Events);
         AssertRouteEqual([current.Path[0], endpoint, current.Path[^1]], SavedRoute(document).Path);
         Assert.Empty(FindRouteVisual(document.CaptureSnapshot()).Route);
         AssertRelationshipUnchanged(Assert.Single(before.SemanticModel.Relationships), document.CaptureSnapshot());
 
-        Assert.True((await session.RedoAsync()).IsCommitted);
-        await WaitForCommittedEventAndSessionIdleAsync(document, session);
-        AssertRouteEqual([endpoint], SavedRoute(document).ManualDefinition!.Value);
-        AssertPointEqual(new PointD(240, 140), SavedRoute(document).Path[0]);
         Assert.True((await session.UndoAsync()).IsCommitted);
+        await WaitForCommittedEventAndSessionIdleAsync(document, session);
+        Assert.Equal(current, SavedRoute(document));
+        Assert.True((await session.RedoAsync()).IsCommitted);
         await WaitForCommittedEventAndSessionIdleAsync(document, session);
         AssertRouteEqual([endpoint], SavedRoute(document).ManualDefinition!.Value);
         AssertPointEqual(current.Path[0], SavedRoute(document).Path[0]);

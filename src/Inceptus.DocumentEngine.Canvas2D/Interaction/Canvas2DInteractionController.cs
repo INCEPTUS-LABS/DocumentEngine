@@ -1272,12 +1272,10 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
                         gesture.OriginalBounds,
                         gesture.CurrentDocumentPoint - gesture.StartDocumentPoint,
                         gesture.ResizeDirection)
-                    : Canvas2DResizeGeometry.CalculateBounds(
+                    : Canvas2DNodeLabelResizeGeometry.CalculateBounds(
                         gesture.OriginalBounds,
                         gesture.CurrentDocumentPoint - gesture.StartDocumentPoint,
-                        gesture.ResizeDirection,
-                        NodeLabelVisualOverride.MinimumWidth,
-                        NodeLabelVisualOverride.MinimumHeight);
+                        gesture.ResizeDirection);
                 if (finalBounds == previousBounds)
                 {
                     return new Canvas2DInteractionResult(
@@ -4574,12 +4572,10 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
                     finalBounds = gesture.NodeLabelOperation ==
                         Canvas2DNodeLabelGestureOperation.Move
                             ? gesture.OriginalBounds.Translate(delta)
-                            : Canvas2DResizeGeometry.CalculateBounds(
+                            : Canvas2DNodeLabelResizeGeometry.CalculateBounds(
                                 gesture.OriginalBounds,
                                 delta,
-                                gesture.ResizeDirection,
-                                NodeLabelVisualOverride.MinimumWidth,
-                                NodeLabelVisualOverride.MinimumHeight);
+                                gesture.ResizeDirection);
                     ValidateNodeLabelPreview(scene, gesture);
                     var labelCenter = new PointD(
                         finalBounds.Left + (finalBounds.Width / 2d),

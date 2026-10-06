@@ -41,7 +41,7 @@ public sealed class MoveLabelCommand :
         AuthoritativeDocumentComponent.VisualModel;
 
     PipelineInvalidation ICommandPipelineInvalidation.PipelineInvalidation =>
-        CommandPipelineInvalidation.ConnectorOnly;
+        PipelineInvalidation.Scene;
 
     public VisualStateId TargetVisualStateId { get; }
 

@@ -471,7 +471,7 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
             Assert.True(result.Status == Canvas2DInteractionStatus.Committed, Diagnostics(result.Diagnostics));
             await WaitForReadyAsync(Session);
             Assert.Equal(state.DocumentRevision.Increment(), State.DocumentRevision);
-            Assert.Equal(state.HistoryStatus.EntryCount, State.HistoryStatus.EntryCount);
+            Assert.Equal(state.HistoryStatus.EntryCount + 1, State.HistoryStatus.EntryCount);
             Assert.Empty(VisibilityGraphics(State.CurrentScene!));
         }
 

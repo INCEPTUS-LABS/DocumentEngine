@@ -1,4 +1,5 @@
 using Inceptus.DocumentEngine.Bpmn.Blazor.Presentation;
+using Inceptus.DocumentEngine.Bpmn.Semantics;
 using Inceptus.DocumentEngine.Contracts.Geometry;
 using Inceptus.DocumentEngine.Contracts.Primitives;
 using Inceptus.DocumentEngine.Contracts.Properties;
@@ -41,7 +42,7 @@ public sealed class DocumentCanvasRoutingPropertiesTests
     }
 
     [Fact]
-    public void ModeAndNameUseSeparateApplyTransactions()
+    public void ModeAndNameCanShareApplyWithoutAllowingOtherFieldGroups()
     {
         var draft = new DocumentCanvasPropertiesDraft(Snapshot(ConnectorRoutingType.Automatic))
         {
@@ -51,12 +52,31 @@ public sealed class DocumentCanvasRoutingPropertiesTests
         Assert.True(draft.IsValid);
         Assert.False(draft.HasConflictingChanges);
         draft.DataFields[0].EditorValue = "Changed name";
-        Assert.True(draft.HasConflictingChanges);
-        Assert.False(draft.IsValid);
+        Assert.False(draft.HasConflictingChanges);
+        Assert.True(draft.IsValid);
+        Assert.True(draft.IsCombinedConnectorNameAndRoutingChange);
         draft.RoutingTypeValue = "automatic";
         Assert.True(draft.IsValid);
         Assert.True(draft.IsSemanticDirty);
         Assert.False(draft.IsRoutingTypeDirty);
+    }
+
+    [Fact]
+    public void RoutingPlusAnotherDataFieldStillRequiresSeparateApply()
+    {
+        var original = Snapshot(ConnectorRoutingType.Automatic);
+        var description = new DocumentCanvasDataPropertySnapshot(
+            new ElementPropertyFieldDefinition(new ElementPropertyFieldId("description"), "Description", "description",
+                ElementPropertyEditorKind.MultilineText, SemanticPropertyMutationKind.Property, true, 1),
+            PropertyValue.FromText("Before"), "Before", true);
+        var draft = new DocumentCanvasPropertiesDraft(original with { DataFields = [.. original.DataFields, description] })
+        { RoutingTypeValue = "manual" };
+        draft.DataFields[1].EditorValue = "After";
+        Assert.True(draft.HasConflictingChanges);
+        Assert.False(draft.IsValid);
+        draft.DataFields[0].EditorValue = "New name";
+        Assert.True(draft.HasConflictingChanges);
+        Assert.False(draft.IsValid);
     }
 
     [Fact]
@@ -70,10 +90,10 @@ public sealed class DocumentCanvasRoutingPropertiesTests
 
     private static DocumentCanvasPropertySnapshot Snapshot(ConnectorRoutingType? routingType) =>
         new(new DocumentId("test:routing-properties"), new DocumentRevision(4), new VisualStateId("flow:visual"),
-            new SemanticElementId("flow"), new SemanticTypeId("test:flow"),
+            new SemanticElementId("flow"), BpmnSemanticTypes.SequenceFlow,
             [new DocumentCanvasDataPropertySnapshot(
-                new ElementPropertyFieldDefinition(new ElementPropertyFieldId("name"), "Name", "name",
-                    ElementPropertyEditorKind.SingleLineText, SemanticPropertyMutationKind.Name, true, 0),
+                new ElementPropertyFieldDefinition(new ElementPropertyFieldId("name"), "Name", BpmnSemanticProperties.Name,
+                    ElementPropertyEditorKind.SingleLineText, SemanticPropertyMutationKind.Property, true, 0),
                 PropertyValue.FromText("Flow"), "Flow", true)],
             VisualPlacementMode.Automatic, new RectD(0, 0, 0, 0), true,
             new SemanticElementId("source"), new SemanticElementId("target"), ConnectorLabelPlacement.Default,

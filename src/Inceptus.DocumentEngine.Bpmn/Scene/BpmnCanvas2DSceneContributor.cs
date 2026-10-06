@@ -52,6 +52,7 @@ public sealed class BpmnCanvas2DSceneContributor : ICanvas2DSceneContributor, IC
         Canvas2DSceneTransientDependency.Invariant, Canvas2DScenePlacementDependency.Invariant,
         Canvas2DSceneTransientDependency.Invariant,
         Canvas2DSceneTransientDependency.Invariant,
+        Canvas2DSceneTransientDependency.Invariant,
         Canvas2DSceneTransientDependency.Invariant);
 
     private static readonly Canvas2DSceneContributorDescriptor PlacementDescriptor = new(
@@ -59,6 +60,7 @@ public sealed class BpmnCanvas2DSceneContributor : ICanvas2DSceneContributor, IC
         Canvas2DScenePanDependency.Invariant, Canvas2DSceneMoveGestureDependency.Invariant,
         Canvas2DSceneTransientDependency.Invariant, Canvas2DSceneTransientDependency.Invariant,
         Canvas2DScenePlacementDependency.BoundedFeedbackOnly,
+        Canvas2DSceneTransientDependency.Invariant,
         Canvas2DSceneTransientDependency.Invariant,
         Canvas2DSceneTransientDependency.Invariant,
         Canvas2DSceneTransientDependency.Invariant);

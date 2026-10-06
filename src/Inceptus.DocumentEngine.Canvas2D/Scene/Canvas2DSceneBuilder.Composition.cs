@@ -592,6 +592,8 @@ public sealed partial class Canvas2DSceneBuilder
             {
                 var hoverItems = items.ToArray();
                 hovered = ResolveConnectorHoverTarget(hovered, hoverItems);
+                hovered = ResolveNodeLabelHoverTarget(hovered, itemsById);
+                hovered = ResolveConnectorLabelHoverPreview(hovered, editorState.ActiveGesture);
                 if (!IsResizeInteractionRegion(hovered))
                 {
                     items.AddRange(CreateTargetOverlays(
@@ -1036,6 +1038,30 @@ public sealed partial class Canvas2DSceneBuilder
         Canvas2DSceneLayer.Background => 4,
         _ => 5,
     };
+
+    private static Canvas2DSceneItem ResolveNodeLabelHoverTarget(
+        Canvas2DSceneItem hovered,
+        Dictionary<SceneObjectId, Canvas2DSceneItem> itemsById)
+    {
+        // A label's invisible resize zones share its boundary feedback, while
+        // retaining their own hit identity for cursor and gesture resolution.
+        if (IsResizeInteractionRegion(hovered) &&
+            TryGetTextMetadata(hovered, EditorKindKey, out var kind) &&
+            StringComparer.Ordinal.Equals(kind, Canvas2DNodeLabelGestureMetadata.ResizeZoneKind) &&
+            TryGetTextMetadata(hovered, Canvas2DNodeLabelGestureMetadata.TargetLabelSceneObjectId, out var labelId) &&
+            itemsById.TryGetValue(new SceneObjectId(labelId), out var label) &&
+            label.Layer == Canvas2DSceneLayer.Label &&
+            (label.Origin.Categories & Canvas2DSceneOriginCategory.EditorState) == 0 &&
+            HasBooleanMetadata(label, Canvas2DNodeLabelGestureMetadata.InteractionCapable) &&
+            label.Origin.VisualStateId == hovered.Origin.VisualStateId &&
+            label.Origin.ProjectedObjectId == hovered.Origin.ProjectedObjectId &&
+            hovered.Origin.RelatedSceneObjectIds.Contains(label.Id))
+        {
+            return label;
+        }
+
+        return hovered;
+    }
 
     private static bool IsResizeInteractionRegion(Canvas2DSceneItem item)
     {

@@ -1414,7 +1414,7 @@ public sealed class PhaseL5ContextPropertiesIntegrationTests
             committed.HistoryStatus.EntryCount);
         Assert.Equal(MoveLabelCommand.KnownTypeId,
             harness.Events.Events.Last().CommandTypeId);
-        AssertOnePipelineWithoutLayout(
+        AssertSceneOnlyChange(
             beforeReleaseCounters,
             harness.CaptureCounters());
         AssertSelection(session, BetaGammaConnectorId);
@@ -1442,7 +1442,7 @@ public sealed class PhaseL5ContextPropertiesIntegrationTests
             DocumentTextAnchor(Assert.Single(LabelLines(
                 CurrentScene(session),
                 BetaGammaConnectorId))));
-        AssertOnePipelineWithoutLayout(placementCounters, harness.CaptureCounters());
+        AssertSceneOnlyChange(placementCounters, harness.CaptureCounters());
 
         var undoCounters = harness.CaptureCounters();
         await harness.Host.RedoAsync();
@@ -1454,7 +1454,7 @@ public sealed class PhaseL5ContextPropertiesIntegrationTests
             DocumentTextAnchor(Assert.Single(LabelLines(
                 CurrentScene(session),
                 BetaGammaConnectorId))));
-        AssertOnePipelineWithoutLayout(undoCounters, harness.CaptureCounters());
+        AssertSceneOnlyChange(undoCounters, harness.CaptureCounters());
 
         var beforeNodeMoveAnchor = DocumentTextAnchor(Assert.Single(LabelLines(
             CurrentScene(session),

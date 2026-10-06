@@ -189,7 +189,7 @@ public sealed class PhaseN42ObstacleAwareRoutingIntegrationTests
     }
 
     [Fact]
-    public async Task ManualModeCapturesCompleteAutomaticPathAndPointEditsPreserveHistory()
+    public async Task ManualModeCapturesCompleteAutomaticPathAndPointEditsUseGlobalHistory()
     {
         await using var harness = await PhaseM31BpmnPropertiesIntegrationTests.HostHarness.CreateAsync();
         await using var interaction = new Canvas2DInteractionController(harness.Session);
@@ -220,7 +220,7 @@ public sealed class PhaseN42ObstacleAwareRoutingIntegrationTests
         _ = await AddRoutePointThroughHostAsync(harness, secondPoint);
         var secondRoute = SavedRecord(document.CaptureSnapshot(), visualId).Path;
         Assert.Equal(automaticPath.Length + 2, secondRoute.Length);
-        Assert.Equal(1, harness.State.HistoryStatus.EntryCount);
+        Assert.Equal(3, harness.State.HistoryStatus.EntryCount);
         var movedPoint = secondPoint + new VectorD(0, 30);
         var handle = Assert.Single(RouteBendHandles(harness.Scene, visualId), item => Center(item.Bounds) == secondPoint);
         const long pointerId = 42001;
@@ -233,14 +233,14 @@ public sealed class PhaseN42ObstacleAwareRoutingIntegrationTests
         await harness.Session.WaitForIdleAsync();
         var movedRoute = SavedRecord(document.CaptureSnapshot(), visualId).Path;
         Assert.Equal(secondRoute.Select(point => point == secondPoint ? movedPoint : point), movedRoute);
-        Assert.Equal(1, harness.State.HistoryStatus.EntryCount);
+        Assert.Equal(4, harness.State.HistoryStatus.EntryCount);
         var movedHandle = Assert.Single(RouteBendHandles(harness.Scene, visualId), item => Center(item.Bounds) == movedPoint);
         await harness.Pointer.ContextMenuDocumentPointAsync(harness.Scene, Center(movedHandle.Bounds));
         Assert.Equal(Canvas2DConnectorRouteContextActionKind.DeletePoint, harness.Host.CaptureState().ContextMenu?.ConnectorRouteAction?.Kind);
         Assert.True((await harness.Host.ExecuteConnectorRouteContextActionAsync())?.IsCommitted);
         await harness.Session.WaitForIdleAsync();
         Assert.Equal(firstRoute.AsEnumerable(), SavedRecord(document.CaptureSnapshot(), visualId).Path);
-        Assert.Equal(1, harness.State.HistoryStatus.EntryCount);
+        Assert.Equal(5, harness.State.HistoryStatus.EntryCount);
         Assert.True((await harness.Session.ExecuteAsync(new SetConnectorRoutingTypeCommand(
             document.DocumentId, document.Revision, visualId, ConnectorRoutingType.Straight))).IsCommitted);
         await harness.Session.WaitForIdleAsync();
@@ -256,12 +256,12 @@ public sealed class PhaseN42ObstacleAwareRoutingIntegrationTests
         Assert.Empty(reset.ManualDefinition!.Value);
         Assert.Equal(new[] { automaticPath[0], automaticPath[^1] }, reset.Path.AsEnumerable());
         Assert.Empty(RouteBendHandles(harness.Scene, visualId));
-        Assert.Equal(2, harness.State.HistoryStatus.EntryCount);
-        Assert.True(harness.State.HistoryStatus.CanRedo);
-        Assert.True((await harness.Session.RedoAsync()).IsCommitted);
-        await harness.Session.WaitForIdleAsync();
-        Assert.Equal(ConnectorRoutingType.Straight, SavedRecord(document.CaptureSnapshot(), visualId).RoutingType);
+        Assert.Equal(6, harness.State.HistoryStatus.EntryCount);
+        Assert.False(harness.State.HistoryStatus.CanRedo);
         Assert.True((await harness.Session.UndoAsync()).IsCommitted);
+        await harness.Session.WaitForIdleAsync();
+        Assert.Equal(firstRoute.AsEnumerable(), SavedRecord(document.CaptureSnapshot(), visualId).Path);
+        Assert.True((await harness.Session.RedoAsync()).IsCommitted);
         await harness.Session.WaitForIdleAsync();
         Assert.Equal(reset, SavedRecord(document.CaptureSnapshot(), visualId));
         Assert.Empty(Visual(document.CaptureSnapshot(), visualId).Route);
@@ -286,7 +286,7 @@ public sealed class PhaseN42ObstacleAwareRoutingIntegrationTests
         await harness.Session.WaitForIdleAsync();
         Assert.Equal(original, SavedRecord(document.CaptureSnapshot(), visualId));
         Assert.Equal(original.Path.AsEnumerable(), Route(harness.State, flowId).Path);
-        Assert.Equal(2, harness.State.HistoryStatus.EntryCount);
+        Assert.Equal(3, harness.State.HistoryStatus.EntryCount);
         Assert.True((await harness.Session.UndoAsync()).IsCommitted);
         await harness.Session.WaitForIdleAsync();
         Assert.Equal(prepare.Position, Visual(document.CaptureSnapshot(), prepare.Id).Position);
@@ -308,7 +308,7 @@ public sealed class PhaseN42ObstacleAwareRoutingIntegrationTests
         Assert.Equal(original.Path[^1], reconnected.Path[^1]);
         Assert.Equal(BpmnDemoPipeline.RejectedTaskReconnectSourceAnchorId, Visual(document.CaptureSnapshot(), visualId).SourceAnchorId);
         Assert.Equal(beforeReconnect.TargetAnchorId, Visual(document.CaptureSnapshot(), visualId).TargetAnchorId);
-        Assert.Equal(3, harness.State.HistoryStatus.EntryCount);
+        Assert.Equal(4, harness.State.HistoryStatus.EntryCount);
         Assert.True((await harness.Session.UndoAsync()).IsCommitted);
         await harness.Session.WaitForIdleAsync();
         Assert.Equal(original, SavedRecord(document.CaptureSnapshot(), visualId));
@@ -898,7 +898,7 @@ public sealed class PhaseN42ObstacleAwareRoutingIntegrationTests
     }
 
     [Fact]
-    public async Task ExplicitManualModePreservesExactDefinitionAndResetStaysOutsideHistory()
+    public async Task ExplicitManualModeAndResetEachReplayTheirExactDefinition()
     {
         await using var harness = await PhaseM31BpmnPropertiesIntegrationTests.HostHarness.CreateAsync();
         var document = harness.Composition.Document;
@@ -926,7 +926,7 @@ public sealed class PhaseN42ObstacleAwareRoutingIntegrationTests
         Assert.Equal(authored, Route(harness.State, flowId).Path.AsEnumerable());
         Assert.Empty(Visual(document.CaptureSnapshot(), visualId).Route);
         AssertSemanticModelEqual(initialSnapshot, document.CaptureSnapshot());
-        Assert.Equal(1, harness.State.HistoryStatus.EntryCount);
+        Assert.Equal(2, harness.State.HistoryStatus.EntryCount);
         var beforeInvalid = document.CaptureSnapshot();
         var invalid = await harness.Session.ExecuteAsync(new UpdateConnectionRouteCommand(
             document.DocumentId, document.Revision, visualId, [initialPath[0], new PointD(-1, 194), initialPath[^1]]));
@@ -940,15 +940,27 @@ public sealed class PhaseN42ObstacleAwareRoutingIntegrationTests
         Assert.Equal(ConnectorRoutingType.Manual, reset.RoutingType);
         Assert.Empty(reset.ManualDefinition!.Value);
         Assert.Equal(new[] { initialPath[0], initialPath[^1] }, reset.Path.AsEnumerable());
-        Assert.Equal(1, harness.State.HistoryStatus.EntryCount);
+        Assert.Equal(3, harness.State.HistoryStatus.EntryCount);
+        Assert.True((await harness.Session.UndoAsync()).IsCommitted);
+        await harness.Session.WaitForIdleAsync();
+        Assert.Equal(manual, SavedRecord(document.CaptureSnapshot(), visualId));
+        Assert.True((await harness.Session.UndoAsync()).IsCommitted);
+        await harness.Session.WaitForIdleAsync();
+        Assert.Equal(captured, SavedRecord(document.CaptureSnapshot(), visualId));
         Assert.True((await harness.Session.UndoAsync()).IsCommitted);
         await harness.Session.WaitForIdleAsync();
         var automatic = SavedRecord(document.CaptureSnapshot(), visualId);
         Assert.Equal(ConnectorRoutingType.Automatic, automatic.RoutingType);
         Assert.Equal(initialPath.AsEnumerable(), automatic.Path);
-        Assert.Empty(automatic.ManualDefinition!.Value);
+        Assert.Equal(captured.ManualDefinition!.Value.AsEnumerable(), automatic.ManualDefinition!.Value);
         Assert.False(harness.State.HistoryStatus.CanUndo);
         Assert.True(harness.State.HistoryStatus.CanRedo);
+        Assert.True((await harness.Session.RedoAsync()).IsCommitted);
+        await harness.Session.WaitForIdleAsync();
+        Assert.Equal(captured, SavedRecord(document.CaptureSnapshot(), visualId));
+        Assert.True((await harness.Session.RedoAsync()).IsCommitted);
+        await harness.Session.WaitForIdleAsync();
+        Assert.Equal(manual, SavedRecord(document.CaptureSnapshot(), visualId));
         Assert.True((await harness.Session.RedoAsync()).IsCommitted);
         await harness.Session.WaitForIdleAsync();
         Assert.Equal(reset, SavedRecord(document.CaptureSnapshot(), visualId));

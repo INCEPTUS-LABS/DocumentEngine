@@ -3623,12 +3623,10 @@ public sealed class Canvas2DInteractionControllerTests
         var start = Center(zone.Bounds);
         var delta = new VectorD(65d, 0d);
         var end = start + delta;
-        var expectedBounds = Canvas2DResizeGeometry.CalculateBounds(
+        var expectedBounds = Canvas2DNodeLabelResizeGeometry.CalculateBounds(
             labelBody.Bounds,
             delta,
-            Canvas2DResizeDirection.West,
-            NodeLabelVisualOverride.MinimumWidth,
-            NodeLabelVisualOverride.MinimumHeight);
+            Canvas2DResizeDirection.West);
 
         var pressed = await controller.PointerPressedAsync(
             new Canvas2DPointerInput(702, start, buttons: 1));
@@ -3696,12 +3694,10 @@ public sealed class Canvas2DInteractionControllerTests
         var moved = await controller.PointerMovedAsync(
             new Canvas2DPointerInput(707, outside, buttons: 1));
 
-        var expected = Canvas2DResizeGeometry.CalculateBounds(
+        var expected = Canvas2DNodeLabelResizeGeometry.CalculateBounds(
             initialBounds,
             new PointD(0d, 0d) - start,
-            Canvas2DResizeDirection.NorthWest,
-            NodeLabelVisualOverride.MinimumWidth,
-            NodeLabelVisualOverride.MinimumHeight);
+            Canvas2DResizeDirection.NorthWest);
         Assert.Equal(expected, FindNodeLabelPreview(moved.SessionState.CurrentScene!).Bounds);
         Assert.Equal(0d, expected.Left);
         Assert.Equal(0d, expected.Top);
@@ -3751,7 +3747,7 @@ public sealed class Canvas2DInteractionControllerTests
     }
 
     [Fact]
-    public async Task EditableNodeLabelHoverUsesGrabAndResizeZoneUsesCursorWithoutOverlay()
+    public async Task EditableNodeLabelResizeZoneRetainsLabelBoundaryAndItsOwnCursorWithoutZoneOutline()
     {
         var inputs = CreateEditableNodeLabelInputs();
         var selected = new EditorStateSnapshot(selection: [VisualId(inputs, 0)]);
@@ -3767,6 +3763,12 @@ public sealed class Canvas2DInteractionControllerTests
         var zoneHover = await controller.PointerMovedAsync(Center(zone.Bounds));
 
         Assert.Equal("ew-resize", zoneHover.CssCursor);
+        Assert.Equal(zone.Id, zoneHover.SessionState.EditorState.HoveredObjectId);
+        var boundary = Assert.Single(zoneHover.SessionState.CurrentScene!.Items, item =>
+            item.Origin.StableSourceKey == $"hover:{body.Id.Value}");
+        Assert.True(boundary.IsVisible);
+        Assert.Equal(body.Bounds, boundary.Bounds);
+        Assert.Equal(Canvas2DHitTestMode.None, boundary.HitTestPolicy.Mode);
         Assert.DoesNotContain(zoneHover.SessionState.CurrentScene!.Items, item =>
             item.Origin.StableSourceKey?.Contains("hover", StringComparison.Ordinal) == true &&
             item.Origin.RelatedSceneObjectIds.Contains(zone.Id));

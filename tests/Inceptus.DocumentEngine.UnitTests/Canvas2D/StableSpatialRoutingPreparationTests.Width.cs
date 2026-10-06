@@ -14,7 +14,7 @@ public sealed partial class StableSpatialRoutingPreparationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task SpatialEdgeResizeHistoryRestoresOnlyItsDimensionAndKeepsLaterManualPoints(bool width)
+    public async Task SpatialEdgeResizeHistoryRestoresOnlyItsDimensionAndKeepsExternalManualPoints(bool width)
     {
         var fixture = await CreateSpatialFixtureAsync();
         var document = fixture.Document;
@@ -32,8 +32,9 @@ public sealed partial class StableSpatialRoutingPreparationTests
         var current = document.CaptureSnapshot().VisualModel.RoutingScopes!.Value.Single();
         var route = current.Connectors.Single(value => value.VisualStateId == connectorId);
         PointD[] path = [route.Path[0], new PointD(1500, 40), new PointD(1500, 1000), route.Path[^1]];
-        Assert.True((await history.ExecuteAsync(fixture.Processor, new UpdateConnectionRouteCommand(
-            document.DocumentId, document.Revision, connectorId, path))).Succeeded);
+        // A core edit outside the session is not owned by the earlier resize entry.
+        Assert.True((await fixture.Processor.ExecuteAsync(document, new UpdateConnectionRouteCommand(
+            document.DocumentId, document.Revision, connectorId, path))).IsCommitted);
         var manual = document.CaptureSnapshot().VisualModel.RoutingScopes!.Value.Single();
         Assert.True((await history.UndoAsync(fixture.Processor)).Succeeded);
         var undone = document.CaptureSnapshot().VisualModel.RoutingScopes!.Value.Single();

@@ -168,7 +168,6 @@
   <data name="RoutingType_Automatic" xml:space="preserve"><value>Automático</value></data>
   <data name="RoutingType_Straight" xml:space="preserve"><value>Recto</value></data>
   <data name="RoutingType_Manual" xml:space="preserve"><value>Manual</value></data>
-  <data name="Properties_RoutingApplyRule" xml:space="preserve"><value>Aplique el nombre y el tipo de trazado por separado.</value></data>
   <data name="Validation_RoutingType" xml:space="preserve"><value>Seleccione un tipo de trazado admitido.</value></data>
   <data name="Status_RegionHeight" xml:space="preserve"><value>Altura</value></data>
   <data name="Status_RegionWidth" xml:space="preserve"><value>Ancho del conjunto</value></data>

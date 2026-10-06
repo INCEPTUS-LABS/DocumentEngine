@@ -5,6 +5,7 @@ using Inceptus.DocumentEngine.Contracts.Documents;
 using Inceptus.DocumentEngine.Contracts.Geometry;
 using Inceptus.DocumentEngine.Contracts.History;
 using Inceptus.DocumentEngine.Contracts.Primitives;
+using Inceptus.DocumentEngine.Contracts.Routing;
 
 namespace Inceptus.DocumentEngine.Runtime.History;
 
@@ -21,11 +22,6 @@ internal sealed class UpdateConnectionRouteHistoryPolicy : ICommandHistoryPolicy
         ArgumentNullException.ThrowIfNull(command);
         ArgumentNullException.ThrowIfNull(before);
         ArgumentNullException.ThrowIfNull(committed);
-
-        if (before.VisualModel.RoutingScopes is not null)
-        {
-            return CommandHistoryPreparationResult.PreserveExistingHistory();
-        }
 
         if (command is not UpdateConnectionRouteCommand update ||
             !before.VisualModel.TryGetVisualState(update.TargetVisualStateId, out var oldState) ||
@@ -45,6 +41,23 @@ internal sealed class UpdateConnectionRouteHistoryPolicy : ICommandHistoryPolicy
             ]);
         }
 
+        if (before.VisualModel.RoutingScopes is not null)
+        {
+            var oldRoute = SetConnectorRoutingTypeHistoryPolicy.Find(before, update.TargetVisualStateId);
+            var newRoute = SetConnectorRoutingTypeHistoryPolicy.Find(committed, update.TargetVisualStateId);
+            // Automatic recalculation owns no authored points. Manual edits, including a
+            // reset to an empty definition, use the same global chronological History.
+            if (oldRoute?.RoutingType != ConnectorRoutingType.Manual ||
+                newRoute?.RoutingType != ConnectorRoutingType.Manual ||
+                oldRoute.ManualDefinition!.Value.AsSpan().SequenceEqual(newRoute.ManualDefinition!.Value.AsSpan()))
+                return CommandHistoryPreparationResult.PreserveExistingHistory();
+
+            var operation = Classify(oldRoute.ManualDefinition.Value.Length, newRoute.ManualDefinition.Value.Length);
+            return CommandHistoryPreparationResult.Undoable(
+                new UpdateConnectionRouteHistoryCommandFactory(update.TargetVisualStateId, oldRoute.Path, operation),
+                new UpdateConnectionRouteHistoryCommandFactory(update.TargetVisualStateId, newRoute.Path, operation));
+        }
+
         return CommandHistoryPreparationResult.Undoable(
             new UpdateConnectionRouteHistoryCommandFactory(
                 update.TargetVisualStateId,
@@ -53,6 +66,20 @@ internal sealed class UpdateConnectionRouteHistoryPolicy : ICommandHistoryPolicy
                 update.TargetVisualStateId,
                 newState.Route));
     }
+
+    private static ConnectorRoutingHistoryOperation Classify(int beforeCount, int afterCount) =>
+        afterCount > beforeCount ? ConnectorRoutingHistoryOperation.AddManualRoutePoint :
+        afterCount < beforeCount ? ConnectorRoutingHistoryOperation.RemoveManualRoutePoint :
+        ConnectorRoutingHistoryOperation.MoveManualRoutePoint;
+}
+
+/// <summary>Logical user intent retained only in the session's existing History entries.</summary>
+internal enum ConnectorRoutingHistoryOperation
+{
+    ChangeRoutingMode,
+    AddManualRoutePoint,
+    MoveManualRoutePoint,
+    RemoveManualRoutePoint,
 }
 
 internal sealed class UpdateConnectionRouteHistoryCommandFactory : IHistoryCommandFactory
@@ -62,7 +89,8 @@ internal sealed class UpdateConnectionRouteHistoryCommandFactory : IHistoryComma
 
     internal UpdateConnectionRouteHistoryCommandFactory(
         VisualStateId visualStateId,
-        IEnumerable<PointD> route)
+        IEnumerable<PointD> route,
+        ConnectorRoutingHistoryOperation? operation = null)
     {
         ArgumentNullException.ThrowIfNull(visualStateId);
         ArgumentNullException.ThrowIfNull(route);
@@ -76,7 +104,10 @@ internal sealed class UpdateConnectionRouteHistoryCommandFactory : IHistoryComma
 
         _visualStateId = visualStateId;
         _route = copiedRoute;
+        Operation = operation;
     }
+
+    internal ConnectorRoutingHistoryOperation? Operation { get; }
 
     public ICommand Create(DocumentId documentId, DocumentRevision expectedRevision) =>
         new UpdateConnectionRouteCommand(

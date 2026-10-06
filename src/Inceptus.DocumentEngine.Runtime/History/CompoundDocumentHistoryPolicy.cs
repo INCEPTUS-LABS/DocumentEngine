@@ -48,6 +48,7 @@ internal sealed class CompoundDocumentHistoryPolicy : ICommandHistoryPolicy
             }
         }
         if (routingDeltas.IsEmpty && heightDeltas.Count == 0 && widthDeltas.Count == 0 &&
+            ManualRouteHistoryDelta.Capture(command, before, committed).IsEmpty &&
             CommandProcessor.ContentEqualsIgnoringRevision(CommandProcessor.WithoutRoutingScopes(before),
                 CommandProcessor.WithoutRoutingScopes(committed)))
             return CommandHistoryPreparationResult.PreserveExistingHistory();

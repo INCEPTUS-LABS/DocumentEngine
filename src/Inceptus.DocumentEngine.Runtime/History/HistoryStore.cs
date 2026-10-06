@@ -240,7 +240,8 @@ internal sealed class HistoryStore
                     command,
                     routingIntents: entry.RoutingTypeDeltas.Select(delta =>
                         ConnectorRoutingIntent.SetType(delta.VisualStateId,
-                            isUndo ? delta.BeforeType : delta.AfterType)).ToImmutableArray(),
+                            isUndo ? delta.BeforeType : delta.AfterType))
+                        .Concat(entry.ManualRouteDeltas.SelectMany(delta => delta.Replay(isUndo))).ToImmutableArray(),
                     spatialHeightIntents: entry.SpatialHeightDeltas.Select(delta =>
                         new SpatialRegionHeightIntent(delta.ScopeId, delta.RegionId,
                             isUndo ? delta.BeforeHeight : delta.AfterHeight)).ToImmutableArray(),

@@ -408,12 +408,10 @@ public sealed partial class Canvas2DSceneBuilder
         var delta = activeGesture.Current - activeGesture.Origin;
         return operation == Canvas2DNodeLabelGestureOperation.Move
             ? labelTarget.Bounds.Translate(delta)
-            : Canvas2DResizeGeometry.CalculateBounds(
+            : Canvas2DNodeLabelResizeGeometry.CalculateBounds(
                 labelTarget.Bounds,
                 delta,
-                direction,
-                NodeLabelVisualOverride.MinimumWidth,
-                NodeLabelVisualOverride.MinimumHeight);
+                direction);
     }
 
     private static IEnumerable<KeyValuePair<string, PropertyValue>>
@@ -1504,12 +1502,10 @@ public sealed partial class Canvas2DSceneBuilder
             var delta = gesture.Current - gesture.Origin;
             var previewBounds = operation == Canvas2DNodeLabelGestureOperation.Move
                 ? labelInteractionTarget.Bounds.Translate(delta)
-                : Canvas2DResizeGeometry.CalculateBounds(
+                : Canvas2DNodeLabelResizeGeometry.CalculateBounds(
                     labelInteractionTarget.Bounds,
                     delta,
-                    direction,
-                    NodeLabelVisualOverride.MinimumWidth,
-                    NodeLabelVisualOverride.MinimumHeight);
+                    direction);
             var labelCenter = new PointD(
                 previewBounds.Left + (previewBounds.Width / 2d),
                 previewBounds.Top + (previewBounds.Height / 2d));
@@ -1534,6 +1530,8 @@ public sealed partial class Canvas2DSceneBuilder
                 gesture,
                 relatedIds,
                 0));
+            if (operation == Canvas2DNodeLabelGestureOperation.Resize)
+                ComposeNodeLabelResizeBoundary(labelInteractionTarget, previewBounds, items);
             return true;
         }
 
@@ -1554,17 +1552,34 @@ public sealed partial class Canvas2DSceneBuilder
                      preview,
                      persistentAppearance))
         {
-            items.Add(MaterializeProcessLocalEditorOverlay(
+            var materialized = MaterializeProcessLocalEditorOverlay(
                 CreateMeasuredResizePreviewItem(
                     previewItem,
                     gesture,
                     relatedIds,
                     ordinal),
-                labelInteractionTarget.SpatialRegion));
+                labelInteractionTarget.SpatialRegion);
+            items.Add(materialized);
+            if (operation == Canvas2DNodeLabelGestureOperation.Resize &&
+                previewItem.Geometry.Kind == Canvas2DSceneGeometryKind.Rectangle)
+                ComposeNodeLabelResizeBoundary(labelInteractionTarget, materialized.Bounds, items);
             ordinal++;
         }
 
         return true;
+    }
+
+    private static void ComposeNodeLabelResizeBoundary(
+        Canvas2DSceneItem target, RectD previewBounds, List<Canvas2DSceneItem> items)
+    {
+        // The gesture keeps the installed identity for currency checks. Its current
+        // preview, already mapped to Scene coordinates, owns feedback geometry.
+        var stableKey = $"hover:{target.Id.Value}";
+        items.RemoveAll(item => item.Origin.StableSourceKey == stableKey);
+        var previewTarget = new Canvas2DSceneItem(target.Id, target.Layer, target.ZIndex,
+            Canvas2DSceneGeometry.Rectangle(previewBounds), target.Origin,
+            hitTestPolicy: Canvas2DHitTestPolicy.None, bounds: previewBounds);
+        items.AddRange(CreateTargetOverlays(previewTarget, "hover", 2000, "#f59e0b", false, []));
     }
 
     private static Canvas2DSceneItem CreateTranslatedLabelPreview(

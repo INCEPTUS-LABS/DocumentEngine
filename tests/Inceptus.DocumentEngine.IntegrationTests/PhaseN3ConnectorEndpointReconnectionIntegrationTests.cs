@@ -513,12 +513,13 @@ public sealed class PhaseN3ConnectorEndpointReconnectionIntegrationTests
         moved[1] = moved[1] + new VectorD(17d, -11d);
         await ExecuteAuthoritativeAsync(harness, RouteCommand(harness, moved));
         AssertReconnectedBindingAndScene(harness);
-        Assert.Equal(historyBeforeBends, harness.State.HistoryStatus);
+        Assert.Equal(historyBeforeBends.EntryCount + 2, harness.State.HistoryStatus.EntryCount);
         Assert.True((await harness.Placement.Session.UndoAsync()).IsCommitted);
         await harness.Placement.WaitForIdleAsync();
         AssertReconnectedBindingAndScene(harness);
-        Assert.Equal(ConnectorRoutingType.Automatic,
+        Assert.Equal(ConnectorRoutingType.Manual,
             BpmnModelerTestComposition.SavedRoute(harness.Document, harness.PrimaryVisual.Id).RoutingType);
+        Assert.Equal(added, BpmnModelerTestComposition.SavedRoute(harness.Document, harness.PrimaryVisual.Id).Path);
         Assert.True((await harness.Placement.Session.RedoAsync()).IsCommitted);
         await harness.Placement.WaitForIdleAsync();
         AssertReconnectedBindingAndScene(harness);

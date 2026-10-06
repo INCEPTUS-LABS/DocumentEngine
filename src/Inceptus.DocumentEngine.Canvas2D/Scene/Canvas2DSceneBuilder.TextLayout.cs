@@ -33,6 +33,8 @@ public sealed partial class Canvas2DSceneBuilder
         var visuals = visualModel.VisualStates.ToDictionary(static visual => visual.Id);
         var layouts = new Dictionary<ProjectedObjectId, Canvas2DMeasuredNodeLabel>();
         var activeGesture = editorState.ActiveGesture;
+        var savedLabels = savedGeometry is not null && activeGesture?.Kind == Canvas2DNodeLabelGestureMetadata.Kind
+            ? RestoreSavedNodeLabels(graph, savedGeometry) : null;
         VisualStateId? resizeVisualStateId = null;
         var resizeDirection = default(Canvas2DResizeDirection);
         var hasResizePreview = activeGesture is not null &&
@@ -59,7 +61,9 @@ public sealed partial class Canvas2DSceneBuilder
                 NodeLabelVisualOverride.TryRead(
                     labelVisualState.Properties,
                     out manualOverride);
-            var current = hasManualOverride
+            var current = savedLabels is not null && savedLabels.TryGetValue(label.Id, out var savedLabel)
+                ? savedLabel.Current
+                : hasManualOverride
                 ? await CreateMeasuredManualLabelBoxAsync(
                     label.Text,
                     ownerNode.Bounds,
@@ -101,12 +105,10 @@ public sealed partial class Canvas2DSceneBuilder
                 var previewBounds = operation == Canvas2DNodeLabelGestureOperation.Move
                     ? current.PlacementBounds.Translate(
                         activeGesture.Current - activeGesture.Origin)
-                    : Canvas2DResizeGeometry.CalculateBounds(
+                    : Canvas2DNodeLabelResizeGeometry.CalculateBounds(
                         current.PlacementBounds,
                         activeGesture.Current - activeGesture.Origin,
-                        labelResizeDirection,
-                        NodeLabelVisualOverride.MinimumWidth,
-                        NodeLabelVisualOverride.MinimumHeight);
+                        labelResizeDirection);
                 nodeLabelPreview = await CreateMeasuredManualLabelBoxAsync(
                     label.Text,
                     previewBounds,

@@ -1,31 +1,8 @@
 # Inceptus Document Engine
 
 A reusable BPMN modeler with immutable native documents and a standalone process
-presentation export. This README describes release **0.1.7** targeting
+presentation export. This README describes release **0.1.8** targeting
 **net10.0**.
-
-[Product page](https://inceptus.online/bpmn/) · [System/application](https://bpmn.inceptus.online)
-
-[Public release source](https://github.com/INCEPTUS-LABS/DocumentEngine) · [Building and releasing](https://github.com/INCEPTUS-LABS/DocumentEngine/blob/main/docs/releasing.md)
-
-## What's new in 0.1.7
-
-- Adds stable connector routing with persisted complete paths and deterministic
-  per-scope connector order. Valid Automatic routes are preserved and only
-  affected routes are repaired.
-- Adds explicit Automatic, Straight and Manual routing modes.
-- Improves Manual route editing with H/V bridge handling, transient diagonal
-  guidance, Ctrl orthogonal assist and magnetic point snapping.
-- Adds compact Organizational Pools with authored Pool/Unassigned heights,
-  shared scope width and direct mouse edge resizing.
-- Extends bounded interaction fast paths for placement, selection, node-label
-  movement and Manual route-point dragging, avoiding unnecessary full Scene
-  work during supported pointer movement.
-- Introduces native document format v2 with persisted routing and spatial
-  geometry for exact compatible Save/Open.
-
-For the complete version history, see
-[RELEASE-NOTES.md](https://github.com/INCEPTUS-LABS/DocumentEngine/blob/v0.1.7/RELEASE-NOTES.md).
 
 ## Choose an integration level
 
@@ -45,7 +22,7 @@ Use the six packages as an **aligned version family**. The top-level modeler pac
 The validated hosting model is a **standalone Blazor WebAssembly application** on .NET 10. Configure a feed containing the reviewed candidate before adding the package:
 
 ```xml
-<PackageReference Include="Inceptus.DocumentEngine.Bpmn.Blazor" Version="0.1.7" />
+<PackageReference Include="Inceptus.DocumentEngine.Bpmn.Blazor" Version="0.1.8" />
 ```
 
 Register the modeler in the application's `Program.cs`. The extension namespace is `Microsoft.Extensions.DependencyInjection`:
@@ -160,7 +137,7 @@ Invoke operations after Ready and inspect `Succeeded`, `Status` and `Diagnostics
 
 Capture and Export do not change persistent state, History, selection or viewport. Programmatic New creates a fresh empty identity without displaying the toolbar confirmation dialog. Load and Import reconstruct the supplied persistent identity, revision and content into a fresh session with fresh History, without mutating caller input. Replacement is not an undoable document-edit command. Failed or cancelled candidate replacement leaves the previous document authoritative and usable.
 
-Native import/export uses **Inceptus.Document JSON, formatVersion 1**. Public byte APIs do not open a file picker or initiate a download; the consumer chooses storage/delivery. The toolbar retains its own file and confirmation UI. Export, Import and Load are not persistence or autosave services.
+Native import/export uses **Inceptus.Document JSON, formatVersion 2**. Version 2 persists routing and spatial geometry for compatible Save/Open reproduction; native v1 documents are intentionally not accepted. Public byte APIs do not open a file picker or initiate a download; the consumer chooses storage/delivery. The toolbar retains its own file and confirmation UI. Export, Import and Load are not persistence or autosave services.
 
 ## Publish a standalone presentation
 

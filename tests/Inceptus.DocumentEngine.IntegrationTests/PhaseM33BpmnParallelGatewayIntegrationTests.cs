@@ -236,7 +236,7 @@ public sealed class PhaseM33BpmnParallelGatewayIntegrationTests
     }
 
     [Fact]
-    public async Task ParallelManualBendsPreserveEndpointsArrowAndHistory()
+    public async Task ParallelManualBendsPreserveEndpointsAndArrowThroughChronologicalHistory()
     {
         await using var harness = await HostHarness.CreateAsync();
         var flowId = BpmnDemoPipeline.SeventhSequenceFlowId;
@@ -272,16 +272,28 @@ public sealed class PhaseM33BpmnParallelGatewayIntegrationTests
             ]);
         AssertBranchRoute(harness, flowId, visualId, []);
         Assert.Equal(
-            historyBefore.EntryCount + 1,
+            historyBefore.EntryCount + 4,
             harness.State.HistoryStatus.EntryCount);
         Assert.Equal(visualBefore.SourceAnchorId, Visual(harness, visualId).SourceAnchorId);
         Assert.Equal(visualBefore.TargetAnchorId, Visual(harness, visualId).TargetAnchorId);
 
         await harness.Host.UndoAsync();
+        AssertBranchRoute(harness, flowId, visualId, [movedBend]);
+        await harness.Host.UndoAsync();
+        AssertBranchRoute(harness, flowId, visualId, [firstBend]);
+        await harness.Host.UndoAsync();
+        Assert.Equal(ConnectorRoutingType.Manual, BpmnModelerTestComposition.SavedRoute(
+            harness.Composition.Document.CaptureSnapshot(), visualId).RoutingType);
+        await harness.Host.UndoAsync();
         Assert.Equal(ConnectorRoutingType.Automatic, BpmnModelerTestComposition.SavedRoute(
             harness.Composition.Document.CaptureSnapshot(), visualId).RoutingType);
         Assert.Empty(Visual(harness, visualId).Route);
 
+        await harness.Host.RedoAsync();
+        await harness.Host.RedoAsync();
+        AssertBranchRoute(harness, flowId, visualId, [firstBend]);
+        await harness.Host.RedoAsync();
+        AssertBranchRoute(harness, flowId, visualId, [movedBend]);
         await harness.Host.RedoAsync();
         AssertBranchRoute(harness, flowId, visualId, []);
         Assert.Equal(2, BpmnModelerTestComposition.SavedRoute(harness.Composition.Document.CaptureSnapshot(), visualId).Path.Length);

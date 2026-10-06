@@ -42,6 +42,7 @@ public sealed partial class OrganizationalPoolSceneContributor :
         Canvas2DScenePlacementDependency.Invariant,
         Canvas2DSceneTransientDependency.Invariant,
         Canvas2DSceneTransientDependency.Invariant,
+        Canvas2DSceneTransientDependency.Invariant,
         Canvas2DSceneTransientDependency.Invariant);
 
     private readonly IOrganizationalElementEligibilityPolicy _eligibilityPolicy;

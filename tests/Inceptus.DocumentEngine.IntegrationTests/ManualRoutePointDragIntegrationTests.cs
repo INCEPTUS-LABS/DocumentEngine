@@ -81,7 +81,15 @@ public sealed class ManualRoutePointDragIntegrationTests
         Assert.Equal(saved.Path.Skip(1).SkipLast(1).ToArray(), saved.ManualDefinition!.Value.ToArray());
         Assert.Equal(before.Revision.Increment(), test.Snapshot.Revision);
         Assert.Equal(events + 1, test.Events.Count);
-        Assert.Equal(state.HistoryStatus, test.State.HistoryStatus);
+        Assert.Equal(state.HistoryStatus.EntryCount + 1, test.State.HistoryStatus.EntryCount);
+        var committedRoute = saved;
+        Assert.True((await test.Session.UndoAsync()).IsCommitted);
+        await test.Session.WaitForIdleAsync();
+        Assert.Equal(original, BpmnModelerTestComposition.SavedRoute(test.Snapshot, owner).Path.AsEnumerable());
+        Assert.Equal(ConnectorRoutingType.Manual, BpmnModelerTestComposition.SavedRoute(test.Snapshot, owner).RoutingType);
+        Assert.True((await test.Session.RedoAsync()).IsCommitted);
+        await test.Session.WaitForIdleAsync();
+        Assert.Equal(committedRoute, BpmnModelerTestComposition.SavedRoute(test.Snapshot, owner));
         foreach (var scope in before.VisualModel.RoutingScopes!.Value)
             Assert.Equal(scope.Connectors.Where(item => item.VisualStateId != owner).ToArray(),
                 test.Snapshot.VisualModel.RoutingScopes!.Value.Single(item => item.ScopeId == scope.ScopeId)
@@ -168,7 +176,7 @@ public sealed class ManualRoutePointDragIntegrationTests
         AssertPoints(Expected(finalDelta, true)[1..^1], committed.ManualDefinition!.Value);
         Assert.Equal(before.Revision.Increment(), test.Snapshot.Revision);
         Assert.Equal(events + 1, test.Events.Count);
-        Assert.Equal(state.HistoryStatus, test.State.HistoryStatus);
+        Assert.Equal(state.HistoryStatus.EntryCount + 1, test.State.HistoryStatus.EntryCount);
         Assert.Equal(before.VisualModel.VisualStates.ToArray(), test.Snapshot.VisualModel.VisualStates.ToArray());
         foreach (var scope in before.VisualModel.RoutingScopes!.Value)
             Assert.Equal(scope.Connectors.Where(item => item.VisualStateId != owner).ToArray(),
@@ -337,7 +345,7 @@ public sealed class ManualRoutePointDragIntegrationTests
             await test.Session.WaitForIdleAsync();
             Assert.Equal(before.Revision.Increment(), test.Snapshot.Revision);
             Assert.Equal(events + 1, test.Events.Count);
-            Assert.Equal(history, test.State.HistoryStatus);
+            Assert.Equal(history.EntryCount + 1, test.State.HistoryStatus.EntryCount);
             Assert.Null(test.State.CurrentScene!.BoundedPresentation?.RouteBend);
             Assert.Null(test.State.EditorState.ActiveGesture);
             Assert.Equal(owner, Assert.Single(test.State.EditorState.Selection));
@@ -419,7 +427,7 @@ public sealed class ManualRoutePointDragIntegrationTests
         await test.Session.WaitForIdleAsync();
         Assert.Equal(original.Revision.Increment(), test.Snapshot.Revision);
         Assert.Equal(events + 1, test.Events.Count);
-        Assert.Equal(state.HistoryStatus, test.State.HistoryStatus); // Manual geometry preserves both stacks.
+        Assert.Equal(state.HistoryStatus.EntryCount + 1, test.State.HistoryStatus.EntryCount);
         var changed = BpmnModelerTestComposition.SavedRoute(test.Snapshot, owner);
         var expected = connector.ConnectorPresentationMapping?.MapSceneToLogical(final) ?? final;
         Assert.Equal(expected.X, changed.ManualDefinition!.Value[0].X, 8);

@@ -98,6 +98,24 @@ public sealed class Canvas2DSceneContributorDescriptor :
         Canvas2DSceneTransientDependency regionResizeDependency,
         Canvas2DSceneTransientDependency nodeLabelMoveDependency,
         Canvas2DSceneTransientDependency routeBendDependency)
+        : this(contributorId, version, panDependency, moveGestureDependency, hoverDependency,
+            visualSelectionDependency, placementDependency, regionResizeDependency,
+            nodeLabelMoveDependency, routeBendDependency, Canvas2DSceneTransientDependency.Unknown)
+    {
+    }
+
+    public Canvas2DSceneContributorDescriptor(
+        Canvas2DSceneContributorId contributorId,
+        string version,
+        Canvas2DScenePanDependency panDependency,
+        Canvas2DSceneMoveGestureDependency moveGestureDependency,
+        Canvas2DSceneTransientDependency hoverDependency,
+        Canvas2DSceneTransientDependency visualSelectionDependency,
+        Canvas2DScenePlacementDependency placementDependency,
+        Canvas2DSceneTransientDependency regionResizeDependency,
+        Canvas2DSceneTransientDependency nodeLabelMoveDependency,
+        Canvas2DSceneTransientDependency routeBendDependency,
+        Canvas2DSceneTransientDependency connectorLabelMoveDependency)
     {
         ArgumentNullException.ThrowIfNull(contributorId);
         ArgumentException.ThrowIfNullOrWhiteSpace(version);
@@ -139,6 +157,9 @@ public sealed class Canvas2DSceneContributorDescriptor :
         if (!Enum.IsDefined(routeBendDependency))
             throw new ArgumentOutOfRangeException(nameof(routeBendDependency));
         RouteBendDependency = routeBendDependency;
+        if (!Enum.IsDefined(connectorLabelMoveDependency))
+            throw new ArgumentOutOfRangeException(nameof(connectorLabelMoveDependency));
+        ConnectorLabelMoveDependency = connectorLabelMoveDependency;
         Version = version;
         PanDependency = panDependency;
     }
@@ -169,6 +190,13 @@ public sealed class Canvas2DSceneContributorDescriptor :
     /// <summary>Dependency on Manual route-bend gesture position, with every other input fixed.</summary>
     public Canvas2DSceneTransientDependency RouteBendDependency { get; }
 
+    /// <summary>
+    /// Dependency on connector-label move gesture position, with every other input fixed.
+    /// Unknown and Dependent require complete composition; other gesture declarations
+    /// do not authorize reuse for this transition.
+    /// </summary>
+    public Canvas2DSceneTransientDependency ConnectorLabelMoveDependency { get; }
+
     public bool Equals(Canvas2DSceneContributorDescriptor? other) =>
         ReferenceEquals(this, other) ||
         other is not null &&
@@ -181,7 +209,8 @@ public sealed class Canvas2DSceneContributorDescriptor :
         PlacementDependency == other.PlacementDependency &&
         RegionResizeDependency == other.RegionResizeDependency &&
         NodeLabelMoveDependency == other.NodeLabelMoveDependency &&
-        RouteBendDependency == other.RouteBendDependency;
+        RouteBendDependency == other.RouteBendDependency &&
+        ConnectorLabelMoveDependency == other.ConnectorLabelMoveDependency;
 
     public override bool Equals(object? obj) =>
         Equals(obj as Canvas2DSceneContributorDescriptor);
@@ -194,5 +223,5 @@ public sealed class Canvas2DSceneContributorDescriptor :
         HoverDependency,
         VisualSelectionDependency,
         PlacementDependency,
-        RegionResizeDependency), NodeLabelMoveDependency, RouteBendDependency);
+        RegionResizeDependency), NodeLabelMoveDependency, RouteBendDependency, ConnectorLabelMoveDependency);
 }

@@ -60,7 +60,8 @@ public sealed partial class Canvas2DSceneBuilder
                 !attachedOwners.Contains(node.Source.SemanticElementId))
             .Select(static node => node.Source.VisualStateId!).ToImmutableHashSet();
         var orderedBase = baseItems.ToArray();
-        SuppressInstalledMovingLabel(editorState, orderedBase);
+        SuppressInstalledNodeLabelGesture(editorState, orderedBase);
+        SuppressInstalledConnectorLabelGesture(editorState, orderedBase);
         Array.Sort(orderedBase, CompareItems);
         var source = new Canvas2DBoundedPresentationSource(
             new(this, presentation.Document, presentation.ActiveScopeId,
@@ -78,21 +79,29 @@ public sealed partial class Canvas2DSceneBuilder
         var supportsPlacement = SupportsPlacementContributors() && IsSupportedPlacementEditorState(editorState);
         var supportsResize = SupportsSpatialResizeContributors() && IsSupportedSpatialResizeState(editorState);
         var labelMove = PrepareBoundedNodeLabelMove(source, editorState, measuredLabels);
+        // Partitioning a freshly composed resize frame makes no assumption about
+        // contributor invariance. Reuse requires exact output equality below.
+        var labelResize = editorState.ActiveGesture is { Kind: Canvas2DNodeLabelGestureMetadata.Kind } labelGesture &&
+            TryGetNodeLabelGestureTarget(labelGesture, out _, out _, out var labelId, out _, out var operation, out _) &&
+            operation == Canvas2DNodeLabelGestureOperation.Resize &&
+            measuredLabels?.GetValueOrDefault(labelId)?.NodeLabelPreview is not null;
         var routeBend = PrepareBoundedRouteBend(source, editorState, overlays, measuredConnectorLabels);
-        if (routeBend is { FixedHighlights.IsEmpty: false })
+        var connectorLabelMove = PrepareBoundedConnectorLabelMove(source, editorState, overlays);
+        var fixedHighlights = routeBend?.FixedHighlights ?? connectorLabelMove?.FixedHighlights;
+        if (fixedHighlights is { IsEmpty: false })
         {
             // Selected connector/jump highlights keep their canonical Connector layer.
             // They are fixed during a bend drag; the renderer's bounded family stays Overlay-only.
-            var stableItems = source.Items.Concat(routeBend.FixedHighlights.Values).ToArray();
+            var stableItems = source.Items.Concat(fixedHighlights.Values).ToArray();
             Array.Sort(stableItems, CompareItems);
             source = source with
             {
                 Items = stableItems.ToImmutableArray(),
-                ItemsById = source.ItemsById.AddRange(routeBend.FixedHighlights),
+                ItemsById = source.ItemsById.AddRange(fixedHighlights),
             };
-            overlays = overlays.Where(item => !routeBend.FixedHighlights.ContainsKey(item.Id)).ToArray();
+            overlays = overlays.Where(item => !fixedHighlights.ContainsKey(item.Id)).ToArray();
         }
-        if ((!supportsMove && !supportsSelection && !supportsPlacement && !supportsResize && labelMove is null && routeBend is null) ||
+        if ((!supportsMove && !supportsSelection && !supportsPlacement && !supportsResize && labelMove is null && !labelResize && routeBend is null && connectorLabelMove is null) ||
             overlays.Any(static item => item.Layer != Canvas2DSceneLayer.Overlay))
         {
             return null;
@@ -105,6 +114,8 @@ public sealed partial class Canvas2DSceneBuilder
             PlacementItems = placementItems,
             NodeLabelMove = labelMove,
             RouteBend = routeBend,
+            NodeLabelResize = labelResize,
+            ConnectorLabelMove = connectorLabelMove,
         };
     }
 
@@ -156,19 +167,20 @@ public sealed partial class Canvas2DSceneBuilder
         {
             input.AddRange(source.Families[editorState.Selection[0]]);
         }
-        if (prior.RouteBend is null && editorState.HoveredObjectId is { } hover && input.All(item => item.Id != hover))
+        if (prior.RouteBend is null && prior.ConnectorLabelMove is null && editorState.HoveredObjectId is { } hover && input.All(item => item.Id != hover))
         {
             input.AddRange(source.Families[source.ItemsById[hover].Origin.VisualStateId!]);
         }
         var start = input.Count;
         var diagnostics = new List<Diagnostic>();
         ComposeEditorOverlays(editorState, graph, document.VisualModel, input, diagnostics,
-            measuredLabels: null, prior.RouteBend?.Labels, source.OverlayInputs, prior.RouteBend?.HasLineJumps);
+            measuredLabels: null, prior.RouteBend?.Labels, source.OverlayInputs,
+            prior.RouteBend?.HasLineJumps ?? prior.ConnectorLabelMove?.HasLineJumps);
         AssociateEditorOverlaysWithSpatialPresentation(input, start);
         var overlays = input.Skip(start).Where(static item => !IsDocumentBoundaryGuide(item)).ToList();
-        if (prior.RouteBend is { } bend)
+        if ((prior.RouteBend?.FixedHighlights ?? prior.ConnectorLabelMove?.FixedHighlights) is { } fixedHighlights)
         {
-            foreach (var highlight in bend.FixedHighlights.Values)
+            foreach (var highlight in fixedHighlights.Values)
             {
                 // Validate the fixed contribution instead of assuming its invariance.
                 var index = overlays.FindIndex(item => item.Id == highlight.Id);
@@ -206,7 +218,8 @@ public sealed partial class Canvas2DSceneBuilder
             }
         }
         cancellationToken.ThrowIfCancellationRequested();
-        var presentation = CreateMovePresentation(source, editorState, overlays.ToImmutableArray()) with { RouteBend = prior.RouteBend };
+        var presentation = CreateMovePresentation(source, editorState, overlays.ToImmutableArray()) with
+        { RouteBend = prior.RouteBend, ConnectorLabelMove = prior.ConnectorLabelMove };
         var complete = MergeBoundedItems(source, presentation);
         cancellationToken.ThrowIfCancellationRequested();
         return previous.WithBoundedPresentation(presentation, complete,

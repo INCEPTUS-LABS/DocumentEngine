@@ -489,7 +489,7 @@ public sealed class PhaseN2AnchorConnectionCreationIntegrationTests
         AssertFlowStillBound(harness, stableRelationship);
         Assert.Empty(FlowVisual(harness).Route);
         Assert.Empty(BpmnModelerTestComposition.SavedRoute(harness.Document, harness.FlowVisualId).ManualDefinition!.Value);
-        Assert.Equal(routeHistory, harness.State.HistoryStatus);
+        Assert.Equal(routeHistory.EntryCount + 3, harness.State.HistoryStatus.EntryCount);
         var editedEdge = Assert.Single(harness.State.ProjectedGraph!.Edges,
             item => item.Source.SemanticElementId == harness.FlowRelationshipId);
         Assert.Contains(harness.Scene.Items, item =>
