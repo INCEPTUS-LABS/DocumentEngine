@@ -1,3 +1,4 @@
+using Inceptus.DocumentEngine.Bpmn.Semantics;
 using Inceptus.DocumentEngine.Contracts.Canvas2D;
 using Inceptus.DocumentEngine.Contracts.EditorState;
 using Inceptus.DocumentEngine.Contracts.Geometry;
@@ -50,7 +51,7 @@ public sealed partial class Canvas2DSpatialPoolInteractionTests
     public async Task A1214PoolCrossingUsesEachActualOriginAndKeepsBodyLabelAndMarkerInOneFeedbackFamily()
     {
         await using var fixture = await Fixture.CreateDragRegressionAsync();
-        fixture.ToolboxSelection.Select(new ToolboxItemId("bpmn:toolbox:manual-task"));
+        fixture.ToolboxSelection.Select(new ToolboxItemId("bpmn:toolbox:message-catch-event"));
         var original = fixture.Document;
         var origins = new List<PointD>();
         foreach (var containerId in new SemanticElementId?[] { Fixture.PoolB, null, Fixture.PoolA, Fixture.PoolB })
@@ -63,10 +64,16 @@ public sealed partial class Canvas2DSpatialPoolInteractionTests
             Assert.True(feedback.PlacementPreview!.IsAllowed);
             Assert.Equal(region.MapLocalToScene(feedback.PlacementPreview.Bounds), feedback.Bounds);
             Assert.Equal(point, Center(feedback.Bounds!.Value));
-            Assert.Contains("Manual Task", feedback.PlacementPreview.Label, StringComparison.Ordinal);
+            Assert.Equal(BpmnSemanticTypes.MessageCatchEvent, feedback.PlacementPreview.SemanticTypeId);
+            Assert.Contains("Message Event", feedback.PlacementPreview.Label, StringComparison.Ordinal);
             var family = fixture.State.CurrentScene!.Items.Where(item =>
                 item.Origin.StableSourceKey?.StartsWith($"feedback:{feedback.Id}:", StringComparison.Ordinal) == true).ToArray();
             Assert.NotEmpty(family);
+            Assert.Contains(family, item => item.Origin.StableSourceKey == $"feedback:{feedback.Id}:body");
+            Assert.Contains(family, item => item.Origin.StableSourceKey!.StartsWith(
+                $"feedback:{feedback.Id}:label:", StringComparison.Ordinal));
+            Assert.Contains(family, item => item.Origin.StableSourceKey!.StartsWith(
+                $"feedback:{feedback.Id}:message-catch-event:envelope:", StringComparison.Ordinal));
             Assert.All(family, item => Assert.Equal(Canvas2DHitTestMode.None, item.HitTestPolicy.Mode));
         }
         Assert.True(origins.Distinct().Count() == 3);

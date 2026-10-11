@@ -8,4 +8,5 @@ public enum NodeGeometryInteractionPolicy
 {
     FreeMoveAndResize = 0,
     AttachedBoundaryMoveFixedSize = 1,
+    DerivedRegion = 2,
 }

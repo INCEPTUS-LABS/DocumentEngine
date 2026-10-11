@@ -14,6 +14,7 @@ using Inceptus.DocumentEngine.Contracts.EndpointReconnection;
 using Inceptus.DocumentEngine.Contracts.Geometry;
 using Inceptus.DocumentEngine.Contracts.History;
 using Inceptus.DocumentEngine.Contracts.Primitives;
+using Inceptus.DocumentEngine.Contracts.Presentation;
 using Inceptus.DocumentEngine.Contracts.Projection;
 using Inceptus.DocumentEngine.Contracts.Properties;
 using Inceptus.DocumentEngine.Contracts.Routing;
@@ -325,6 +326,11 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
         }
 #pragma warning restore CA1031
 
+        if (ConnectionToolState.GetSelection(observed.EditorState) is not null &&
+            kind is InteractionKind.Selection or InteractionKind.Hover or InteractionKind.NodeBodyActivation)
+            return await ExecuteElementConnectionAsync(observed, hit, documentPoint,
+                kind == InteractionKind.Selection, cancellationToken).ConfigureAwait(false);
+
         if (kind == InteractionKind.NodeBodyActivation)
         {
             var hitItem = hit is null
@@ -368,6 +374,11 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
         var cssCursor = kind == InteractionKind.Hover
             ? CssCursor(observed.CurrentScene, hit)
             : "default";
+        if (kind == InteractionKind.Hover && ConnectionSourceHoverEligibility(observed, resolvedHitItem) is { } eligibleSource)
+        {
+            cssCursor = eligibleSource ? "crosshair" : "not-allowed";
+            if (!eligibleSource) targetId = null;
+        }
         var resultHit = hit;
         var connectorRouteContextAction = kind == InteractionKind.ContextMenu && permitsVisualActions
             ? ResolveConnectorRouteContextAction(observed.CurrentScene, hit)
@@ -647,7 +658,11 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
             }
 #pragma warning restore CA1031
 
-            if (AcquireSpatialResize(observed, input.CssPoint, documentPoint, hit) is { } spatialResizeTarget)
+            if (ConnectionToolState.GetSelection(observed.EditorState) is not null)
+                return new(Canvas2DInteractionStatus.Unchanged, observed, hit, cssCursor: "crosshair");
+
+            if (ConnectionToolState.GetSelection(observed.EditorState) is null &&
+                AcquireSpatialResize(observed, input.CssPoint, documentPoint, hit) is { } spatialResizeTarget)
                 return await StartSpatialResizeAsync(observed, input, documentPoint, spatialResizeTarget, linked.Token).ConfigureAwait(false);
 
             if (hit is null)
@@ -688,7 +703,8 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
                     cssCursor: "default");
             }
 
-            var reconnectionStart = await TryStartConnectorEndpointReconnectionUnderGateAsync(
+            var reconnectionStart = ConnectionToolState.GetSelection(observed.EditorState) is not null ? null :
+                await TryStartConnectorEndpointReconnectionUnderGateAsync(
                 observed,
                 input,
                 hit,
@@ -708,6 +724,16 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
             if (connectionStart is not null)
             {
                 return connectionStart;
+            }
+
+            if (ConnectionToolState.GetSelection(observed.EditorState) is not null)
+            {
+                var selectedVisual = ResolveSelectableVisualStateId(observed.CurrentScene, hit);
+                _pendingPointer = new PendingPointerState(input.PointerId, input.ControlKey, documentPoint,
+                    selectedVisual, selectedVisual is null ? ResolveSelectableSemanticElementId(observed.CurrentScene, hit) : null,
+                    MoveTarget: null, observed.CurrentScene, observed.Generation, observed.EditorState);
+                return new Canvas2DInteractionResult(Canvas2DInteractionStatus.Unchanged, observed, hit,
+                    cssCursor: ConnectionSourceHoverEligibility(observed, hitItem) == true ? "crosshair" : "not-allowed");
             }
 
             PersistentGestureKind? specializedGestureKind = null;
@@ -826,9 +852,9 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
             var authoritativeRoute = visualState.Route;
             if (gestureKind == PersistentGestureKind.RouteBend &&
                 _session.TryCaptureDocumentSnapshot(out var routeDocument) &&
-                routeDocument.VisualModel.RoutingScopes is { } routingScopes)
+                (routeDocument.VisualModel.RoutingScopes is not null || !routeDocument.VisualModel.DocumentRoutingStates.IsEmpty))
             {
-                var record = routingScopes.SelectMany(static scope => scope.Connectors)
+                var record = routeDocument.VisualModel.EnumerateConnectorRoutingRecords()
                     .FirstOrDefault(candidate => candidate.VisualStateId == visualStateId);
                 authoritativeRoute = record?.RoutingType == ConnectorRoutingType.Manual ? record.Path : [];
             }
@@ -976,7 +1002,7 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
                     currentScene,
                     update.SessionState.Generation,
                     update.SessionState.EditorState,
-                    SpatialRegion: targetItem.SpatialRegion);
+                    SpatialRegion: targetItem.SpatialRegion, ProcessPlacement: targetItem.ProcessPlacement);
             }
             else
             {
@@ -1045,10 +1071,13 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
                 document.VisualModel,
                 sourceAnchorId))
         {
-            return null;
+            return ConnectionToolState.GetSelection(observed.EditorState) is null ? null :
+                new Canvas2DInteractionResult(Canvas2DInteractionStatus.Unchanged, observed, hit, cssCursor: "not-allowed");
         }
 
         var sourceRequest = new AnchorConnectionCreationSourceRequest(
+            observed.PresentationContext,
+            observed.PresentationPlan,
             document,
             observed.DocumentRevision,
             sourceSemanticElementId,
@@ -1057,7 +1086,8 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
         ImmutableArray<AnchorConnectionCreationRegistration> matches;
         try
         {
-            matches = _connectionCreationCatalog.GetMatchingRegistrations(sourceRequest);
+            matches = _connectionCreationCatalog.GetMatchingRegistrations(sourceRequest,
+                ConnectionToolState.GetSelection(observed.EditorState));
         }
 #pragma warning disable CA1031 // Plugin matching failures become stable interaction diagnostics.
         catch (Exception exception) when (IsNonFatal(exception))
@@ -1072,7 +1102,8 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
 
         if (matches.IsEmpty)
         {
-            return null;
+            return ConnectionToolState.GetSelection(observed.EditorState) is null ? null :
+                new Canvas2DInteractionResult(Canvas2DInteractionStatus.Unchanged, observed, hit, cssCursor: "not-allowed");
         }
 
         if (matches.Length != 1)
@@ -1100,7 +1131,9 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
                 sourceSemanticElementId,
                 sourceVisualStateId,
                 sourceAnchorId,
-                registration.CreationId));
+                registration.CreationId)
+                .Concat(ConnectorVisualMetadata.Encode(registration.VisualDescriptor))
+                .Concat(CaptureConnectionCandidates(observed, document, sourceRequest, registration)));
         var updatedEditorState = Copy(
             observed.EditorState,
             observed.EditorState.Selection,
@@ -1139,12 +1172,15 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
                 update.SessionState.EditorState,
                     new AnchorConnectionGestureState(
                     registration,
+                    observed.PresentationContext,
+                    observed.PresentationPlan,
+                    ConnectionToolState.GetSelection(observed.EditorState),
                     sourceSemanticElementId,
                     sourceVisualStateId,
                         sourceAnchorId,
                         TargetAcquisition: null,
                         ProposedAnchorId: null),
-                    SpatialRegion: sourceTarget.SpatialRegion);
+                    SpatialRegion: sourceTarget.SpatialRegion, ProcessPlacement: sourceTarget.ProcessPlacement);
             return update;
         }
 
@@ -1380,6 +1416,7 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
         var effectivePoint = DocumentGeometryBoundary.Clamp(target is null
             ? documentPoint
             : target.SpatialRegion?.MapLocalToScene(target.Acquisition.DocumentPoint!.Value) ??
+                target.ProcessPlacement?.MapLocalToView(target.Acquisition.DocumentPoint!.Value) ??
                 target.Acquisition.DocumentPoint!.Value);
         if (effectivePoint == gesture.CurrentDocumentPoint &&
             Equals(connection.TargetAcquisition, target?.Acquisition))
@@ -1412,7 +1449,8 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
             active.Kind,
             active.Origin,
             effectivePoint,
-            properties);
+            properties.Concat(ConnectorVisualMetadata.Encode(connection.Registration.VisualDescriptor))
+                .Concat(ConnectionCandidateMetadata.Capture(active.Properties)));
         var updatedEditorState = Copy(
             observed.EditorState,
             observed.EditorState.Selection,
@@ -1608,7 +1646,7 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
                     visualsById[item.Origin.VisualStateId!]),
                 visualsById[item.Origin.VisualStateId!].Route,
                 IsPreviewOnly: !commandTargetIds.Contains(item.Origin.VisualStateId!),
-                SpatialRegion: item.SpatialRegion))
+                SpatialRegion: item.SpatialRegion, ProcessPlacement: item.ProcessPlacement))
             .OrderBy(static target => target.VisualStateId.Value, StringComparer.Ordinal)
             .ToImmutableArray();
         if (moveTargets.IsEmpty)
@@ -1630,7 +1668,7 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
                 moveTargets.Select(static target => target.OriginalBounds), delta)
             : DocumentGeometryBoundary.ClampTranslation(
                 moveTargets.Select(static target =>
-                    target.SpatialRegion?.MapSceneToLocal(target.BoundaryBounds) ??
+                    target.SpatialRegion?.MapSceneToLocal(target.BoundaryBounds) ?? target.ProcessPlacement?.MapViewToLocal(target.BoundaryBounds) ??
                     target.BoundaryBounds),
                 delta);
         var effectiveDocumentPoint = pending.StartDocumentPoint + effectiveDelta;
@@ -1679,7 +1717,7 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
                 currentScene,
                 update.SessionState.Generation,
                 update.SessionState.EditorState,
-                SpatialRegion: initiator.SpatialRegion);
+                SpatialRegion: initiator.SpatialRegion, ProcessPlacement: initiator.ProcessPlacement);
             return update;
         }
 
@@ -1746,7 +1784,7 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
             target.Bounds,
             ResolveMoveBoundaryBounds(target.Bounds, visualState),
             visualState.Route,
-            SpatialRegion: target.SpatialRegion);
+            SpatialRegion: target.SpatialRegion, ProcessPlacement: target.ProcessPlacement);
         var moveTargets = ImmutableArray.Create(moveTarget);
         var gestureId = FormattableString.Invariant(
             $"boundary-attachment-move:{observed.DocumentRevision.Value}:{input.PointerId}:{visualStateId.Value}");
@@ -1794,7 +1832,7 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
                 update.SessionState.Generation,
                 update.SessionState.EditorState,
                 OriginalBoundaryAttachment: visualState.BoundaryAttachment,
-                SpatialRegion: target.SpatialRegion);
+                SpatialRegion: target.SpatialRegion, ProcessPlacement: target.ProcessPlacement);
             return update;
         }
 
@@ -1968,10 +2006,13 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
                         _session.CaptureState());
                 }
 
-                return await ExecutePointInteractionUnderGateAsync(
+                var explicitTool = ConnectionToolState.GetSelection(_session.CaptureState().EditorState) is not null;
+                var released = await ExecutePointInteractionUnderGateAsync(
                     input.CssPoint,
                     InteractionKind.Selection,
                     linked.Token).ConfigureAwait(false);
+                if (explicitTool) _suppressNextActivation = true;
+                return released;
             }
 
             if (input.PointerId != gesture.PointerId)
@@ -2071,9 +2112,9 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
             }
 
             var persistentFinalBounds = gesture.SpatialRegion?.MapSceneToLocal(
-                finalBounds) ?? finalBounds;
+                finalBounds) ?? gesture.ProcessPlacement?.MapViewToLocal(finalBounds) ?? finalBounds;
             var persistentOriginalOwnerBounds = gesture.SpatialRegion?.MapSceneToLocal(
-                gesture.OriginalOwnerBounds) ?? gesture.OriginalOwnerBounds;
+                gesture.OriginalOwnerBounds) ?? gesture.ProcessPlacement?.MapViewToLocal(gesture.OriginalOwnerBounds) ?? gesture.OriginalOwnerBounds;
             ICommand command = gesture.Kind switch
             {
                 PersistentGestureKind.Move when finalMoves.Length == 1 =>
@@ -2305,6 +2346,8 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
         }
 
         var sourceRequest = new AnchorConnectionCreationSourceRequest(
+            observed.PresentationContext,
+            observed.PresentationPlan,
             document,
             observed.DocumentRevision,
             connection.SourceSemanticElementId,
@@ -2313,7 +2356,9 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
         bool stillMatches;
         try
         {
-            stillMatches = currentRegistration.CommandFactory.CanStart(sourceRequest);
+            stillMatches = observed.PresentationContext == connection.PresentationContext &&
+                ConnectionToolState.GetSelection(observed.EditorState) == connection.ExplicitCreationId &&
+                currentRegistration.CommandFactory.CanStart(sourceRequest);
         }
 #pragma warning disable CA1031 // Plugin matching failures become stable interaction diagnostics.
         catch (Exception exception) when (IsNonFatal(exception))
@@ -2342,17 +2387,19 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
                 .ConfigureAwait(false);
         }
 
-        var clearedEditorState = Copy(
+        var clearedEditorState = ConnectionToolState.WithSelection(Copy(
             observed.EditorState,
             observed.EditorState.Selection,
             hoveredObjectId: null,
-            activeGesture: null);
+            activeGesture: null), null);
         _persistentGesture = null;
         AnchorConnectionCreationPlanResult? planned;
         try
         {
             planned = currentRegistration.CommandFactory.CreatePlan(
                 new AnchorConnectionCreationRequest(
+                    observed.PresentationContext,
+                    observed.PresentationPlan,
                     document,
                     observed.DocumentRevision,
                     connection.SourceSemanticElementId,
@@ -2627,6 +2674,10 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
             }
 
             _pendingPointer = null;
+            var toolState = _session.CaptureState();
+            if (ConnectionToolState.GetSelection(toolState.EditorState) is not null)
+                return await ApplyEditorStateAsync(toolState, ConnectionToolState.WithSelection(toolState.EditorState, null),
+                    null, linked.Token).ConfigureAwait(false);
             if (_spatialResize is not null || _session.CaptureState().EditorState.TemporaryFeedback.Any(static feedback => feedback.SpatialResize is not null))
                 return await CancelSpatialResizeAsync().ConfigureAwait(false);
             var gesture = _persistentGesture;
@@ -3509,9 +3560,9 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
         }
 
         var edgeParameter = ConnectorAnchorGeometryResolver.ResolveEdgeParameter(
-            edgeTarget.Bounds,
+            edgeTarget.DerivedRegionMapping?.LogicalBounds ?? edgeTarget.Bounds,
             side,
-            hitResult.DocumentPoint);
+            edgeTarget.DerivedRegionMapping is { } mapping ? mapping.CoordinateMap.MapSceneToLogical(hitResult.DocumentPoint) : hitResult.DocumentPoint);
         var insertionIndex = ConnectorAnchorGeometryResolver.ResolveInsertionIndex(
             targetVisualState.ConnectorAnchors,
             side,
@@ -3741,9 +3792,9 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
                     anchorId,
                     documentPoint),
                 MapSceneToProcessLocal(ownerTarget, hitResult.DocumentPoint),
-                ownerTarget.SpatialRegion?.MapSceneToLocal(ownerTarget.Bounds) ?? ownerTarget.Bounds,
+                ownerTarget.MapPresentationToLocal(ownerTarget.Bounds),
                 IsSmart: false,
-                ownerTarget.SpatialRegion);
+                ownerTarget.SpatialRegion, ownerTarget.ProcessPlacement);
             return true;
         }
 
@@ -3774,6 +3825,8 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
         try
         {
             if (!eligibility.CanAcquire(new AnchorConnectionTargetEligibilityRequest(
+                    observed.PresentationContext,
+                    observed.PresentationPlan,
                     document,
                     observed.DocumentRevision,
                     connection.SourceSemanticElementId,
@@ -3791,7 +3844,7 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
                     observed.DocumentRevision,
                     semanticElementId,
                     visualStateId,
-                    hitItem.SpatialRegion?.MapSceneToLocal(hitItem.Bounds) ?? hitItem.Bounds,
+                    hitItem.MapPresentationToLocal(hitItem.Bounds),
                     MapSceneToProcessLocal(hitItem, hitResult.DocumentPoint),
                     policy),
                 () => stableProposedAnchorId ??=
@@ -3804,9 +3857,9 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
             target = new AnchorConnectionTarget(
                 acquisition,
                 MapSceneToProcessLocal(hitItem, hitResult.DocumentPoint),
-                hitItem.SpatialRegion?.MapSceneToLocal(hitItem.Bounds) ?? hitItem.Bounds,
+                hitItem.MapPresentationToLocal(hitItem.Bounds),
                 IsSmart: true,
-                hitItem.SpatialRegion);
+                hitItem.SpatialRegion, hitItem.ProcessPlacement);
             proposedAnchorId = stableProposedAnchorId;
         }
 #pragma warning disable CA1031 // Optional plugin acquisition failures reject the transient target.
@@ -3865,6 +3918,8 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
         try
         {
             if (!eligibility.CanAcquire(new AnchorConnectionTargetEligibilityRequest(
+                    observed.PresentationContext,
+                    observed.PresentationPlan,
                     document,
                     document.Revision,
                     connection.SourceSemanticElementId,
@@ -3925,6 +3980,8 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
         try
         {
             return eligibility.CanAcquire(new AnchorConnectionTargetEligibilityRequest(
+                connection.PresentationContext,
+                connection.PresentationPlan,
                 document,
                 document.Revision,
                 connection.SourceSemanticElementId,
@@ -4140,8 +4197,7 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
     }
 
     private static PointD MapSceneToProcessLocal(Canvas2DSceneItem item, PointD point) =>
-        item.ConnectorPresentationMapping?.MapSceneGuidanceToCanonical(point) ??
-        item.SpatialRegion?.MapSceneToLocal(point) ?? point;
+        item.MapPresentationToLocal(point);
 
     private static bool TryResolveContextBend(
         Canvas2DScene scene,
@@ -4258,7 +4314,7 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
     {
         attachment = null;
         ownerTarget = null;
-        if (!state.TryGetCurrentProcessInteraction(out var scopeScene) ||
+        if (!state.TryGetCurrentPresentationInteraction(out var scopeScene) ||
             scopeScene is null ||
             state.CurrentScene is null ||
             target.Origin.ProjectedObjectId is not { } projectedObjectId)
@@ -4293,7 +4349,7 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
     private static bool IsAttachedFixedSizeNode(
         EditingSessionState state,
         Canvas2DSceneItem target) =>
-        state.TryGetCurrentProcessInteraction(out var scopeScene) &&
+        state.TryGetCurrentPresentationInteraction(out var scopeScene) &&
         scopeScene is not null &&
         target.Origin.ProjectedObjectId is { } projectedObjectId &&
         scopeScene.ProjectedGraph!.Nodes.Any(node =>
@@ -4306,7 +4362,7 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
         IEnumerable<Canvas2DSceneItem> ownerTargets)
     {
         var owners = ownerTargets.ToArray();
-        if (!state.TryGetCurrentProcessInteraction(out var scopeScene) ||
+        if (!state.TryGetCurrentPresentationInteraction(out var scopeScene) ||
             scopeScene is null || state.CurrentScene is null)
         {
             yield break;
@@ -4490,7 +4546,7 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
                             if (!target.IsPreviewOnly)
                             {
                                 var persistentBounds = target.SpatialRegion?.MapSceneToLocal(
-                                    movedBounds) ?? movedBounds;
+                                    movedBounds) ?? target.ProcessPlacement?.MapViewToLocal(movedBounds) ?? movedBounds;
                                 moves.Add(new VisualStateMove(
                                     target.VisualStateId,
                                     persistentBounds.TopLeft,
@@ -4777,7 +4833,7 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
             }
             var translation = DocumentGeometryBoundary.ClampTranslation(
                 gesture.MoveTargets.Select(static target =>
-                    target.SpatialRegion?.MapSceneToLocal(target.BoundaryBounds) ??
+                    target.SpatialRegion?.MapSceneToLocal(target.BoundaryBounds) ?? target.ProcessPlacement?.MapViewToLocal(target.BoundaryBounds) ??
                     target.BoundaryBounds),
                 requestedPoint - gesture.StartDocumentPoint);
             return gesture.StartDocumentPoint + translation;
@@ -4826,6 +4882,9 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
                     DocumentGeometryBoundary.Clamp(
                         presentation.MapSceneToLocal(requestedPoint)));
             }
+
+            if (gesture.ProcessPlacement is { } processPlacement)
+                return processPlacement.MapLocalToView(DocumentGeometryBoundary.Clamp(processPlacement.MapViewToLocal(requestedPoint)));
 
             return DocumentGeometryBoundary.Clamp(requestedPoint);
         }
@@ -4969,10 +5028,14 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
         ConnectorEndpointReconnectionGestureState? EndpointReconnection = null,
         BoundaryAttachmentPlacement? OriginalBoundaryAttachment = null,
         Canvas2DSpatialRegion? SpatialRegion = null,
-        Canvas2DRouteBendSnapState RouteSnap = default);
+        Canvas2DRouteBendSnapState RouteSnap = default,
+        PresentationScopePlacement? ProcessPlacement = null);
 
     private sealed record AnchorConnectionGestureState(
         AnchorConnectionCreationRegistration Registration,
+        PresentationViewContext PresentationContext,
+        PresentationViewPlan? PresentationPlan,
+        AnchorConnectionCreationId? ExplicitCreationId,
         SemanticElementId SourceSemanticElementId,
         VisualStateId SourceVisualStateId,
         ConnectorAnchorId SourceAnchorId,
@@ -4984,7 +5047,8 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
         PointD PointerDocumentPoint,
         RectD TargetBounds,
         bool IsSmart,
-        Canvas2DSpatialRegion? SpatialRegion);
+        Canvas2DSpatialRegion? SpatialRegion,
+        PresentationScopePlacement? ProcessPlacement = null);
 
     private sealed record ConnectorEndpointReconnectionGestureState(
         ConnectorEndpointReconnectionRegistration Registration,
@@ -5011,7 +5075,8 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
         RectD BoundaryBounds,
         ImmutableArray<PointD> OriginalRoute,
         bool IsPreviewOnly = false,
-        Canvas2DSpatialRegion? SpatialRegion = null);
+        Canvas2DSpatialRegion? SpatialRegion = null,
+        PresentationScopePlacement? ProcessPlacement = null);
 
     private sealed record PendingPointerState(
         long PointerId,

@@ -9,6 +9,29 @@ namespace Inceptus.DocumentEngine.UnitTests.TestSupport;
 
 internal static class BpmnModelerTestComposition
 {
+    // Cross-Pool routing regressions explicitly model Lanes of one Participant.
+    internal static async Task AssignSharedParticipantAsync(
+        Func<Inceptus.DocumentEngine.Contracts.Commands.ICommand, Task> execute,
+        Func<DocumentSnapshot> capture,
+        params Inceptus.DocumentEngine.Contracts.Primitives.SemanticElementId[] pools)
+    {
+        var collaboration = new Inceptus.DocumentEngine.Contracts.Primitives.SemanticElementId("test:lane-collaboration");
+        var participant = new Inceptus.DocumentEngine.Contracts.Primitives.SemanticElementId("test:lane-participant");
+        var snapshot = capture();
+        if (!snapshot.SemanticModel.ModelProfiles.IsAvailable(Inceptus.DocumentEngine.Bpmn.Profiles.BpmnModelProfiles.OrganizationalId))
+            await execute(new Inceptus.DocumentEngine.Contracts.Commands.SetModelProfileAvailabilityCommand(snapshot.DocumentId, snapshot.Revision,
+                [new(Inceptus.DocumentEngine.Bpmn.Profiles.BpmnModelProfiles.OrganizationalId, true)]));
+        snapshot = capture();
+        await execute(new Inceptus.DocumentEngine.Bpmn.Commands.CreateBpmnCollaborationCommand(snapshot.DocumentId, snapshot.Revision, collaboration, "Test collaboration"));
+        snapshot = capture();
+        await execute(new Inceptus.DocumentEngine.Bpmn.Commands.CreateBpmnParticipantCommand(snapshot.DocumentId, snapshot.Revision, participant, collaboration, name: "Shared participant"));
+        foreach (var pool in pools)
+        {
+            snapshot = capture();
+            await execute(new Inceptus.DocumentEngine.Bpmn.Commands.SetBpmnPoolParticipantCommand(snapshot.DocumentId, snapshot.Revision, pool, participant));
+        }
+    }
+
     internal static IDocumentCanvasCompositionFactory DemoFactory { get; } =
         new FreshDemoTestCompositionFactory();
 

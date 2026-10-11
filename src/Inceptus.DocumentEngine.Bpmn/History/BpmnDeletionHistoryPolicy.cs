@@ -211,6 +211,6 @@ internal sealed class BpmnDeletionSnapshotRestoreCommandFactory : IHistoryComman
                 expectedRevision,
                 _visualModel.VisualStates,
                 _visualModel.ProfileElementPresentations,
-                _visualModel.RoutingScopes),
+                _visualModel.RoutingScopes, _visualModel.DocumentRoutingStates),
             _nodeGeometryImpact);
 }

@@ -4,7 +4,7 @@ using Inceptus.DocumentEngine.Contracts.Primitives;
 
 namespace Inceptus.DocumentEngine.Contracts.Routing;
 
-/// <summary>One saved expanded scope-logical path. Array order in its scope supplies priority.</summary>
+/// <summary>One saved logical path. Array order in its process or document routing owner supplies priority.</summary>
 public sealed class ConnectorRoutingRecord : IEquatable<ConnectorRoutingRecord>
 {
     public ConnectorRoutingRecord(

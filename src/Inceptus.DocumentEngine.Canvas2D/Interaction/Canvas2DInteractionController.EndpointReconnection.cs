@@ -59,6 +59,7 @@ public sealed partial class Canvas2DInteractionController
         }
 
         var startRequest = new ConnectorEndpointReconnectionStartRequest(
+            observed.PresentationContext, observed.PresentationPlan,
             document,
             observed.DocumentRevision,
             relationshipId,
@@ -112,6 +113,18 @@ public sealed partial class Canvas2DInteractionController
         }
 
         var registration = matches[0];
+        ImmutableArray<KeyValuePair<string, PropertyValue>> candidates;
+        try
+        {
+            candidates = CaptureReconnectionCandidates(document, observed.CurrentScene!, registration, startRequest);
+        }
+#pragma warning disable CA1031 // Plugin eligibility failures become stable interaction diagnostics.
+        catch (Exception exception) when (IsNonFatal(exception))
+        {
+            return FailureResult(observed, Canvas2DInteractionDiagnosticCodes.EndpointReconnectionFactoryFailed,
+                "The endpoint-reconnection capability could not determine eligible candidates.", exception);
+        }
+#pragma warning restore CA1031
         var originalPoint = endpointKind == ConnectorEndpointKind.Source
             ? displayedRoute[0]
             : displayedRoute[^1];
@@ -129,7 +142,7 @@ public sealed partial class Canvas2DInteractionController
                 currentSemanticEndpointId,
                 currentAnchorId,
                 registration.ReconnectionId,
-                connectorTarget.Id));
+                connectorTarget.Id).Concat(candidates));
         var updatedEditorState = Copy(
             observed.EditorState,
             observed.EditorState.Selection,
@@ -177,7 +190,7 @@ public sealed partial class Canvas2DInteractionController
                     CandidateSemanticElementId: null,
                     CandidateVisualStateId: null,
                     CandidateAnchorId: null),
-                SpatialRegion: connectorTarget.SpatialRegion);
+                SpatialRegion: connectorTarget.SpatialRegion, ProcessPlacement: connectorTarget.ProcessPlacement);
             return update;
         }
 
@@ -214,10 +227,21 @@ public sealed partial class Canvas2DInteractionController
         }
 #pragma warning restore CA1031
 
-        ConnectorEndpointReconnectionTarget? target =
-            TryResolveEndpointReconnectionTarget(observed, reconnection, hit, out var resolvedTarget)
-                ? resolvedTarget
-                : null;
+        ConnectorEndpointReconnectionTarget? target;
+        try
+        {
+            target = TryResolveEndpointReconnectionTarget(observed, reconnection, hit, out var resolvedTarget)
+                ? resolvedTarget : null;
+        }
+#pragma warning disable CA1031 // Plugin eligibility failures become stable interaction diagnostics.
+        catch (Exception exception) when (IsNonFatal(exception))
+        {
+            _persistentGesture = null;
+            return await CleanupFailedGestureUpdateUnderGateAsync(gesture.GestureId,
+                FailureResult(observed, Canvas2DInteractionDiagnosticCodes.EndpointReconnectionFactoryFailed,
+                    "The endpoint-reconnection capability could not validate the candidate.", exception)).ConfigureAwait(false);
+        }
+#pragma warning restore CA1031
         var effectivePoint = DocumentGeometryBoundary.Clamp(
             target?.DocumentPoint ?? documentPoint);
         if (effectivePoint == gesture.CurrentDocumentPoint &&
@@ -243,7 +267,7 @@ public sealed partial class Canvas2DInteractionController
             reconnection.ConnectorSceneObjectId,
             target?.SemanticElementId,
             target?.VisualStateId,
-            target?.AnchorId);
+            target?.AnchorId).Concat(ConnectionCandidateMetadata.Capture(active.Properties));
         var updatedGesture = new EditorGestureSnapshot(
             active.Id,
             active.Kind,
@@ -352,11 +376,22 @@ public sealed partial class Canvas2DInteractionController
         }
 #pragma warning restore CA1031
 
-        if (!TryResolveEndpointReconnectionTarget(
-                observed,
-                reconnection,
-                hit,
-                out var target))
+        ConnectorEndpointReconnectionTarget? target;
+        try
+        {
+            target = TryResolveEndpointReconnectionTarget(observed, reconnection, hit, out var resolvedTarget)
+                ? resolvedTarget : null;
+        }
+#pragma warning disable CA1031 // Plugin eligibility failures become stable interaction diagnostics.
+        catch (Exception exception) when (IsNonFatal(exception))
+        {
+            _persistentGesture = null;
+            return await CleanupFailedGestureUpdateUnderGateAsync(gesture.GestureId,
+                FailureResult(observed, Canvas2DInteractionDiagnosticCodes.EndpointReconnectionFactoryFailed,
+                    "The endpoint-reconnection capability could not validate the candidate.", exception)).ConfigureAwait(false);
+        }
+#pragma warning restore CA1031
+        if (target is null)
         {
             return await CancelConnectorEndpointReconnectionUnderGateAsync(
                 gesture,
@@ -388,6 +423,7 @@ public sealed partial class Canvas2DInteractionController
         }
 
         var startRequest = new ConnectorEndpointReconnectionStartRequest(
+            observed.PresentationContext, observed.PresentationPlan,
             document,
             observed.DocumentRevision,
             reconnection.RelationshipId,
@@ -438,6 +474,7 @@ public sealed partial class Canvas2DInteractionController
         {
             planned = currentRegistration.CommandFactory.CreatePlan(
                 new ConnectorEndpointReconnectionRequest(
+                    observed.PresentationContext, observed.PresentationPlan,
                     document,
                     observed.DocumentRevision,
                     reconnection.RelationshipId,
@@ -625,7 +662,12 @@ public sealed partial class Canvas2DInteractionController
                 document.VisualModel,
                 anchorId,
                 reconnection.ConnectorVisualStateId,
-                reconnection.EndpointKind))
+                reconnection.EndpointKind) ||
+            !IsReconnectionCandidateEligible(reconnection.Registration, new ConnectorEndpointReconnectionRequest(
+                observed.PresentationContext, observed.PresentationPlan, document,
+                observed.DocumentRevision, reconnection.RelationshipId, reconnection.ConnectorVisualStateId,
+                reconnection.EndpointKind, reconnection.OriginalSemanticEndpointId, reconnection.OriginalAnchorId,
+                semanticElementId, visualStateId, anchorId)))
         {
             return false;
         }
@@ -637,6 +679,28 @@ public sealed partial class Canvas2DInteractionController
             Center(hitItem.Bounds));
         return true;
     }
+
+    private static ImmutableArray<KeyValuePair<string, PropertyValue>> CaptureReconnectionCandidates(
+        DocumentSnapshot document, Canvas2DScene scene, ConnectorEndpointReconnectionRegistration registration,
+        ConnectorEndpointReconnectionStartRequest start)
+    {
+        if (registration.CandidateEligibility is null) return [];
+        var visible = scene.Items.Where(item => item.IsVisible && Canvas2DNodeBodyMetadata.IsNodeBody(item))
+            .Select(static item => item.Origin.VisualStateId).ToHashSet();
+        var role = RequiredRole(start.EndpointKind);
+        return ConnectionCandidateMetadata.EncodeAllowedVisuals(document.VisualModel.VisualStates.Where(visual =>
+            visible.Contains(visual.Id) && visual.ConnectorAnchors.Any(anchor => anchor.Role == role &&
+                !ConnectorAnchorOccupancy.IsOccupiedByOtherEndpoint(document.VisualModel, anchor.Id,
+                    start.ConnectorVisualStateId, start.EndpointKind) &&
+                IsReconnectionCandidateEligible(registration, new ConnectorEndpointReconnectionRequest(
+                    start.PresentationContext, start.PresentationPlan, document,
+                    start.ExpectedRevision, start.RelationshipId, start.ConnectorVisualStateId, start.EndpointKind,
+                    start.CurrentSemanticElementId, start.CurrentAnchorId, visual.SemanticElementId, visual.Id, anchor.Id))))
+            .Select(static visual => visual.Id));
+    }
+
+    private static bool IsReconnectionCandidateEligible(ConnectorEndpointReconnectionRegistration registration,
+        ConnectorEndpointReconnectionRequest request) => registration.CandidateEligibility?.IsEligible(request) ?? true;
 
     private static bool TryResolveConnectorEndpointHandle(
         Canvas2DScene scene,

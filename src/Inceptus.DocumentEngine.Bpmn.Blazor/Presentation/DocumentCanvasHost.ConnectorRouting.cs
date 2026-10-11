@@ -11,7 +11,9 @@ internal sealed partial class DocumentCanvasHost
     private static ImmutableArray<PointD> ResolveEditableConnectorRoute(DocumentSnapshot document, VisualStateSnapshot visual)
     {
         if (document.VisualModel.RoutingScopes is not { } scopes) return visual.Route;
-        var record = scopes.SelectMany(static scope => scope.Connectors).FirstOrDefault(candidate => candidate.VisualStateId == visual.Id);
+        var record = scopes.SelectMany(static scope => scope.Connectors)
+            .Concat(document.VisualModel.DocumentRoutingStates.SelectMany(static view => view.Connectors))
+            .FirstOrDefault(candidate => candidate.VisualStateId == visual.Id);
         return record?.RoutingType == ConnectorRoutingType.Manual ? record.Path : [];
     }
 }

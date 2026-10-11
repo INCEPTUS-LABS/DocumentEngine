@@ -1,5 +1,6 @@
 using Inceptus.DocumentEngine.Contracts.Creation;
 using Inceptus.DocumentEngine.Contracts.Documents;
+using Inceptus.DocumentEngine.Contracts.Presentation;
 using Inceptus.DocumentEngine.Contracts.Primitives;
 
 namespace Inceptus.DocumentEngine.Contracts.ConnectionCreation;
@@ -20,6 +21,17 @@ public sealed class AnchorConnectionCreationRequest
         ConnectorAnchorId targetAnchorId,
         IDocumentCreationIdentityProvider identityProvider,
         TargetAnchorAcquisitionResult? targetAcquisition = null)
+        : this(null, null, document, expectedRevision, sourceSemanticElementId, sourceVisualStateId, sourceAnchorId,
+            targetSemanticElementId, targetVisualStateId, targetAnchorId, identityProvider, targetAcquisition)
+    {
+    }
+
+    public AnchorConnectionCreationRequest(
+        PresentationViewContext? presentationContext, PresentationViewPlan? presentationPlan,
+        DocumentSnapshot document, DocumentRevision expectedRevision,
+        SemanticElementId sourceSemanticElementId, VisualStateId sourceVisualStateId, ConnectorAnchorId sourceAnchorId,
+        SemanticElementId targetSemanticElementId, VisualStateId targetVisualStateId, ConnectorAnchorId targetAnchorId,
+        IDocumentCreationIdentityProvider identityProvider, TargetAnchorAcquisitionResult? targetAcquisition = null)
     {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(sourceSemanticElementId);
@@ -58,6 +70,9 @@ public sealed class AnchorConnectionCreationRequest
         TargetAnchorId = targetAnchorId;
         IdentityProvider = identityProvider;
         TargetAcquisition = targetAcquisition;
+        ConnectionPresentationRequest.Validate(document, presentationContext, presentationPlan);
+        PresentationContext = presentationContext;
+        PresentationPlan = presentationPlan;
     }
 
     public DocumentSnapshot Document { get; }
@@ -79,4 +94,7 @@ public sealed class AnchorConnectionCreationRequest
     public IDocumentCreationIdentityProvider IdentityProvider { get; }
 
     public TargetAnchorAcquisitionResult? TargetAcquisition { get; }
+
+    public PresentationViewContext? PresentationContext { get; }
+    public PresentationViewPlan? PresentationPlan { get; }
 }

@@ -189,7 +189,7 @@ public sealed class PhaseA1214ToolboxPlacementIntegrationTests
         await using var harness = await Harness.CreateAsync();
         var identities = new CountingIdentityProvider();
         var controller = Controller(harness, identities);
-        harness.Selection.Select(new ToolboxItemId("bpmn:toolbox:timer-boundary-event"));
+        harness.Selection.Select(new ToolboxItemId("bpmn:toolbox:message-boundary-event"));
         await controller.UpdatePreviewAtCssPointAsync(harness.Session, Css(harness, new PointD(1100d, 600d)));
         Assert.False(Preview(harness).PlacementPreview!.IsAllowed);
         var invalid = await controller.TryPlaceAtCssPointAsync(harness.Session, Css(harness, new PointD(1100d, 600d)));

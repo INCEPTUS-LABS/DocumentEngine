@@ -499,6 +499,8 @@ public sealed partial class Canvas2DSpatialPoolInteractionTests
             await fixture.ExecuteAsync(state => new CreateOrganizationalPoolCommand(
                 state.DocumentId, state.DocumentRevision, PoolB, state.ActiveScopeId,
                 OrganizationalPoolCreationMode.Empty, "B"));
+            await BpmnModelerTestComposition.AssignSharedParticipantAsync(command => fixture.ExecuteAsync(_ => command),
+                () => fixture.Document, PoolA, PoolB);
             await fixture.PrepareInteractionCapacitiesAsync();
             await fixture.ExecuteAsync(state => new AssignOrganizationalElementCommand(
                 state.DocumentId, state.DocumentRevision, fixture.Visual(TaskB).SemanticElementId, PoolB));

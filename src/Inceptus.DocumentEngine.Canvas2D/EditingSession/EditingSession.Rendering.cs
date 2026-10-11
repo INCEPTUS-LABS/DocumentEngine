@@ -150,7 +150,7 @@ public sealed partial class EditingSession
                     var updated = await UpdateEditorStateCoreAsync(
                         CopyEditorStateWithViewport(state.EditorState, viewport),
                         linked.Token,
-                        state.ActiveScopeId,
+                        state.PresentationContext,
                         state.Generation,
                         surfaceSize).ConfigureAwait(false);
                     if (!updated.Succeeded)

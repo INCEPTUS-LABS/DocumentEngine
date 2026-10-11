@@ -143,7 +143,7 @@ public sealed class PhaseN5ModelValidationArchitectureTests
             "Components",
             "DocumentCanvas.razor.css");
 
-        Assert.Contains("@issue.Message", component, StringComparison.Ordinal);
+        Assert.Contains("@ModelerDiagnosticLabels.Message(Text, issue.Code, issue.Message)", component, StringComparison.Ordinal);
         Assert.DoesNotContain("MarkupString", component, StringComparison.Ordinal);
         Assert.Contains(".issue-content > span", styles, StringComparison.Ordinal);
         Assert.Contains("overflow-wrap: anywhere", styles, StringComparison.Ordinal);

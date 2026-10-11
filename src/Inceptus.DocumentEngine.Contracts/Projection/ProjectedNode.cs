@@ -17,6 +17,18 @@ public sealed class ProjectedNode : IProjectedObject, IEquatable<ProjectedNode>
         IEnumerable<KeyValuePair<string, PropertyValue>>? algorithmMetadata = null,
         NodeGeometryInteractionPolicy geometryInteractionPolicy =
             NodeGeometryInteractionPolicy.FreeMoveAndResize)
+        : this(source, placementHint, semanticProperties, projectedProperties, layoutHints, routingHints,
+            algorithmMetadata, geometryInteractionPolicy, null)
+    {
+    }
+
+    public ProjectedNode(ProjectionSourceTrace source, ProjectedPlacementHint? placementHint,
+        IEnumerable<KeyValuePair<string, PropertyValue>>? semanticProperties,
+        IEnumerable<KeyValuePair<string, PropertyValue>>? projectedProperties,
+        IEnumerable<KeyValuePair<string, PropertyValue>>? layoutHints,
+        IEnumerable<KeyValuePair<string, PropertyValue>>? routingHints,
+        IEnumerable<KeyValuePair<string, PropertyValue>>? algorithmMetadata,
+        NodeGeometryInteractionPolicy geometryInteractionPolicy, ProjectedRegionEnvelope? regionEnvelope)
     {
         ArgumentNullException.ThrowIfNull(source);
         if (!Enum.IsDefined(geometryInteractionPolicy))
@@ -31,6 +43,7 @@ public sealed class ProjectedNode : IProjectedObject, IEquatable<ProjectedNode>
         Id = ProjectedObjectIdentity.Create(source, ProjectedObjectKind.Node);
         PlacementHint = placementHint;
         GeometryInteractionPolicy = geometryInteractionPolicy;
+        RegionEnvelope = regionEnvelope;
         _propertySet = new ProjectedObjectPropertySet(
             semanticProperties,
             projectedProperties,
@@ -49,6 +62,8 @@ public sealed class ProjectedNode : IProjectedObject, IEquatable<ProjectedNode>
 
     public NodeGeometryInteractionPolicy GeometryInteractionPolicy { get; }
 
+    public ProjectedRegionEnvelope? RegionEnvelope { get; }
+
     public PropertyMap SemanticProperties => _propertySet.SemanticProperties;
 
     public PropertyMap ProjectedProperties => _propertySet.ProjectedProperties;
@@ -66,6 +81,7 @@ public sealed class ProjectedNode : IProjectedObject, IEquatable<ProjectedNode>
         Source.Equals(other.Source) &&
         Equals(PlacementHint, other.PlacementHint) &&
         GeometryInteractionPolicy == other.GeometryInteractionPolicy &&
+        Equals(RegionEnvelope, other.RegionEnvelope) &&
         _propertySet.Equals(other._propertySet);
 
     public override bool Equals(object? obj) => Equals(obj as ProjectedNode);
@@ -76,5 +92,6 @@ public sealed class ProjectedNode : IProjectedObject, IEquatable<ProjectedNode>
             Source,
             PlacementHint,
             GeometryInteractionPolicy,
+            RegionEnvelope,
             _propertySet);
 }

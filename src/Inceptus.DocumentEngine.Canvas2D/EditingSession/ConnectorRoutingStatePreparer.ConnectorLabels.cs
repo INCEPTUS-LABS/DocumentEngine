@@ -22,6 +22,7 @@ public sealed partial class ConnectorRoutingStatePreparer
             before.VisualModel.RoutingScopes is not { } scopes ||
             after.VisualModel.RoutingScopes is not { } proposedScopes ||
             !scopes.AsSpan().SequenceEqual(proposedScopes.AsSpan()) ||
+            !before.VisualModel.DocumentRoutingStates.AsSpan().SequenceEqual(after.VisualModel.DocumentRoutingStates.AsSpan()) ||
             !semantic.Elements.AsSpan().SequenceEqual(proposed.Elements.AsSpan()) ||
             !semantic.Relationships.AsSpan().SequenceEqual(proposed.Relationships.AsSpan()) ||
             !semantic.NestedScopes.AsSpan().SequenceEqual(proposed.NestedScopes.AsSpan()) ||
@@ -42,7 +43,7 @@ public sealed partial class ConnectorRoutingStatePreparer
             var next = after.VisualModel.VisualStates[index];
             if (old.Equals(next)) continue;
             if (!semantic.TryGetRelationship(old.SemanticElementId, out _) ||
-                !scopes.Any(scope => scope.Connectors.Any(record => record.VisualStateId == old.Id)) ||
+                !before.VisualModel.EnumerateConnectorRoutingRecords().Any(record => record.VisualStateId == old.Id) ||
                 !new VisualStateSnapshot(next.Id, next.SemanticElementId, next.Position, next.Size,
                     next.PlacementMode, next.Route, old.Properties, next.ConnectorAnchors,
                     next.SourceAnchorId, next.TargetAnchorId, next.BoundaryAttachment).Equals(old))

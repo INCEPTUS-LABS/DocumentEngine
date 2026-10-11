@@ -3,6 +3,7 @@ using Inceptus.DocumentEngine.Contracts.Diagnostics;
 using Inceptus.DocumentEngine.Contracts.Documents;
 using Inceptus.DocumentEngine.Contracts.Primitives;
 using Inceptus.DocumentEngine.Contracts.Routing;
+using Inceptus.DocumentEngine.Contracts.Semantics;
 using Inceptus.DocumentEngine.Contracts.Visuals;
 
 namespace Inceptus.DocumentEngine.Runtime.Documents;
@@ -33,6 +34,8 @@ internal static partial class DocumentInvariantValidator
 
         var allNodeIds = new HashSet<VisualStateId>();
         var allConnectorIds = new HashSet<VisualStateId>();
+        var documentConnectorIds = snapshot.VisualModel.DocumentRoutingStates
+            .SelectMany(static state => state.Connectors).Select(static connector => connector.VisualStateId).ToHashSet();
         foreach (var scope in scopes)
         {
             if (!semantic.TryGetScope(scope.ScopeId, out _))
@@ -41,12 +44,15 @@ internal static partial class DocumentInvariantValidator
                 continue;
             }
             var expectedNodes = snapshot.VisualModel.VisualStates.Where(visual =>
+                visual.PlacementMode != VisualPlacementMode.Derived &&
                 semantic.TryGetElement(visual.SemanticElementId, out _) &&
                 semantic.TryGetScope(visual.SemanticElementId, out var owner) && owner?.Id == scope.ScopeId)
                 .Select(static visual => visual.Id).ToHashSet();
             var expectedConnectors = snapshot.VisualModel.VisualStates.Where(visual =>
+                !documentConnectorIds.Contains(visual.Id) &&
                 semantic.TryGetRelationship(visual.SemanticElementId, out _) &&
-                semantic.TryGetScope(visual.SemanticElementId, out var owner) && owner?.Id == scope.ScopeId)
+                (semantic.TryGetScope(visual.SemanticElementId, out var owner) ? owner?.Id == scope.ScopeId :
+                    scope.Connectors.Any(connector => connector.VisualStateId == visual.Id)))
                 .Select(static visual => visual.Id).ToHashSet();
             if (!expectedNodes.SetEquals(scope.Geometry.Nodes.Select(static node => node.VisualStateId)))
                 Add("Saved node geometry must cover exactly the node visuals in its scope.", scope.ScopeId.Value);
@@ -83,6 +89,14 @@ internal static partial class DocumentInvariantValidator
                     Add("A saved connector must refer to an existing relationship visual.", connector.VisualStateId.Value);
                     continue;
                 }
+                bool Member(SemanticElementId id) => semantic.TryGetScope(id, out var endpointScope)
+                    ? endpointScope?.Id == scope.ScopeId
+                    : semantic.TryGetElement(id, out var endpoint) && endpoint?.ContainmentKind == SemanticElementContainmentKind.Document &&
+                        snapshot.VisualModel.VisualStates.Any(owner => owner.SemanticElementId == id && owner.PlacementMode == VisualPlacementMode.Derived);
+                // Document members are checked against the registered presentation plan at preparation/import.
+                // Every scope-contained endpoint still has to belong to this exact Process.
+                if (!Member(relationship.SourceId) || !Member(relationship.TargetId))
+                    Add("A saved connector cannot contain an endpoint from another Process scope.", connector.VisualStateId.Value);
                 if (connector.AutomaticProof is { } proof)
                 {
                     ValidateObservation(proof.Source, relationship.SourceId, visual.SourceAnchorId, connector.VisualStateId);
@@ -90,6 +104,37 @@ internal static partial class DocumentInvariantValidator
                 }
             }
         }
+        foreach (var state in snapshot.VisualModel.DocumentRoutingStates)
+        {
+            if (state.Connectors.IsEmpty)
+                Add("Document routing requires at least one document-owned connector.", state.OwnerId.Value);
+            if (!semantic.TryGetElement(state.OwnerId, out var owner) ||
+                owner?.ContainmentKind != SemanticElementContainmentKind.Document)
+                Add("Document routing must belong to an existing document-contained semantic owner.", state.OwnerId.Value);
+            foreach (var connector in state.Connectors)
+            {
+                if (!allConnectorIds.Add(connector.VisualStateId))
+                    Add("A connector can have only one saved routing owner.", connector.VisualStateId.Value);
+                if (!snapshot.VisualModel.TryGetVisualState(connector.VisualStateId, out var visual) || visual is null ||
+                    !semantic.TryGetRelationship(visual.SemanticElementId, out var relationship) || relationship is null)
+                {
+                    Add("A saved connector must refer to an existing relationship visual.", connector.VisualStateId.Value);
+                    continue;
+                }
+                if (semantic.TryGetScope(relationship.SourceId, out var sourceScope) && sourceScope is not null &&
+                    semantic.TryGetScope(relationship.TargetId, out var targetScope) && targetScope?.Id == sourceScope.Id)
+                    Add("A connector whose endpoints share a Process scope must retain that scope's routing authority.", connector.VisualStateId.Value);
+                if (connector.AutomaticProof is { } proof)
+                {
+                    ValidateObservation(proof.Source, relationship.SourceId, visual.SourceAnchorId, connector.VisualStateId);
+                    ValidateObservation(proof.Target, relationship.TargetId, visual.TargetAnchorId, connector.VisualStateId);
+                }
+            }
+        }
+        var expectedConnectorIds = snapshot.VisualModel.VisualStates.Where(visual =>
+            semantic.TryGetRelationship(visual.SemanticElementId, out _)).Select(static visual => visual.Id);
+        if (!allConnectorIds.SetEquals(expectedConnectorIds))
+            Add("Saved routing must cover every relationship visual exactly once.", snapshot.DocumentId.Value);
         if (snapshot.VisualModel.VisualStates.Any(static visual => !visual.Route.IsEmpty))
             Add("Prepared routing cannot coexist with untyped VisualState route guidance.", snapshot.DocumentId.Value);
         return [.. diagnostics];

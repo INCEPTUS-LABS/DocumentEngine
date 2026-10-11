@@ -198,6 +198,7 @@ public sealed class PhaseD1ArchitectureTests
             typeof(EditorFeedbackSnapshot),
             new Dictionary<string, Type>
             {
+                [nameof(EditorFeedbackSnapshot.ElementConnection)] = typeof(Inceptus.DocumentEngine.Contracts.ConnectionCreation.ElementConnectionPreview),
                 [nameof(EditorFeedbackSnapshot.Id)] = typeof(string),
                 [nameof(EditorFeedbackSnapshot.Kind)] = typeof(string),
                 [nameof(EditorFeedbackSnapshot.Bounds)] = typeof(RectD?),
@@ -237,7 +238,7 @@ public sealed class PhaseD1ArchitectureTests
             typeof(PointD),
             typeof(PointD),
             typeof(IEnumerable<KeyValuePair<string, PropertyValue>>));
-        Assert.Equal(3, typeof(EditorFeedbackSnapshot).GetConstructors().Length);
+        Assert.Equal(4, typeof(EditorFeedbackSnapshot).GetConstructors().Length);
         Assert.NotNull(typeof(EditorFeedbackSnapshot).GetConstructor([typeof(string), typeof(Canvas2DSpatialResizeFeedback)]));
         Assert.NotNull(typeof(EditorFeedbackSnapshot).GetConstructor([
             typeof(string),

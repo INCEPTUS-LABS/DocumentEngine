@@ -2,15 +2,25 @@ using Inceptus.DocumentEngine.Contracts.Layout;
 using Inceptus.DocumentEngine.Contracts.Primitives;
 using Inceptus.DocumentEngine.Contracts.Projection;
 using Inceptus.DocumentEngine.Contracts.Routing;
+using Inceptus.DocumentEngine.Contracts.Presentation;
 
 namespace Inceptus.DocumentEngine.Canvas2D.EditingSession;
 
 internal sealed record EditingSessionPipelineArtifacts(
-    DocumentScopeId ScopeId,
+    PresentationViewContext PresentationContext,
     ProjectedGraph ProjectedGraph,
     LayoutResult LayoutResult,
     RoutingResult RoutingResult)
 {
+    internal PresentationViewPlan? PresentationPlan { get; init; }
+
+    internal EditingSessionPipelineArtifacts(DocumentScopeId scopeId, ProjectedGraph graph,
+        LayoutResult layout, RoutingResult routing)
+        : this(new ProcessScopePresentationContext(scopeId), graph, layout, routing) { }
+
+    internal DocumentScopeId ScopeId => PresentationContext is ProcessScopePresentationContext process
+        ? process.ScopeId : throw new InvalidOperationException("A document presentation has no active process scope.");
+
     internal EditingSessionPipelineArtifacts(
         ProjectedGraph projectedGraph,
         LayoutResult layoutResult,
@@ -26,7 +36,7 @@ internal sealed record EditingSessionPipelineArtifacts(
     internal bool IsInternallyConsistent => IsCompatibleWith(
         ProjectedGraph.DocumentId,
         ProjectedGraph.SourceRevision,
-        ScopeId);
+        PresentationContext);
 
     internal bool IsCompatibleWith(
         DocumentId documentId,
@@ -39,8 +49,11 @@ internal sealed record EditingSessionPipelineArtifacts(
     internal bool IsCompatibleWith(
         DocumentId documentId,
         DocumentRevision revision,
-        DocumentScopeId scopeId) =>
-        ScopeId == scopeId &&
+        DocumentScopeId scopeId) => IsCompatibleWith(documentId, revision, new ProcessScopePresentationContext(scopeId));
+
+    internal bool IsCompatibleWith(DocumentId documentId, DocumentRevision revision,
+        PresentationViewContext context) =>
+        PresentationContext == context &&
         ProjectedGraph.DocumentId == documentId &&
         ProjectedGraph.SourceRevision == revision &&
         LayoutResult.DocumentId == documentId &&
@@ -56,7 +69,7 @@ internal sealed record EditingSessionPipelineArtifacts(
         ScopeGeometrySnapshot? committedGeometry = null)
     {
         ArgumentNullException.ThrowIfNull(documentId);
-        if (!IsCompatibleWith(documentId, previousRevision, ScopeId))
+        if (!IsCompatibleWith(documentId, previousRevision, PresentationContext))
         {
             throw new ArgumentException(
                 "Only internally consistent artifacts from the previous Document revision can be rebound.",
@@ -71,7 +84,7 @@ internal sealed record EditingSessionPipelineArtifacts(
         }
 
         return new EditingSessionPipelineArtifacts(
-            ScopeId,
+            PresentationContext,
             new ProjectedGraph(
                 documentId,
                 committedRevision,
@@ -97,6 +110,10 @@ internal sealed record EditingSessionPipelineArtifacts(
                     ? new RoutingLogicalGeometry(logical.ScopeId, committedGeometry ?? logical.Geometry,
                         new LayoutResult(documentId, committedRevision, logical.Layout.AlgorithmId,
                             logical.Layout.Computation, logical.Layout.Diagnostics))
-                    : null));
+                    : null))
+        {
+            PresentationPlan = PresentationPlan is { } plan ? new PresentationViewPlan(documentId, committedRevision,
+                plan.Context, plan.ElementIds, plan.RelationshipIds, plan.ScopePlacements) : null,
+        };
     }
 }

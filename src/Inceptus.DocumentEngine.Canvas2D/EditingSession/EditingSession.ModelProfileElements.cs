@@ -1,6 +1,7 @@
 using Inceptus.DocumentEngine.Contracts.Canvas2D;
 using Inceptus.DocumentEngine.Contracts.Documents;
 using Inceptus.DocumentEngine.Contracts.Primitives;
+using Inceptus.DocumentEngine.Contracts.Presentation;
 using Inceptus.DocumentEngine.Contracts.Profiles;
 
 namespace Inceptus.DocumentEngine.Canvas2D.EditingSession;
@@ -114,7 +115,7 @@ public sealed partial class EditingSession
                     !artifacts.IsCompatibleWith(
                         snapshot.DocumentId,
                         snapshot.Revision,
-                        _activeScopeId))
+                        _presentationContext))
                 {
                     return OperationResult(
                         EditingSessionOperationStatus.Rejected,
@@ -161,6 +162,7 @@ public sealed partial class EditingSession
         DocumentSnapshot document)
     {
         if (_status != EditingSessionStatus.Ready ||
+            _presentationContext is not ProcessScopePresentationContext ||
             document.DocumentId != update.ExpectedDocumentId ||
             document.Revision != update.ExpectedDocumentRevision ||
             _activeScopeId != update.ExpectedActiveScopeId ||

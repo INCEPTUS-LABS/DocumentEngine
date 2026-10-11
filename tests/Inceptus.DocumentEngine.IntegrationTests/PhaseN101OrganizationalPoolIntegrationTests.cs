@@ -44,6 +44,10 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
         Assert.Equal(EditingSessionAttachStatus.Ready, attachment.Status);
 
         var activeScopeId = session.CaptureState().ActiveScopeId;
+        await ExecuteAsync(session, new CreateBpmnTaskCommand(document.DocumentId, document.Revision,
+            new SemanticElementId("a-independent"), new VisualStateId("a-independent:visual"),
+            new PointD(100d, 100d), new SizeD(120d, 80d), "INDEPENDENT", "Independent", 998,
+            VisualPlacementMode.Pinned, targetScopeId: activeScopeId));
         var initial = CaptureCurrentDocument(session);
         var initialElements = initial.SemanticModel.Elements;
         var initialRelationships = initial.SemanticModel.Relationships;
@@ -349,12 +353,23 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
             AssertConnectorEndpoints(fixture, flowVisualId, sourceId, targetId);
         }
 
-        // Reuse the populated Unassigned destination with a connected node, not only an
-        // isolated Task. Organizational transfer must not author presentation offsets into
-        // the manual route or duplicate the existing SequenceFlow.
+        // A connected node may transfer between Lanes of the same Participant.
+        // The transfer must not author presentation offsets into the manual route
+        // or duplicate the existing SequenceFlow.
+        var thirdLane = new SemanticElementId("n101:drag:third-lane");
+        await fixture.ExecuteAsync(state => new CreateOrganizationalPoolCommand(
+            state.DocumentId, state.DocumentRevision, thirdLane, state.ActiveScopeId,
+            OrganizationalPoolCreationMode.Empty, "Third Lane"));
+        await fixture.ExecuteAsync(state => new SetBpmnPoolParticipantCommand(
+            state.DocumentId, state.DocumentRevision, thirdLane, new SemanticElementId("test:lane-participant")));
+        var thirdRegion = fixture.Document.VisualModel.RoutingScopes!.Value
+            .Single(scope => scope.ScopeId == fixture.State.ActiveScopeId).Geometry.Regions
+            .Single(region => region.ContainerSemanticElementId == thirdLane);
+        await fixture.ExecuteAsync(state => new SetOrganizationalRegionExpandedHeightCommand(
+            state.DocumentId, state.DocumentRevision, state.ActiveScopeId, thirdRegion.Id, 512d));
         var beforeTransfer = fixture.Document;
         var unassignedIdentity = UnassignedRegion(fixture).Id;
-        await MoveToRegionAsync(fixture, targetId, null, new PointD(340d, 100d), unassignedIdentity,
+        await MoveToRegionAsync(fixture, targetId, thirdLane, new PointD(340d, 100d), unassignedIdentity,
             grabOffset: new VectorD(18d, 50d));
         Assert.Equal(editedRoute.AsEnumerable(), fixture.SavedRoute(flowVisualId).ManualDefinition!.Value);
         Assert.Equal(relationship, fixture.Document.SemanticModel.Relationships.Single(item => item.Id == flowId));
@@ -368,7 +383,7 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
         await WaitForReadyAsync(fixture.Session);
         AssertEquivalentIgnoringRevision(transferred, fixture.Document);
         AssertConnectorEndpoints(fixture, flowVisualId, sourceId, targetId);
-        await PlaceInUnassignedAsync(fixture, "timer-catch-event", new PointD(80d, 40d), unassignedIdentity);
+        await PlaceInUnassignedAsync(fixture, "message-catch-event", new PointD(80d, 40d), unassignedIdentity);
         Assert.Equal(editedRoute.AsEnumerable(), fixture.SavedRoute(flowVisualId).ManualDefinition!.Value);
         AssertConnectorEndpoints(fixture, flowVisualId, sourceId, targetId);
     }
@@ -453,6 +468,8 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
             await fixture.ExecuteAsync(state => new CreateOrganizationalPoolCommand(
                 state.DocumentId, state.DocumentRevision, PoolBId, state.ActiveScopeId,
                 OrganizationalPoolCreationMode.Empty, "Pool B"));
+            await BpmnModelerTestComposition.AssignSharedParticipantAsync(command => fixture.ExecuteAsync(_ => command),
+                () => fixture.Document, PoolAId, PoolBId);
             await PrepareRegionCapacitiesAsync(fixture.Session, 900d);
             var positions = new[]
             {

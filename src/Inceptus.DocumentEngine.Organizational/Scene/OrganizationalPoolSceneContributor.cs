@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using Inceptus.DocumentEngine.Contracts.Canvas2D;
 using Inceptus.DocumentEngine.Contracts.Geometry;
 using Inceptus.DocumentEngine.Contracts.Primitives;
+using Inceptus.DocumentEngine.Contracts.Presentation;
 using Inceptus.DocumentEngine.Contracts.Projection;
 using Inceptus.DocumentEngine.Contracts.Properties;
 using Inceptus.DocumentEngine.Organizational.Profiles;
@@ -66,7 +67,7 @@ public sealed partial class OrganizationalPoolSceneContributor :
     {
         ArgumentNullException.ThrowIfNull(context);
         var presentation = context.Presentation;
-        if (presentation is null ||
+        if (presentation is null || presentation.PresentationContext is not ProcessScopePresentationContext ||
             !presentation.Document.SemanticModel.ModelProfiles.IsAvailable(
                 OrganizationalModelProfile.Id))
         {
@@ -100,7 +101,7 @@ public sealed partial class OrganizationalPoolSceneContributor :
 
         var poolIds = pools.Select(static pool => pool.Id).ToHashSet();
         var nodes = context.ProjectedGraph.Nodes
-            .Where(static node => node.Source.VisualStateId is not null)
+            .Where(static node => node.Source.VisualStateId is not null && node.RegionEnvelope is null)
             .OrderBy(static node => node.Id.Value, StringComparer.Ordinal)
             .ToArray();
         var assignmentByVisual = new Dictionary<VisualStateId, SemanticElementId?>();

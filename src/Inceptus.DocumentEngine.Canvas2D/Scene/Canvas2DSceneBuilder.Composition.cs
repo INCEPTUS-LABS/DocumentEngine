@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using Inceptus.DocumentEngine.Contracts.ConnectionCreation;
 using Inceptus.DocumentEngine.Contracts.Canvas2D;
 using Inceptus.DocumentEngine.Contracts.Diagnostics;
 using Inceptus.DocumentEngine.Contracts.EditorState;
@@ -45,7 +46,7 @@ public sealed partial class Canvas2DSceneBuilder
         var savedRecords = routing.LogicalGeometry is { } logicalGeometry
             ? visualModel.RoutingScopes.GetValueOrDefault().Single(scope => scope.ScopeId == logicalGeometry.ScopeId)
                 .Connectors.ToDictionary(static record => record.VisualStateId)
-            : null;
+            : visualModel.EnumerateConnectorRoutingRecords().ToDictionary(static record => record.VisualStateId);
         var noRouteEdgeIds = routing.NoRouteEdgeIds.ToHashSet();
         var portsById = graph.Ports.ToDictionary(static port => port.Id);
 
@@ -72,12 +73,13 @@ public sealed partial class Canvas2DSceneBuilder
         foreach (var node in graph.Nodes)
         {
             var geometry = nodeGeometry[node.Id];
+            var boundaryContainer = Canvas2DNodePresentationMetadata.IsBoundaryContainer(node.ProjectedProperties);
             var isAttachedFixedSize = node.GeometryInteractionPolicy ==
                 NodeGeometryInteractionPolicy.AttachedBoundaryMoveFixedSize;
             items.Add(new Canvas2DSceneItem(
                 Canvas2DSceneObjectIdentity.ForProjected(node.Id, "node"),
                 Canvas2DSceneLayer.Content,
-                isAttachedFixedSize ? 1 : 0,
+                boundaryContainer ? -10 : isAttachedFixedSize ? 1 : 0,
                 Canvas2DSceneGeometry.Rectangle(new RectD(
                     0d,
                     0d,
@@ -85,10 +87,11 @@ public sealed partial class Canvas2DSceneBuilder
                     geometry.Bounds.Height)),
                 CreateOrigin(node),
                 transform: geometry.Transform,
-                style: new Canvas2DSceneStyle("#ffffff", "#000000"),
-                hitTestPolicy: new Canvas2DHitTestPolicy(Canvas2DHitTestMode.FillOrStroke),
+                style: node.RegionEnvelope is not null ? new Canvas2DSceneStyle(stroke: "transparent") : new Canvas2DSceneStyle("#ffffff", "#000000"),
+                hitTestPolicy: new Canvas2DHitTestPolicy(boundaryContainer && node.RegionEnvelope?.HeaderWidth is null ? Canvas2DHitTestMode.Stroke : Canvas2DHitTestMode.FillOrStroke),
                 persistentAppearance: GetPersistentAppearance(node, visualsById),
-                metadata: isAttachedFixedSize
+                metadata: node.GeometryInteractionPolicy == NodeGeometryInteractionPolicy.DerivedRegion
+                    ? Canvas2DNodeBodyMetadata.DerivedNodeBodyCapability : isAttachedFixedSize
                     ? Canvas2DNodeBodyMetadata.AttachedMoveAndNodeBodyCapability
                     : Canvas2DNodeBodyMetadata.MoveResizeAndNodeBodyCapability,
                 bounds: geometry.Bounds));
@@ -96,6 +99,7 @@ public sealed partial class Canvas2DSceneBuilder
 
         foreach (var edge in graph.Edges)
         {
+            var visualDescriptor = ConnectorVisualMetadata.Resolve(edge.ProjectedProperties);
             var isRouted = routes.TryGetValue(edge.Id, out var route);
             var isNoRouteFallback = !isRouted && noRouteEdgeIds.Contains(edge.Id);
             if (!isRouted && !isNoRouteFallback)
@@ -161,7 +165,7 @@ public sealed partial class Canvas2DSceneBuilder
                     ConnectorLineJumpZIndex,
                     Canvas2DSceneGeometry.Path(jumpPath),
                     CreateDerivedConnectorOrigin(origin, stableKey, connectorId),
-                    style: new Canvas2DSceneStyle(stroke: "#000000"),
+                    style: new Canvas2DSceneStyle(stroke: "#000000", dashPattern: visualDescriptor.DashPattern),
                     hitTestPolicy: new Canvas2DHitTestPolicy(
                         Canvas2DHitTestMode.Stroke,
                         Canvas2DConnectorInteractionConfiguration.Default.PathHitTolerance),
@@ -175,7 +179,7 @@ public sealed partial class Canvas2DSceneBuilder
                 ConnectorBaseZIndex,
                 Canvas2DSceneGeometry.Path(lineJumpPresentation.DisplayPath),
                 origin,
-                style: new Canvas2DSceneStyle(stroke: "#000000"),
+                style: new Canvas2DSceneStyle(stroke: "#000000", dashPattern: visualDescriptor.DashPattern),
                 hitTestPolicy: new Canvas2DHitTestPolicy(
                     Canvas2DHitTestMode.Stroke,
                     Canvas2DConnectorInteractionConfiguration.Default.PathHitTolerance),
@@ -187,31 +191,9 @@ public sealed partial class Canvas2DSceneBuilder
                     targetAnchor,
                     route?.Metadata,
                     isNoRouteFallback, edge.Source.VisualStateId is { } visualId
-                        ? savedRecords?.GetValueOrDefault(visualId) : null)));
+                        ? savedRecords?.GetValueOrDefault(visualId) : null).Concat(CreateConnectorVisualMetadata(visualDescriptor))));
 
-            var targetArrow = Canvas2DConnectorArrowGeometry.Create(logicalPath);
-            if (targetArrow is not null)
-            {
-                items.Add(new Canvas2DSceneItem(
-                    Canvas2DSceneObjectIdentity.ForProjected(
-                        edge.Id,
-                        "connector-target-arrow"),
-                    Canvas2DSceneLayer.Connector,
-                    ConnectorBaseTargetArrowZIndex,
-                    targetArrow,
-                    origin,
-                    style: new Canvas2DSceneStyle("#000000", "#000000"),
-                    hitTestPolicy: new Canvas2DHitTestPolicy(
-                        Canvas2DHitTestMode.FillOrStroke,
-                        1d),
-                    persistentAppearance: persistentAppearance,
-                    metadata:
-                    [
-                        new KeyValuePair<string, PropertyValue>(
-                            Canvas2DConnectorArrowMetadata.TargetArrow,
-                            Canvas2DConnectorArrowMetadata.TargetArrowValue),
-                    ]));
-            }
+            items.AddRange(CreateConnectorDecorations(edge, origin, persistentAppearance, logicalPath, visualDescriptor));
         }
 
         foreach (var label in graph.Labels)
@@ -382,13 +364,14 @@ public sealed partial class Canvas2DSceneBuilder
             Canvas2DConnectorEndpointReconnectionGestureMetadata.TryRead(
                 activeGesture.Properties,
                 out var activeReconnection) &&
-            activeReconnection?.EndpointKind == ConnectorEndpointKind.Target)
+            activeReconnection is not null)
         {
             items.RemoveAll(item =>
                 item.Layer == Canvas2DSceneLayer.Connector &&
                 item.Origin.VisualStateId == activeReconnection.ConnectorVisualStateId &&
                 item.Metadata.TryGetValue(
-                    Canvas2DConnectorArrowMetadata.TargetArrow,
+                    activeReconnection.EndpointKind == ConnectorEndpointKind.Target
+                        ? Canvas2DConnectorArrowMetadata.TargetArrow : ConnectorSourceDecorationKey,
                     out var targetArrow) &&
                 targetArrow.Kind == PropertyValueKind.Boolean &&
                 targetArrow.BooleanValue);
@@ -449,7 +432,7 @@ public sealed partial class Canvas2DSceneBuilder
                 foreach (var anchorHandle in CreateConnectorAnchorHandles(
                              target,
                              visualState,
-                             resolvedAnchors,
+                             FilterConnectionAnchors(editorState, visualState.Id, resolvedAnchors, referencedAnchorIds),
                              referencedAnchorIds,
                              editorState.ActiveGesture))
                 {
@@ -504,7 +487,8 @@ public sealed partial class Canvas2DSceneBuilder
                 out _))
         {
             foreach (var visualState in visualStatesById.Values
-                         .Where(visual => !editorState.Selection.Contains(visual.Id))
+                         .Where(visual => !editorState.Selection.Contains(visual.Id) &&
+                             ConnectionCandidateMetadata.AllowsVisual(connectionGesture.Properties, visual.Id))
                          .OrderBy(static visual => visual.Id.Value, StringComparer.Ordinal))
             {
                 var target = ResolveLogicalSelectionTarget(persistentItems, visualState.Id);
@@ -548,7 +532,8 @@ public sealed partial class Canvas2DSceneBuilder
                 ? ConnectorAnchorRole.Source
                 : ConnectorAnchorRole.Target;
             foreach (var visualState in visualStatesById.Values
-                         .Where(visual => !editorState.Selection.Contains(visual.Id))
+                         .Where(visual => !editorState.Selection.Contains(visual.Id) &&
+                             ConnectionCandidateMetadata.AllowsVisual(reconnectionGesture.Properties, visual.Id))
                          .OrderBy(static visual => visual.Id.Value, StringComparer.Ordinal))
             {
                 var target = ResolveLogicalSelectionTarget(persistentItems, visualState.Id);
@@ -668,6 +653,24 @@ public sealed partial class Canvas2DSceneBuilder
         for (var index = 0; index < editorState.TemporaryFeedback.Length; index++)
         {
             var feedback = editorState.TemporaryFeedback[index];
+            if (feedback.ElementConnection is { } connection)
+            {
+                var source = items.FirstOrDefault(item => item.Id == connection.Source.SceneId &&
+                    item.Origin.VisualStateId == connection.Source.VisualId && item.Origin.ProjectedObjectId == connection.Source.ProjectedId);
+                if (source is not null)
+                {
+                    var center = new PointD(source.Bounds.X + source.Bounds.Width / 2, source.Bounds.Y + source.Bounds.Height / 2);
+                    var points = new[] { center, connection.CurrentPoint };
+                    var key = ElementConnectionPreview.FeedbackId;
+                    var origin = new Canvas2DSceneOriginTrace(Canvas2DSceneOriginCategory.EditorState, stableSourceKey: key);
+                    items.Add(new Canvas2DSceneItem(Canvas2DSceneObjectIdentity.ForEditorState(key), Canvas2DSceneLayer.Overlay,
+                        4900, Canvas2DSceneGeometry.Path(points), origin,
+                        style: new Canvas2DSceneStyle(stroke: "#2563eb", strokeWidth: 2d, dashPattern: connection.Descriptor.DashPattern),
+                        hitTestPolicy: Canvas2DHitTestPolicy.None));
+                    items.AddRange(CreatePreviewConnectorDecorations(key, origin, points, connection.Descriptor, 4901));
+                }
+                continue;
+            }
             if (feedback.PresentationMode == EditorFeedbackPresentationMode.ContributorOnly)
             {
                 continue;
@@ -852,7 +855,7 @@ public sealed partial class Canvas2DSceneBuilder
                 relatedSceneObjectIds: [target.Id]),
             transform: target.Transform,
             clip: target.Clip,
-            style: new Canvas2DSceneStyle(stroke: stroke, strokeWidth: 2d),
+            style: new Canvas2DSceneStyle(stroke: stroke, strokeWidth: 2d, dashPattern: isConnector ? target.Style.DashPattern : null),
             hitTestPolicy: Canvas2DHitTestPolicy.None,
             bounds: target.Bounds);
 
@@ -861,10 +864,11 @@ public sealed partial class Canvas2DSceneBuilder
             yield break;
         }
 
-        var targetArrow = persistentItems.SingleOrDefault(item =>
+        var decorations = persistentItems.Where(item =>
             item.Origin.ProjectedObjectId == target.Origin.ProjectedObjectId &&
-            HasBooleanMetadata(item, Canvas2DConnectorArrowMetadata.TargetArrow));
-        if (targetArrow is not null)
+            (HasBooleanMetadata(item, Canvas2DConnectorArrowMetadata.TargetArrow) ||
+             HasBooleanMetadata(item, ConnectorSourceDecorationKey)));
+        foreach (var targetArrow in decorations)
         {
             yield return CreateConnectorTargetArrowOverlay(
                 target,
@@ -915,7 +919,8 @@ public sealed partial class Canvas2DSceneBuilder
         Canvas2DSceneItem hovered,
         IReadOnlyList<Canvas2DSceneItem> persistentItems)
     {
-        if (!HasBooleanMetadata(hovered, Canvas2DConnectorArrowMetadata.TargetArrow))
+        if (!HasBooleanMetadata(hovered, Canvas2DConnectorArrowMetadata.TargetArrow) &&
+            !HasBooleanMetadata(hovered, ConnectorSourceDecorationKey))
         {
             return hovered;
         }
@@ -965,7 +970,7 @@ public sealed partial class Canvas2DSceneBuilder
                 relatedSceneObjectIds: [connector.Id, lineJump.Id]),
             transform: lineJump.Transform,
             clip: lineJump.Clip,
-            style: new Canvas2DSceneStyle(stroke: stroke, strokeWidth: 2d),
+            style: new Canvas2DSceneStyle(stroke: stroke, strokeWidth: 2d, dashPattern: connector.Style.DashPattern),
             hitTestPolicy: Canvas2DHitTestPolicy.None,
             bounds: lineJump.Bounds);
     }
@@ -1010,7 +1015,9 @@ public sealed partial class Canvas2DSceneBuilder
                 relatedSceneObjectIds: [connector.Id, targetArrow.Id]),
             transform: targetArrow.Transform,
             clip: targetArrow.Clip,
-            style: new Canvas2DSceneStyle(color, color, 2d),
+            style: ConnectorDecorationStyle(HasBooleanMetadata(targetArrow, ConnectorSourceDecorationKey)
+                ? ConnectorVisualMetadata.Resolve(targetArrow.Metadata).SourceDecoration
+                : ConnectorVisualMetadata.Resolve(targetArrow.Metadata).TargetDecoration, color, 2d),
             hitTestPolicy: Canvas2DHitTestPolicy.None,
             bounds: targetArrow.Bounds);
     }
@@ -1277,7 +1284,7 @@ public sealed partial class Canvas2DSceneBuilder
                 bounds,
                 anchor.Side,
                 anchor.Order,
-                anchor.SideCount);
+                anchor.SideCount, anchor.NormalizedPosition);
         }
         else
         {

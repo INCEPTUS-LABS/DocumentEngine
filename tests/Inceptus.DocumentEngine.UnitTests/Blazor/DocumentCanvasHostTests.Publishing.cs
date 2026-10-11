@@ -9,6 +9,7 @@ using Inceptus.DocumentEngine.Bpmn.Blazor.Components;
 using Inceptus.DocumentEngine.Bpmn.Blazor.Presentation;
 using Inceptus.DocumentEngine.Bpmn.Publishing;
 using Inceptus.DocumentEngine.Bpmn.Semantics;
+using Inceptus.DocumentEngine.Bpmn.Commands;
 using Inceptus.DocumentEngine.Canvas2D.EditingSession;
 using Inceptus.DocumentEngine.Canvas2D.Publishing;
 using Inceptus.DocumentEngine.Canvas2D.Rendering;
@@ -745,15 +746,20 @@ public sealed partial class DocumentCanvasHostTests
             session.CaptureState().ActiveScopeId,
             OrganizationalPoolCreationMode.Empty,
             "Fulfilment"));
+        var collaboration = new SemanticElementId("test:publish:collaboration");
+        var participant = new SemanticElementId("test:publish:participant");
+        await ExecutePublishCommandAsync(session, new CreateBpmnCollaborationCommand(document.DocumentId, document.Revision, collaboration));
+        await ExecutePublishCommandAsync(session, new CreateBpmnParticipantCommand(document.DocumentId, document.Revision, participant, collaboration, name: "Company"));
+        await ExecutePublishCommandAsync(session, new SetBpmnPoolParticipantCommand(document.DocumentId, document.Revision, poolA, participant));
+        await ExecutePublishCommandAsync(session, new SetBpmnPoolParticipantCommand(document.DocumentId, document.Revision, poolB, participant));
         await ExecutePublishCommandAsync(session, new AssignOrganizationalElementCommand(
             document.DocumentId,
             document.Revision,
             BpmnDemoPipeline.TaskId,
             poolB));
-        await ExecutePublishCommandAsync(session, new UnassignOrganizationalElementCommand(
-            document.DocumentId,
-            document.Revision,
-            BpmnDemoPipeline.StartEventId));
+        var unpooledId = new SemanticElementId("test:publish:independent");
+        await ExecutePublishCommandAsync(session, new CreateBpmnTaskCommand(document.DocumentId, document.Revision,
+            unpooledId, new VisualStateId("test:publish:independent:visual"), new PointD(40d, 50d), new SizeD(120d, 80d), "INDEPENDENT", "Independent", 5, VisualPlacementMode.Pinned));
 
         var taskVisual = document.VisualModel.VisualStates.Single(
             visual => visual.Id == BpmnDemoPipeline.TaskVisualId);
@@ -833,11 +839,11 @@ public sealed partial class DocumentCanvasHostTests
         var snapshot = Assert.IsType<PublishedProcessPackage>(directBuild.Package).Snapshot;
         Assert.True(packageJson.AsSpan().SequenceEqual(directBuild.Package!.ProcessJson.AsSpan()));
 
-        Assert.Equal(capture.ProjectedGraph.Nodes.Length, snapshot.Presentation.Nodes.Length);
+        Assert.Equal(capture.ProjectedGraph.Nodes.Count(node => node.RegionEnvelope is null), snapshot.Presentation.Nodes.Length);
         Assert.Contains(snapshot.Presentation.Nodes, node => node.Id == poolAElement.Value);
         Assert.Contains(snapshot.Presentation.Nodes, node => node.Id == BpmnDemoPipeline.TaskId.Value);
         Assert.Contains(snapshot.Presentation.Nodes, node => node.Id == BpmnDemoPipeline.StartEventId.Value);
-        foreach (var node in capture.ProjectedGraph.Nodes)
+        foreach (var node in capture.ProjectedGraph.Nodes.Where(node => node.RegionEnvelope is null))
         {
             var expectedItem = capture.Scene.Items.Single(item => item.IsVisible &&
                 item.Id == Canvas2DSceneObjectIdentity.ForProjected(node.Id, "node"));
@@ -875,7 +881,7 @@ public sealed partial class DocumentCanvasHostTests
         var assignedToB = snapshot.Presentation.Nodes.Single(node =>
             node.Id == BpmnDemoPipeline.TaskId.Value);
         var unassigned = snapshot.Presentation.Nodes.Single(node =>
-            node.Id == BpmnDemoPipeline.StartEventId.Value);
+            node.Id == unpooledId.Value);
         Assert.NotEqual(assignedToA.Bounds.Y, assignedToB.Bounds.Y);
         Assert.NotEqual(assignedToB.Bounds.Y, unassigned.Bounds.Y);
 

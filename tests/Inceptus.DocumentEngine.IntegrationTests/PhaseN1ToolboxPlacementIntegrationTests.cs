@@ -610,11 +610,11 @@ public sealed class PhaseN1ToolboxPlacementIntegrationTests
     {
         await using var harness = await HostHarness.CreateAsync();
         var toolboxSelection = HostToolboxSelection(harness.Host);
-        var toolbox = new ToolboxCatalog(BpmnPluginRegistration.N1.ToolboxContributions);
+        var toolbox = new ToolboxCatalog(BpmnPluginRegistration.N100.ToolboxContributions);
         var taskItem = Assert.Single(toolbox.Items, item =>
             item.ElementTypeId == BpmnSemanticTypes.Task);
-        var parallelItem = Assert.Single(toolbox.Items, item =>
-            item.ElementTypeId == BpmnSemanticTypes.ParallelGateway);
+        var gatewayItem = Assert.Single(toolbox.Items, item =>
+            item.ElementTypeId == BpmnSemanticTypes.ExclusiveGateway);
         var before = harness.Composition.Document.CaptureSnapshot();
         var clickCenter = PlacementCenter;
 
@@ -631,7 +631,7 @@ public sealed class PhaseN1ToolboxPlacementIntegrationTests
         Assert.Null(toolboxSelection.SelectedItemId);
         Assert.Equal("default", harness.Host.CaptureState().CssCursor);
 
-        Assert.True(toolboxSelection.Select(parallelItem.ItemId));
+        Assert.True(toolboxSelection.Select(gatewayItem.ItemId));
         await harness.Host.RefreshToolboxPlacementAsync();
         await SendPointerAsync(
             harness,
@@ -654,7 +654,7 @@ public sealed class PhaseN1ToolboxPlacementIntegrationTests
             element.TypeId == BpmnSemanticTypes.Task &&
             !before.SemanticModel.Elements.Any(previous => previous.Id == element.Id)));
         var gateway = Assert.Single(after.SemanticModel.Elements, element =>
-            element.TypeId == BpmnSemanticTypes.ParallelGateway &&
+            element.TypeId == BpmnSemanticTypes.ExclusiveGateway &&
             !before.SemanticModel.Elements.Any(previous => previous.Id == element.Id));
         var visual = Assert.Single(after.VisualModel.VisualStates, candidate =>
             candidate.SemanticElementId == gateway.Id);
@@ -1069,7 +1069,7 @@ public sealed class PhaseN1ToolboxPlacementIntegrationTests
             var identityProvider = identities ?? new SequenceIdentityProvider(
                 Identity($"default:{Guid.NewGuid():N}"));
             var controller = new ToolboxPlacementController(
-                composition.ToolboxPlacementCatalog,
+                new ToolboxPlacementCatalog(BpmnPluginRegistration.N1.ToolboxPlacementRegistrations, toolbox),
                 selection,
                 identityProvider);
             return new PlacementHarness(

@@ -37,7 +37,7 @@ public sealed class PhaseA1216EdgeResizeIntegrationTests(ITestOutputHelper outpu
             spatialEditPlanners: source.SpatialEditPlanners);
         await using var test = await Fixture.CreateAsync(composition);
         await using var controller = test.CreateInteractionController();
-        Assert.Equal(nodeCount, test.State.ProjectedGraph!.NodeCount);
+        Assert.Equal(nodeCount, test.State.ProjectedGraph!.Nodes.Count(node => node.RegionEnvelope is null));
         Assert.Equal(nodeCount / 2, test.State.ProjectedGraph.EdgeCount);
         var samples = new List<object>();
         for (var repeat = 0; repeat < 3; repeat++)

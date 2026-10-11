@@ -114,6 +114,10 @@ internal static class BpmnToolboxPlacementContribution
                 BpmnSemanticTypes.SignalBoundaryEvent, BpmnSignalBoundaryEventSceneFeedback.AttachmentCandidateKind)),
     ];
 
+    internal static ImmutableArray<ToolboxPlacementRegistration> A21Registrations { get; } =
+        [.. N91Registrations.Where(registration => BpmnToolboxContribution.A21Definition.Items
+            .Any(item => item.ItemId == registration.ToolboxItemId))];
+
     private static ToolboxPlacementRegistration Registration(
         ToolboxItemId toolboxItemId,
         BpmnPlacementNodeKind nodeKind) =>

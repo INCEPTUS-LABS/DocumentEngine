@@ -84,54 +84,9 @@ internal static class BpmnValidationTargetFormatter
     private static string DisplayName(SemanticTypeId typeId)
     {
         ArgumentNullException.ThrowIfNull(typeId);
-        if (typeId == BpmnSemanticTypes.StartEvent)
+        if (BpmnSemanticTypes.IsFlowNode(typeId))
         {
-            return "Start Event";
-        }
-
-        if (typeId == BpmnSemanticTypes.EndEvent)
-        {
-            return "End Event";
-        }
-
-        if (BpmnTaskSemanticTypes.IsTask(typeId))
-        {
-            return BpmnTaskSemanticTypes.DisplayName(typeId);
-        }
-
-        if (typeId == BpmnSemanticTypes.SubProcess)
-        {
-            return "SubProcess";
-        }
-
-        if (typeId == BpmnSemanticTypes.ExclusiveGateway)
-        {
-            return "Exclusive Gateway";
-        }
-
-        if (typeId == BpmnSemanticTypes.ParallelGateway)
-        {
-            return "Parallel Gateway";
-        }
-
-        if (typeId == BpmnSemanticTypes.InclusiveGateway)
-        {
-            return "Inclusive Gateway";
-        }
-
-        if (typeId == BpmnSemanticTypes.EventBasedGateway)
-        {
-            return "Event-Based Gateway";
-        }
-
-        if (BpmnIntermediateEventSemanticTypes.IsIntermediateEvent(typeId))
-        {
-            return BpmnIntermediateEventSemanticTypes.DisplayName(typeId);
-        }
-
-        if (BpmnBoundaryEventSemanticTypes.IsBoundaryEvent(typeId))
-        {
-            return BpmnBoundaryEventSemanticTypes.DisplayName(typeId);
+            return BpmnElementTypeSwitching.GetDisplayName(typeId);
         }
 
         if (typeId == BpmnSemanticTypes.SequenceFlow)

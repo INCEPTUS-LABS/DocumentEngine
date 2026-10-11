@@ -63,7 +63,7 @@ public static class NativeDocumentSerializer
         try
         {
             var snapshot = NativeDocumentJsonCodec.Read(utf8Json);
-            var diagnostics = DocumentInvariantValidator.ValidateRoutingState(snapshot, requirePrepared: true, connectorAnchorPolicyProvider);
+            var diagnostics = DocumentInvariantValidator.Validate(snapshot, connectorAnchorPolicyProvider, requirePreparedRouting: true);
             if (!diagnostics.IsEmpty)
             {
                 return DocumentConstructionResult.Failure(diagnostics);

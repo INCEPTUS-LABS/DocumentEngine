@@ -238,13 +238,11 @@ public sealed class PhaseA11SequenceFlowLabelIntegrationTests
         var originalVisuals = test.Snapshot.VisualModel.VisualStates;
         var source = test.Flow(id).SourceId;
         var target = test.Flow(id).TargetId;
-        await test.ExecuteAsync(new UnassignOrganizationalElementCommand(test.Id, test.Revision, target));
-        test.AssertAutomatic(id); // Pool -> Unassigned
-        await test.ExecuteAsync(new AssignOrganizationalElementCommand(test.Id, test.Revision, target, pool));
         test.AssertAutomatic(id); // same Pool
         var secondPool = new SemanticElementId("a11:pool-b");
         await test.ExecuteAsync(new CreateOrganizationalPoolCommand(test.Id, test.Revision, secondPool,
             test.State.ActiveScopeId, OrganizationalPoolCreationMode.Empty, "Other"));
+        await BpmnModelerTestComposition.AssignSharedParticipantAsync(test.ExecuteAsync, () => test.Snapshot, pool, secondPool);
         await test.ExecuteAsync(new AssignOrganizationalElementCommand(test.Id, test.Revision, target, secondPool));
         test.AssertAutomatic(id); // cross Pool
         var beforeView = test.Snapshot;
@@ -336,7 +334,7 @@ public sealed class PhaseA11SequenceFlowLabelIntegrationTests
         await test.NameAsync(flow, "Approved <script>alert('x')</script> Żółć");
         var pool = new SemanticElementId("a11:publish:pool");
         await test.EnablePoolAsync(pool);
-        await test.ExecuteAsync(new UnassignOrganizationalElementCommand(test.Id, test.Revision, test.Flow(flow).TargetId));
+        await test.MoveToPeerLaneAsync(pool, test.Flow(flow).TargetId);
         var captured = await test.Session.CapturePresentationAsync(
             test.State.ModelProfileViewState.WithPreferredVisibility(OrganizationalModelProfile.Id, false),
             ModelProfileElementViewStateSnapshot.Empty);
@@ -388,8 +386,7 @@ public sealed class PhaseA11SequenceFlowLabelIntegrationTests
         {
             var pool = new SemanticElementId("a11:drag:pool");
             await test.EnablePoolAsync(pool);
-            await test.ExecuteAsync(new UnassignOrganizationalElementCommand(
-                test.Id, test.Revision, test.Flow(flow).TargetId));
+            await test.MoveToPeerLaneAsync(pool, test.Flow(flow).TargetId);
         }
         await using var controller = new Canvas2DInteractionController(test.Session);
         var bounds = test.LabelBounds(flow);
@@ -497,6 +494,19 @@ public sealed class PhaseA11SequenceFlowLabelIntegrationTests
             Assert.True((await session.NavigateToScopeAsync(scope)).Succeeded);
             await session.WaitForIdleAsync();
         }
+        internal async Task MoveToPeerLaneAsync(SemanticElementId pool, SemanticElementId target)
+        {
+            var peer = new SemanticElementId(pool.Value + ":peer");
+            await ExecuteAsync(new CreateOrganizationalPoolCommand(Id, Revision, peer,
+                State.ActiveScopeId, OrganizationalPoolCreationMode.Empty, "Peer lane"));
+            await BpmnModelerTestComposition.AssignSharedParticipantAsync(ExecuteAsync, () => Snapshot, pool, peer);
+            var regions = Snapshot.VisualModel.RoutingScopes!.Value.Single(scope => scope.ScopeId == State.ActiveScopeId).Geometry.Regions;
+            var height = regions.Single(region => region.ContainerSemanticElementId == pool).ExpandedHeight;
+            var peerRegion = regions.Single(region => region.ContainerSemanticElementId == peer);
+            await ExecuteAsync(new SetOrganizationalRegionExpandedHeightCommand(Id, Revision, State.ActiveScopeId, peerRegion.Id, height));
+            await ExecuteAsync(new AssignOrganizationalElementCommand(Id, Revision, target, peer));
+        }
+
         internal async Task EnablePoolAsync(SemanticElementId pool)
         {
             await ExecuteAsync(new SetModelProfileAvailabilityCommand(Id, Revision,

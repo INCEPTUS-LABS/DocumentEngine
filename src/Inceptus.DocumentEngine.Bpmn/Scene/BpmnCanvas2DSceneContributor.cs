@@ -143,6 +143,10 @@ public sealed class BpmnCanvas2DSceneContributor : ICanvas2DSceneContributor, IC
             }
         }
 
+        var participants = BpmnParticipantSceneContributor.Contribute(graph, localLayout, Descriptor.ContributorId);
+        items.AddRange(participants.Items);
+        visualOverrides.AddRange(participants.CanonicalItemVisualOverrides);
+
         if (includeLegacyFeedback)
         {
             AddBoundaryEventCandidateFeedback(editorState, items, Descriptor.ContributorId);

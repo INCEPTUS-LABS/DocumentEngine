@@ -86,11 +86,14 @@ internal sealed class BpmnDeletionCommandFactory : IDiagramDeletionCommandFactor
                 request.SemanticId,
                 out var relationship) &&
             relationship is not null &&
-            relationship.TypeId == BpmnSemanticTypes.SequenceFlow &&
+            (relationship.TypeId == BpmnSemanticTypes.SequenceFlow || relationship.TypeId == BpmnSemanticTypes.MessageFlow) &&
             visual.SourceAnchorId is { } sourceAnchorId &&
             visual.TargetAnchorId is { } targetAnchorId)
         {
-            command = new DeleteBpmnSequenceFlowCommand(
+            command = relationship.TypeId == BpmnSemanticTypes.MessageFlow
+                ? new DeleteBpmnMessageFlowCommand(request.Document.DocumentId, request.ExpectedRevision,
+                    relationship.Id, visual.Id, relationship.SourceId, relationship.TargetId, sourceAnchorId, targetAnchorId)
+                : new DeleteBpmnSequenceFlowCommand(
                 request.Document.DocumentId,
                 request.ExpectedRevision,
                 relationship.Id,
@@ -111,6 +114,8 @@ internal sealed class BpmnDeletionCommandFactory : IDiagramDeletionCommandFactor
         {
             DeleteBpmnSequenceFlowCommand deletion =>
                 BpmnDeletionValidation.Validate(deletion, document),
+            DeleteBpmnMessageFlowCommand deletion =>
+                new BpmnMessageFlowDeletionCommandHandler().Validate(deletion, document),
             DeleteBpmnFlowNodeCommand deletion =>
                 BpmnDeletionValidation.Validate(deletion, document),
             _ => throw new InvalidOperationException(

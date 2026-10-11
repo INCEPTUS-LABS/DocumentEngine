@@ -6,6 +6,7 @@ using Inceptus.DocumentEngine.Contracts.EditorState;
 using Inceptus.DocumentEngine.Contracts.History;
 using Inceptus.DocumentEngine.Contracts.Layout;
 using Inceptus.DocumentEngine.Contracts.Primitives;
+using Inceptus.DocumentEngine.Contracts.Presentation;
 using Inceptus.DocumentEngine.Contracts.Profiles;
 using Inceptus.DocumentEngine.Contracts.Projection;
 using Inceptus.DocumentEngine.Contracts.Routing;
@@ -82,7 +83,9 @@ public sealed class EditingSessionState
         ModelProfileViewStateSnapshot? modelProfileViewState = null,
         ModelProfileElementViewStateSnapshot? modelProfileElementViewState = null,
         bool isCurrentScenePresented = false,
-        bool isPanPresentationPending = false)
+        bool isPanPresentationPending = false,
+        PresentationViewContext? presentationContext = null,
+        PresentationViewPlan? presentationPlan = null)
     {
         ArgumentNullException.ThrowIfNull(documentId);
         ArgumentNullException.ThrowIfNull(activeScopeId);
@@ -132,7 +135,8 @@ public sealed class EditingSessionState
 
         DocumentId = documentId;
         DocumentRevision = documentRevision;
-        ActiveScopeId = activeScopeId;
+        PresentationContext = presentationContext ?? new ProcessScopePresentationContext(activeScopeId);
+        PresentationPlan = presentationPlan;
         Status = status;
         Generation = generation;
         CurrentScene = currentScene;
@@ -165,7 +169,12 @@ public sealed class EditingSessionState
 
     public DocumentRevision DocumentRevision { get; }
 
-    public DocumentScopeId ActiveScopeId { get; }
+    public PresentationViewContext PresentationContext { get; }
+
+    public PresentationViewPlan? PresentationPlan { get; }
+
+    public DocumentScopeId ActiveScopeId => PresentationContext is ProcessScopePresentationContext process
+        ? process.ScopeId : throw new InvalidOperationException("A document presentation has no active process scope.");
 
     public EditingSessionStatus Status { get; }
 
@@ -230,8 +239,16 @@ public sealed class EditingSessionState
     /// <summary>Gets the current active Process artifacts for interaction, never another scope.</summary>
     public bool TryGetCurrentProcessInteraction(out EditingSessionState? state)
     {
-        state = IsGraphicalInteractionEnabled && ProjectedGraph is not null &&
+        state = PresentationContext is ProcessScopePresentationContext && IsGraphicalInteractionEnabled && ProjectedGraph is not null &&
             LayoutResult is not null && RoutingResult is not null ? this : null;
+        return state is not null;
+    }
+
+    public bool TryGetCurrentPresentationInteraction(out EditingSessionState? state)
+    {
+        state = IsGraphicalInteractionEnabled && ProjectedGraph is not null &&
+            LayoutResult is not null && RoutingResult is not null &&
+            (PresentationContext is ProcessScopePresentationContext || PresentationPlan is not null) ? this : null;
         return state is not null;
     }
 }

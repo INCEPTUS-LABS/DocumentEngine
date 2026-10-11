@@ -13,6 +13,29 @@ namespace Inceptus.DocumentEngine.Organizational.Semantics;
 /// </summary>
 public static class OrganizationalSemantics
 {
+    public static SemanticElementId? GetParticipantId(SemanticElementSnapshot pool)
+    {
+        ArgumentNullException.ThrowIfNull(pool);
+        return pool.Properties.TryGetValue(OrganizationalSemanticProperties.ParticipantId, out var value) &&
+            value.Kind == Inceptus.DocumentEngine.Contracts.Properties.PropertyValueKind.Text &&
+            !string.IsNullOrWhiteSpace(value.TextValue) ? new SemanticElementId(value.TextValue) : null;
+    }
+
+    /// <summary>Resolves explicit membership; attached elements inherit their Activity's assignment.</summary>
+    public static SemanticElementId? GetOwningPoolId(ISemanticModelView model, SemanticElementId id)
+    {
+        ArgumentNullException.ThrowIfNull(model);
+        ArgumentNullException.ThrowIfNull(id);
+        var visited = new HashSet<SemanticElementId>();
+        while (visited.Add(id) && model.TryGetElement(id, out var element) && element is not null)
+        {
+            if (IsPool(element)) return element.Id;
+            if (element.AttachedToElementId is { } attached) { id = attached; continue; }
+            return TryGetAssignedPoolId(model, id, out var pool) ? pool : null;
+        }
+        return null;
+    }
+
     /// <summary>
     /// Shared spatial ownership authority for presentation and routing preparation.
     /// Attached nodes inherit their owner's assignment; null is the distinct Unassigned region.

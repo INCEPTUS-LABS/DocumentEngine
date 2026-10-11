@@ -1,6 +1,7 @@
 using Inceptus.DocumentEngine.Contracts.Diagnostics;
 using Inceptus.DocumentEngine.Contracts.Documents;
 using Inceptus.DocumentEngine.Contracts.Primitives;
+using Inceptus.DocumentEngine.Contracts.Presentation;
 using Inceptus.DocumentEngine.Contracts.Projection;
 using Inceptus.DocumentEngine.Contracts.Semantics;
 using Inceptus.DocumentEngine.Contracts.Visuals;
@@ -10,12 +11,21 @@ namespace Inceptus.DocumentEngine.Runtime.Projection;
 /// <summary>
 /// Framework-owned orchestration for deriving an immutable ProjectedGraph from one Document snapshot.
 /// </summary>
-public sealed class ProjectionEngine
+public sealed partial class ProjectionEngine
 {
     private readonly ProjectionRuleRegistry _registry;
 
-    public ProjectionEngine(IEnumerable<ProjectionRuleRegistration>? registrations = null) =>
+    public ProjectionEngine(IEnumerable<ProjectionRuleRegistration>? registrations = null)
+        : this(registrations, null)
+    {
+    }
+
+    public ProjectionEngine(IEnumerable<ProjectionRuleRegistration>? registrations,
+        IEnumerable<PresentationViewProviderRegistration>? presentationProviders)
+    {
         _registry = new ProjectionRuleRegistry(registrations ?? []);
+        _presentationProviders = (presentationProviders ?? []).ToDictionary(static entry => entry.OwnerTypeId);
+    }
 
     /// <summary>
     /// Projects one coherent immutable Document snapshot without modifying authoritative state.
@@ -47,9 +57,17 @@ public sealed class ProjectionEngine
         ArgumentNullException.ThrowIfNull(activeScopeId);
         context ??= ProjectionContext.Empty;
 
+        if (!ScopeExists(document.SemanticModel, activeScopeId))
+            return ProjectionResult.Failure(document.DocumentId, document.Revision,
+                [Error(ProjectionDiagnosticCodes.InvalidInput,
+                    $"Document scope '{activeScopeId}' does not exist in the Semantic Model.", activeScopeId.Value)]);
+
         try
         {
-            return ProjectCore(document, activeScopeId, context, cancellationToken);
+            var view = new ProcessScopePresentationContext(activeScopeId);
+            var resolution = ResolvePresentation(document, view);
+            return resolution.Plan is { } plan ? ProjectCore(document, view, context, cancellationToken, plan)
+                : ProjectionResult.Failure(document.DocumentId, document.Revision, resolution.Diagnostics);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -59,19 +77,20 @@ public sealed class ProjectionEngine
 
     private ProjectionResult ProjectCore(
         DocumentSnapshot document,
-        DocumentScopeId activeScopeId,
+        PresentationViewContext viewContext,
         ProjectionContext context,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Inceptus.DocumentEngine.Contracts.Presentation.PresentationViewPlan? presentation = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
         var diagnostics = new List<Diagnostic>();
-        if (!ScopeExists(document.SemanticModel, activeScopeId))
+        if (viewContext is ProcessScopePresentationContext process && !ScopeExists(document.SemanticModel, process.ScopeId))
         {
             diagnostics.Add(Error(
                 ProjectionDiagnosticCodes.InvalidInput,
-                $"Document scope '{activeScopeId}' does not exist in the Semantic Model.",
-                activeScopeId.Value));
+                $"Document scope '{process.ScopeId}' does not exist in the Semantic Model.",
+                process.ScopeId.Value));
             return ProjectionResult.Failure(
                 document.DocumentId,
                 document.Revision,
@@ -82,7 +101,7 @@ public sealed class ProjectionEngine
         var visualStatesBySemanticId = BuildVisualStateIndex(document, diagnostics);
 
         foreach (var element in document.SemanticModel.Elements.Where(
-                     element => IsInScope(document, element.Id, activeScopeId)))
+                     element => presentation is null ? IsInScope(document, element.Id, ((ProcessScopePresentationContext)viewContext).ScopeId) : presentation.ElementIds.Contains(element.Id)))
         {
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -99,8 +118,8 @@ public sealed class ProjectionEngine
             }
 
             var input = new ElementProjectionRuleInput(
-                document.DocumentId,
-                document.Revision,
+                document,
+                viewContext,
                 context,
                 element,
                 FindVisualStates(visualStatesBySemanticId, element.Id));
@@ -116,7 +135,9 @@ public sealed class ProjectionEngine
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (document.SemanticModel.TryGetElement(
+            if (presentation is not null && !presentation.RelationshipIds.Contains(relationship.Id)) continue;
+
+            if (presentation is null && document.SemanticModel.TryGetElement(
                     relationship.SourceId,
                     out var scopedSource) &&
                 scopedSource is not null &&
@@ -124,8 +145,8 @@ public sealed class ProjectionEngine
                     relationship.TargetId,
                     out var scopedTarget) &&
                 scopedTarget is not null &&
-                (!IsInScope(document, scopedSource.Id, activeScopeId) ||
-                    !IsInScope(document, scopedTarget.Id, activeScopeId)))
+                (!IsInScope(document, scopedSource.Id, ((ProcessScopePresentationContext)viewContext).ScopeId) ||
+                    !IsInScope(document, scopedTarget.Id, ((ProcessScopePresentationContext)viewContext).ScopeId)))
             {
                 continue;
             }
@@ -152,8 +173,8 @@ public sealed class ProjectionEngine
                 continue;
             }
 
-            if (!IsInScope(document, sourceElement.Id, activeScopeId) ||
-                !IsInScope(document, targetElement.Id, activeScopeId))
+            if (presentation is null && (!IsInScope(document, sourceElement.Id, ((ProcessScopePresentationContext)viewContext).ScopeId) ||
+                !IsInScope(document, targetElement.Id, ((ProcessScopePresentationContext)viewContext).ScopeId)))
             {
                 continue;
             }

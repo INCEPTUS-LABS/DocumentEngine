@@ -41,7 +41,8 @@ internal sealed class ResizeVisualStateCommandHandler : ICommandHandler
             ]));
         }
 
-        if (!document.SemanticModel.TryGetElement(existing.SemanticElementId, out _))
+        if (existing.PlacementMode == VisualPlacementMode.Derived ||
+            !document.SemanticModel.TryGetElement(existing.SemanticElementId, out _))
         {
             return ValueTask.FromResult(CommandHandlerResult.Failure(
             [
@@ -112,7 +113,7 @@ internal sealed class ResizeVisualStateCommandHandler : ICommandHandler
                     ? synchronized
                     : visualState),
             document.VisualModel.ProfileElementPresentations,
-            document.VisualModel.RoutingScopes);
+            document.VisualModel.RoutingScopes, document.VisualModel.DocumentRoutingStates);
         var proposedDocument = new DocumentSnapshot(
             document.SemanticModel,
             proposedVisualModel,

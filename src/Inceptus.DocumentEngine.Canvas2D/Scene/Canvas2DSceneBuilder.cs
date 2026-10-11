@@ -8,6 +8,7 @@ using Inceptus.DocumentEngine.Contracts.EditorState;
 using Inceptus.DocumentEngine.Contracts.Geometry;
 using Inceptus.DocumentEngine.Contracts.Layout;
 using Inceptus.DocumentEngine.Contracts.Primitives;
+using Inceptus.DocumentEngine.Contracts.Presentation;
 using Inceptus.DocumentEngine.Contracts.Projection;
 using Inceptus.DocumentEngine.Contracts.Properties;
 using Inceptus.DocumentEngine.Contracts.Profiles;
@@ -439,6 +440,20 @@ public sealed partial class Canvas2DSceneBuilder
         ImmutableArray<Canvas2DPlacementLabelLayout>? placementLabelLayouts = null)
     {
         var diagnostics = initialDiagnostics?.ToList() ?? [];
+        if (presentation is { Plan: null, PresentationContext: ProcessScopePresentationContext process })
+        {
+            // Preserve the public Process build entry point. Document-level members come
+            // exclusively from the supplied canonical projection, never inferred geometry.
+            var semantic = presentation.Document.SemanticModel;
+            var ids = semantic.Elements.Where(element => semantic.TryGetScope(element.Id, out var scope) && scope?.Id == process.ScopeId)
+                .Select(element => element.Id).Concat(graph.Nodes.Select(node => node.Source.SemanticElementId)).ToHashSet();
+            presentation = presentation with
+            {
+                Plan = new PresentationViewPlan(graph.DocumentId, graph.SourceRevision,
+                process, ids, semantic.Relationships.Where(edge => ids.Contains(edge.SourceId) && ids.Contains(edge.TargetId))
+                    .Select(edge => edge.Id), [new PresentationScopePlacement(process.ScopeId, new VectorD(0d, 0d))])
+            };
+        }
         ValidateCompatibility(graph, layout, routing, visualModel, editorState, diagnostics);
         if (HasErrors(diagnostics))
         {
@@ -527,7 +542,7 @@ public sealed partial class Canvas2DSceneBuilder
                 items,
                 spatialPresentation.Plan,
                 spatialPresentation.ConnectorRouter,
-                diagnostics);
+                diagnostics, presentation);
         }
 
         if (HasErrors(diagnostics))
@@ -537,6 +552,7 @@ public sealed partial class Canvas2DSceneBuilder
 
         SuppressNodeLabelHitTestingDuringAnchorConnection(editorState, items);
 
+        ApplyPresentationCoordinates(items, presentation);
         var editorOverlayStartIndex = items.Count;
         var placementItemIds = placementContributorItems.Select(static item => item.Id).ToHashSet();
         var moveBaseItems = items.Where(item => !placementItemIds.Contains(item.Id)).ToArray();
@@ -554,6 +570,7 @@ public sealed partial class Canvas2DSceneBuilder
         ComposePlacementLabels(editorState, placementLabelLayouts ?? [], items);
         var placementFamily = placementContributorItems.Concat(items.Skip(placementLabelStart)).ToImmutableArray();
         AssociateEditorOverlaysWithSpatialPresentation(items, editorOverlayStartIndex);
+        ApplyPresentationCoordinates(items, presentation);
         SuppressInstalledNodeLabelGesture(editorState, items);
         SuppressInstalledConnectorLabelGesture(editorState, items);
         var moveOverlayItems = items.Skip(editorOverlayStartIndex)
@@ -599,7 +616,9 @@ public sealed partial class Canvas2DSceneBuilder
             boundaryGuides,
             CreateBoundedPresentation(graph, layout, routing, visualModel, editorState,
                 presentation, moveBaseItems, moveOverlayItems, overlayInputs, diagnostics,
-                placementLabelLayouts ?? [], placementFamily, measuredNodeLabels, measuredConnectorLabels));
+                placementLabelLayouts ?? [], placementFamily, measuredNodeLabels, measuredConnectorLabels),
+            presentationContext: presentation?.PresentationContext,
+            presentationPlan: presentation?.Plan);
 
         return Canvas2DSceneBuildResult.Success(scene);
     }
@@ -626,7 +645,7 @@ public sealed partial class Canvas2DSceneBuilder
             ? null
             : new Canvas2DScenePresentationContext(
                 presentation.Document,
-                presentation.ActiveScopeId,
+                presentation.PresentationContext,
                 presentation.ModelProfileViewState,
                 presentation.ModelProfileElementViewState,
                 canonicalItems.Values);
@@ -643,7 +662,7 @@ public sealed partial class Canvas2DSceneBuilder
                     .Where(static feedback => feedback.PlacementPreview is not null))
                 : editorState;
             var contributorPresentation = boundedFeedback && presentation is not null
-                ? new Canvas2DScenePresentationContext(presentation.Document, presentation.ActiveScopeId,
+                ? new Canvas2DScenePresentationContext(presentation.Document, presentation.PresentationContext,
                     presentation.ModelProfileViewState, presentation.ModelProfileElementViewState, [])
                 : presentationContext;
             var context = new Canvas2DSceneContributionContext(
@@ -822,9 +841,18 @@ public sealed partial class Canvas2DSceneBuilder
 
     private sealed record ScenePresentationInput(
         DocumentSnapshot Document,
-        DocumentScopeId ActiveScopeId,
+        PresentationViewContext PresentationContext,
         ModelProfileViewStateSnapshot ModelProfileViewState,
-        ModelProfileElementViewStateSnapshot ModelProfileElementViewState);
+        ModelProfileElementViewStateSnapshot ModelProfileElementViewState,
+        PresentationViewPlan? Plan = null)
+    {
+        internal ScenePresentationInput(DocumentSnapshot document, DocumentScopeId scopeId,
+            ModelProfileViewStateSnapshot profileState, ModelProfileElementViewStateSnapshot elementState)
+            : this(document, new ProcessScopePresentationContext(scopeId), profileState, elementState) { }
+
+        internal DocumentScopeId ActiveScopeId => PresentationContext is ProcessScopePresentationContext process
+            ? process.ScopeId : throw new InvalidOperationException("A document presentation has no active process scope.");
+    }
 
     private sealed record SpatialPresentationRegistration(
         Canvas2DSceneContributorId ContributorId,

@@ -3,6 +3,8 @@ namespace Inceptus.DocumentEngine.Bpmn.Commands;
 public static class BpmnCommandDiagnosticCodes
 {
     public const string InvalidCommand = "BPMN_CMD_INVALID";
+    public const string ElementTypeSwitchInvalid = "BPMN_ELEMENT_TYPE_SWITCH_INVALID";
+    public const string ElementTypeSwitchUnchanged = "BPMN_ELEMENT_TYPE_SWITCH_UNCHANGED";
     public const string DuplicateSemanticId = "BPMN_SEMANTIC_ID_DUPLICATE";
     public const string DuplicateVisualId = "BPMN_VISUAL_ID_DUPLICATE";
     public const string ElementTargetScopeInvalid =

@@ -93,12 +93,15 @@ public sealed class PhaseN82ScopeNavigationArchitectureTests
             StringComparison.Ordinal);
         Assert.Contains("_activeScopeId = document.SemanticModel.RootScopeId;", session,
             StringComparison.Ordinal);
-        Assert.Contains("public DocumentScopeId ActiveScopeId { get; }", sessionState,
+        Assert.Contains("public DocumentScopeId ActiveScopeId => PresentationContext is ProcessScopePresentationContext", sessionState,
+            StringComparison.Ordinal);
+        Assert.Contains("public PresentationViewContext PresentationContext { get; }", sessionState,
             StringComparison.Ordinal);
         Assert.DoesNotContain("ActiveScope", editorState, StringComparison.Ordinal);
         Assert.DoesNotContain("_activeScopeId", host, StringComparison.Ordinal);
         Assert.DoesNotContain("_activeScopeId", razor, StringComparison.Ordinal);
-        Assert.Contains("_state?.Session?.ActiveScopeId", razor, StringComparison.Ordinal);
+        Assert.Contains("_state?.Session?.PresentationContext is ProcessScopePresentationContext", razor,
+            StringComparison.Ordinal);
     }
 
     [Fact]

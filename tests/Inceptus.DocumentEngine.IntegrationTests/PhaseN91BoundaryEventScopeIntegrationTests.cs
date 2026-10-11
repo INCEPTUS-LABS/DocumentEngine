@@ -252,7 +252,7 @@ public sealed class PhaseN91BoundaryEventScopeIntegrationTests
 
     [Theory]
     [MemberData(nameof(BoundaryTypes))]
-    public async Task NewlyCreatedBoundaryBodyEdgeOffersSourceOnlyAnchorContext(
+    public async Task NewlyCreatedBoundaryBodyEdgeOffersOnlySupportedAnchorRoles(
         SemanticTypeId boundaryType)
     {
         var composition = await BpmnModelerTestComposition.DemoFactory.CreateAsync();
@@ -311,7 +311,8 @@ public sealed class PhaseN91BoundaryEventScopeIntegrationTests
         Assert.Equal(visualStateId, action.TargetVisualStateId);
         Assert.Equal(ConnectorAnchorSide.Right, action.Side);
         Assert.True(action.CanAdd(ConnectorAnchorRole.Source));
-        Assert.False(action.CanAdd(ConnectorAnchorRole.Target));
+        Assert.Equal(boundaryType == BpmnSemanticTypes.MessageBoundaryEvent,
+            action.CanAdd(ConnectorAnchorRole.Target));
         Assert.Equal(action.SourceSceneObjectId, action.TargetSceneObjectId);
         Assert.Equal(before.Revision, composition.Document.Revision);
         Assert.Equal(

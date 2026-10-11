@@ -22,7 +22,7 @@ public sealed partial class StableSpatialRoutingPreparationTests
         var before = Assert.Single(fixture.Document.CaptureSnapshot().VisualModel.RoutingScopes!.Value);
         var routeA = before.Connectors.Single(record => record.VisualStateId == new VisualStateId("v:flow-a"));
         var routeB = before.Connectors.Single(record => record.VisualStateId == new VisualStateId("v:flow-b"));
-        var obstacle = new RectD(370, 356, 120, 80);
+        var obstacle = new RectD(370, 316, 120, 80);
         Assert.False(CrossesBody(routeA.Path, obstacle));
         Assert.True(CrossesBody(routeB.Path, obstacle));
         fixture.Policy.Searches.Clear();
@@ -59,13 +59,13 @@ public sealed partial class StableSpatialRoutingPreparationTests
         var snapshot = fixture.Document.CaptureSnapshot();
         var scope = Assert.Single(snapshot.VisualModel.RoutingScopes!.Value);
         var original = scope.Connectors.Single(record => record.VisualStateId == new VisualStateId("v:flow-a"));
-        PointD[] detour = [new(250, 132), new(278, 132), new(278, 500), new(582, 500), new(582, 132), new(610, 132)];
+        PointD[] detour = [new(250, 132), new(278, 132), new(278, 460), new(582, 460), new(582, 132), new(610, 132)];
         var candidate = new ConnectorRoutingRecord(original.VisualStateId, ConnectorRoutingType.Automatic,
             ConnectorRoutingOutcome.Path, detour, automaticProof: original.AutomaticProof);
         var graph = fixture.Configuration.ProjectionEngine.Project(snapshot, fixture.Configuration.ProjectionContext).Graph!;
         var local = ConnectorRoutingStatePreparer.RestoreLocalLayout(graph, scope.Geometry);
         var logical = ConnectorRoutingStatePreparer.CreateLogicalLayout(graph, local, scope.Geometry);
-        var domain = new RoutingObstacleDomain(graph.Nodes.Select(static node => node.Id));
+        var domain = new RoutingObstacleDomain(graph.Nodes.Where(node => node.RegionEnvelope is null).Select(static node => node.Id));
         var context = new RoutingContext(fixture.Configuration.RoutingContext.Options,
             new PreparedRoutingInput(graph, logical, graph.Edges.Select(edge => KeyValuePair.Create(edge.Id, domain)),
                 new RoutingLogicalGeometry(scope.ScopeId, scope.Geometry, logical)));
@@ -86,15 +86,15 @@ public sealed partial class StableSpatialRoutingPreparationTests
         Assert.True(reconstructed.Succeeded, Describe(reconstructed.Diagnostics));
         fixture = fixture with { Document = reconstructed.Document! };
         Assert.True(detour.Max(static point => point.Y) > 440);
-        Assert.False(CrossesBody(detour, new RectD(370, 532, 120, 80)));
-        Assert.True(CrossesBody(detour, new RectD(370, 482, 120, 80)));
+        Assert.False(CrossesBody(detour, new RectD(370, 492, 120, 80)));
+        Assert.True(CrossesBody(detour, new RectD(370, 442, 120, 80)));
         fixture.Policy.Searches.Clear();
         await CommitHeight(fixture, poolRegion.Id, 350);
         var after = Assert.Single(fixture.Document.CaptureSnapshot().VisualModel.RoutingScopes!.Value);
         Assert.Equal([original.VisualStateId], fixture.Policy.Searches);
         Assert.Equal([other.VisualStateId, original.VisualStateId], after.Connectors.Select(static record => record.VisualStateId));
         Assert.Equal(other.Path.Select(static point => new PointD(point.X, point.Y - 50)), after.Connectors[0].Path);
-        Assert.False(CrossesBody(after.Connectors[1].Path, new RectD(370, 482, 120, 80)));
+        Assert.False(CrossesBody(after.Connectors[1].Path, new RectD(370, 442, 120, 80)));
         Assert.NotEqual(detour, after.Connectors[1].Path.AsEnumerable());
         Assert.Equal(350, after.Geometry.Regions.Single(region => region.Id == poolRegion.Id).ExpandedHeight);
         Assert.Equal(224, after.Geometry.Regions.Single(region => region.ContainerSemanticElementId == PoolB).ExpandedHeight);
@@ -104,6 +104,9 @@ public sealed partial class StableSpatialRoutingPreparationTests
     public async Task DeletingLastPoolKeepsOnlyDormantUnassignedCapacityAndUndoRestoresTheSamePoolFrame()
     {
         var fixture = await CreateSpatialFixtureAsync();
+        var reassigned = await fixture.Processor.ExecuteAsync(fixture.Document, new AssignOrganizationalElementCommand(
+            fixture.Document.DocumentId, fixture.Document.Revision, new SemanticElementId("a-source"), PoolB));
+        Assert.True(reassigned.IsCommitted, Describe(reassigned.Diagnostics));
         var deleted = await fixture.Processor.ExecuteAsync(fixture.Document, new DeleteOrganizationalPoolCommand(
             fixture.Document.DocumentId, fixture.Document.Revision, PoolA));
         Assert.True(deleted.IsCommitted, Describe(deleted.Diagnostics));
@@ -127,6 +130,11 @@ public sealed partial class StableSpatialRoutingPreparationTests
     private static async Task<StableRoutingPreparationTests.Fixture> CreateParallelPoolFixtureAsync()
     {
         var fixture = await CreateSpatialFixtureAsync();
+        var deleted = await fixture.Processor.ExecuteAsync(fixture.Document, new DeleteBpmnSequenceFlowCommand(
+            fixture.Document.DocumentId, fixture.Document.Revision, new SemanticElementId("flow-b"), new VisualStateId("v:flow-b"),
+            new SemanticElementId("b-source"), new SemanticElementId("b-target"),
+            new ConnectorAnchorId("b-source:source"), new ConnectorAnchorId("b-target:target")));
+        Assert.True(deleted.IsCommitted, Describe(deleted.Diagnostics));
         foreach (var name in new[] { "b-source", "b-target" })
             await MoveNode(fixture, name, new PointD(name == "b-source" ? 20 : 500, 20));
         foreach (var (name, pool) in new[] { ("a-target", PoolA), ("b-source", PoolB), ("b-target", PoolB) })
@@ -135,6 +143,11 @@ public sealed partial class StableSpatialRoutingPreparationTests
                 fixture.Document.DocumentId, fixture.Document.Revision, new SemanticElementId(name), pool));
             Assert.True(assigned.IsCommitted, Describe(assigned.Diagnostics));
         }
+        var restored = await fixture.Processor.ExecuteAsync(fixture.Document, new CreateBpmnSequenceFlowCommand(
+            fixture.Document.DocumentId, fixture.Document.Revision, new SemanticElementId("flow-b"), new VisualStateId("v:flow-b"),
+            new SemanticElementId("b-source"), new SemanticElementId("b-target"),
+            new ConnectorAnchorId("b-source:source"), new ConnectorAnchorId("b-target:target")));
+        Assert.True(restored.IsCommitted, Describe(restored.Diagnostics));
         return fixture;
     }
 

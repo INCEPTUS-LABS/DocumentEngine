@@ -226,7 +226,9 @@ public sealed class DocumentCanvasComponentTests
             StringComparison.Ordinal);
         Assert.Contains("data-toolbox-item-id=\"bpmn:toolbox:start-event\"", initial,
             StringComparison.Ordinal);
-        Assert.Contains("data-toolbox-item-id=\"bpmn:toolbox:user-task\"", initial,
+        Assert.Contains("data-toolbox-item-id=\"bpmn:toolbox:task\"", initial,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("data-toolbox-item-id=\"bpmn:toolbox:user-task\"", initial,
             StringComparison.Ordinal);
         Assert.Contains("data-toolbox-item-id=\"bpmn:toolbox:sub-process\"", initial,
             StringComparison.Ordinal);

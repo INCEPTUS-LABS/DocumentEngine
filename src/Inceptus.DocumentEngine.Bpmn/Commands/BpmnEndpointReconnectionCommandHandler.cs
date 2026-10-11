@@ -86,7 +86,7 @@ internal sealed class BpmnSequenceFlowEndpointReconnectionCommandHandler : IComm
                     ? visualReplacement
                     : candidate),
             document.VisualModel.ProfileElementPresentations,
-            document.VisualModel.RoutingScopes);
+            document.VisualModel.RoutingScopes, document.VisualModel.DocumentRoutingStates);
 
         return ValueTask.FromResult(CommandHandlerResult.Success(
             BpmnDocumentReplacement.Replace(document, semanticModel, visualModel)));

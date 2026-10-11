@@ -60,7 +60,7 @@ public sealed partial class EditingSession
                 if (!artifacts.IsCompatibleWith(
                         document.DocumentId,
                         document.Revision,
-                        _activeScopeId) ||
+                        _presentationContext) ||
                     _currentScene.DocumentId != document.DocumentId ||
                     _currentScene.SourceRevision != document.Revision)
                 {
@@ -83,7 +83,7 @@ public sealed partial class EditingSession
                 !rebuilt.Artifacts.IsCompatibleWith(
                     document.DocumentId,
                     document.Revision,
-                    artifacts.ScopeId))
+                    artifacts.PresentationContext))
             {
                 return EditingSessionPresentationCaptureResult.Failure(
                     EditingSessionPresentationCaptureStatus.Failed,
@@ -102,7 +102,7 @@ public sealed partial class EditingSession
             return EditingSessionPresentationCaptureResult.Success(
                 new EditingSessionPresentationCapture(
                     document,
-                    artifacts.ScopeId,
+                    artifacts.PresentationContext,
                     generation,
                     rebuilt.Artifacts.ProjectedGraph,
                     rebuilt.Artifacts.LayoutResult,

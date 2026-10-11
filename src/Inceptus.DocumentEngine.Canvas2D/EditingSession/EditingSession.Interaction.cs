@@ -3,6 +3,7 @@ using Inceptus.DocumentEngine.Contracts.Canvas2D;
 using Inceptus.DocumentEngine.Canvas2D.Interaction;
 using Inceptus.DocumentEngine.Canvas2D.Scene;
 using Inceptus.DocumentEngine.Contracts.Commands;
+using Inceptus.DocumentEngine.Contracts.ConnectionCreation;
 using Inceptus.DocumentEngine.Contracts.Documents;
 using Inceptus.DocumentEngine.Contracts.EditorState;
 using Inceptus.DocumentEngine.Contracts.History;
@@ -178,7 +179,7 @@ public sealed partial class EditingSession
                     artifacts.IsCompatibleWith(
                         snapshot.DocumentId,
                         snapshot.Revision,
-                        _activeScopeId))
+                        _presentationContext))
                 {
                     var started = BeginRun(
                         snapshot,
@@ -259,7 +260,7 @@ public sealed partial class EditingSession
                     !currentArtifacts.IsCompatibleWith(
                         expectedScene.DocumentId,
                         expectedScene.SourceRevision,
-                        _activeScopeId))
+                        _presentationContext))
                 {
                     return OperationResult(
                         EditingSessionOperationStatus.Rejected,
@@ -383,7 +384,7 @@ public sealed partial class EditingSession
                     artifacts.IsCompatibleWith(
                         snapshot.DocumentId,
                         snapshot.Revision,
-                        _activeScopeId))
+                        _presentationContext))
                 {
                     var started = BeginRun(
                         snapshot,
@@ -511,12 +512,12 @@ public sealed partial class EditingSession
                 if (snapshot.DocumentId != command.TargetDocumentId ||
                     snapshot.Revision != command.ExpectedRevision ||
                     (spatialResize is null && !IsCurrentVisualSelection(
-                        snapshot, expectedScene, _activeScopeId, expectedEditorState)) ||
+                        snapshot, expectedScene, _presentationContext, expectedEditorState)) ||
                     _artifacts is not { } currentArtifacts ||
                     !currentArtifacts.IsCompatibleWith(
                         snapshot.DocumentId,
                         snapshot.Revision,
-                        _activeScopeId))
+                        _presentationContext))
                 {
                     return InteractionCommandRejected(
                         command,
@@ -595,7 +596,7 @@ public sealed partial class EditingSession
                         artifacts.IsCompatibleWith(
                             snapshot.DocumentId,
                             snapshot.Revision,
-                            _activeScopeId))
+                            _presentationContext))
                     {
                         var started = BeginRun(
                             snapshot,
@@ -637,7 +638,7 @@ public sealed partial class EditingSession
 
     private static EditorStateSnapshot CopyEditorStateWithoutGesture(
         EditorStateSnapshot source) =>
-        new(
+        ClearConnectionSelectionForGesture(source, new(
             source.Selection,
             source.HoveredObjectId,
             source.ActiveToolId,
@@ -646,5 +647,10 @@ public sealed partial class EditingSession
             activeGesture: null,
             source.TemporaryFeedback.Where(static feedback => feedback.SpatialResize is null),
             source.ToolState,
-            source.SemanticSceneSelection);
+            source.SemanticSceneSelection));
+
+    private static EditorStateSnapshot ClearConnectionSelectionForGesture(
+        EditorStateSnapshot source, EditorStateSnapshot cleared) =>
+        StringComparer.Ordinal.Equals(source.ActiveGesture?.Kind, Canvas2DAnchorConnectionGestureMetadata.Kind)
+            ? ConnectionToolState.WithSelection(cleared, null) : cleared;
 }

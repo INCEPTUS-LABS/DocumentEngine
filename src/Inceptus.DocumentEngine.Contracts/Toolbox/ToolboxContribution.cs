@@ -11,10 +11,20 @@ public sealed class ToolboxContribution
         IEnumerable<ToolboxGroupDefinition>? groups = null,
         IEnumerable<ToolboxItemDefinition>? items = null,
         IEnumerable<ToolboxSectionDefinition>? sections = null)
+        : this(groups, items, sections, null)
+    {
+    }
+
+    public ToolboxContribution(
+        IEnumerable<ToolboxGroupDefinition>? groups,
+        IEnumerable<ToolboxItemDefinition>? items,
+        IEnumerable<ToolboxSectionDefinition>? sections,
+        IEnumerable<ToolboxConnectionItemDefinition>? connectionItems)
     {
         Sections = Copy(sections, nameof(sections));
         Groups = Copy(groups, nameof(groups));
         Items = Copy(items, nameof(items));
+        ConnectionItems = Copy(connectionItems, nameof(connectionItems));
     }
 
     public static ToolboxContribution Empty { get; } = new();
@@ -24,6 +34,8 @@ public sealed class ToolboxContribution
     public ImmutableArray<ToolboxGroupDefinition> Groups { get; }
 
     public ImmutableArray<ToolboxItemDefinition> Items { get; }
+
+    public ImmutableArray<ToolboxConnectionItemDefinition> ConnectionItems { get; }
 
     private static ImmutableArray<T> Copy<T>(
         IEnumerable<T>? values,

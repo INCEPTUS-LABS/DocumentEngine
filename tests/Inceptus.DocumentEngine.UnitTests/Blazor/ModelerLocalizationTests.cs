@@ -21,6 +21,23 @@ namespace Inceptus.DocumentEngine.UnitTests.Blazor;
 public sealed class ModelerLocalizationTests
 {
     [Theory]
+    [InlineData("en", "Move Lane Up", "Move Lane Down")]
+    [InlineData("pl", "Przenieś tor w górę", "Przenieś tor w dół")]
+    [InlineData("de", "Lane nach oben verschieben", "Lane nach unten verschieben")]
+    [InlineData("fr", "Déplacer le couloir vers le haut", "Déplacer le couloir vers le bas")]
+    [InlineData("es", "Mover carril hacia arriba", "Mover carril hacia abajo")]
+    public void A22OrderingLaneActionsUseLocalizedAccessibleNames(string culture, string up, string down)
+    {
+        using var scope = new ModelerCultureScope(culture);
+        using var services = new ServiceCollection().AddLogging().AddInceptusBpmnModeler().BuildServiceProvider();
+        var text = services.GetRequiredService<IStringLocalizer<ModelerStrings>>();
+        Assert.Equal(up, ModelerLabels.ActionLabel(text,
+            Inceptus.DocumentEngine.Organizational.ContextMenus.OrganizationalPoolActions.MoveLaneUpId.Value, "fallback"));
+        Assert.Equal(down, ModelerLabels.ActionLabel(text,
+            Inceptus.DocumentEngine.Organizational.ContextMenus.OrganizationalPoolActions.MoveLaneDownId.Value, "fallback"));
+    }
+
+    [Theory]
     [InlineData("", "Undo")]
     [InlineData("en", "Undo")]
     [InlineData("en-GB", "Undo")]
@@ -112,6 +129,13 @@ public sealed class ModelerLocalizationTests
             Assert.NotNull(ModelerLabels.ToolboxKey(group.GroupId.Value));
             Assert.Contains(ModelerLabels.ToolboxLabel(text, group), markup, StringComparison.Ordinal);
             foreach (var item in BpmnModelerCompositionFactory.ToolboxCatalog.GetItems(group.GroupId))
+            {
+                Assert.NotNull(ModelerLabels.ToolboxKey(item.ItemId.Value));
+                Assert.Contains(ModelerLabels.ToolboxLabel(text, item), markup, StringComparison.Ordinal);
+                Assert.Contains(item.ItemId.Value, markup, StringComparison.Ordinal);
+            }
+
+            foreach (var item in BpmnModelerCompositionFactory.ToolboxCatalog.GetConnectionItems(group.GroupId))
             {
                 Assert.NotNull(ModelerLabels.ToolboxKey(item.ItemId.Value));
                 Assert.Contains(ModelerLabels.ToolboxLabel(text, item), markup, StringComparison.Ordinal);

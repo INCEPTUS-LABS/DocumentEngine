@@ -20,7 +20,7 @@ public sealed partial class Canvas2DSceneBuilder
         VisualModelSnapshot visualModel,
         EditorStateSnapshot editorState,
         ScenePresentationInput? presentation) =>
-        presentation is not null &&
+        presentation?.PresentationContext is Inceptus.DocumentEngine.Contracts.Presentation.ProcessScopePresentationContext &&
         ReferenceEquals(visualModel, presentation.Document.VisualModel) &&
         editorState.ActiveGesture is null && editorState.TemporaryFeedback.IsEmpty &&
         _contributors.Descriptors.All(static descriptor =>

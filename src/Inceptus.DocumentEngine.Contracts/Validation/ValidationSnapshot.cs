@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using Inceptus.DocumentEngine.Contracts.Presentation;
 using Inceptus.DocumentEngine.Contracts.Primitives;
 
 namespace Inceptus.DocumentEngine.Contracts.Validation;
@@ -28,9 +29,19 @@ public sealed class ValidationSnapshot
         DocumentRevision sourceRevision,
         IEnumerable<ModelValidationIssue>? issues = null,
         long? sourceGeneration = null)
+        : this(documentId, new ProcessScopePresentationContext(scopeId), sourceRevision, issues, sourceGeneration)
+    {
+    }
+
+    public ValidationSnapshot(
+        DocumentId documentId,
+        PresentationViewContext presentationContext,
+        DocumentRevision sourceRevision,
+        IEnumerable<ModelValidationIssue>? issues = null,
+        long? sourceGeneration = null)
     {
         ArgumentNullException.ThrowIfNull(documentId);
-        ArgumentNullException.ThrowIfNull(scopeId);
+        ArgumentNullException.ThrowIfNull(presentationContext);
         if (sourceGeneration < 0)
         {
             throw new ArgumentOutOfRangeException(
@@ -40,7 +51,7 @@ public sealed class ValidationSnapshot
         }
 
         DocumentId = documentId;
-        ScopeId = scopeId;
+        PresentationContext = presentationContext;
         SourceRevision = sourceRevision;
         SourceGeneration = sourceGeneration;
         Issues = ModelValidationIssueCollection.CopyAndOrder(issues, nameof(issues));
@@ -48,7 +59,11 @@ public sealed class ValidationSnapshot
 
     public DocumentId DocumentId { get; }
 
-    public DocumentScopeId ScopeId { get; }
+    public PresentationViewContext PresentationContext { get; }
+
+    public DocumentScopeId ScopeId => PresentationContext is ProcessScopePresentationContext process
+        ? process.ScopeId
+        : throw new InvalidOperationException("Document presentation validation has no Process scope.");
 
     public DocumentRevision SourceRevision { get; }
 

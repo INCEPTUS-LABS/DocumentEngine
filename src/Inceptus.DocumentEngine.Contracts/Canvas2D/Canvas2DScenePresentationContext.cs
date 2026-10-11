@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using Inceptus.DocumentEngine.Contracts.Documents;
 using Inceptus.DocumentEngine.Contracts.Primitives;
 using Inceptus.DocumentEngine.Contracts.Profiles;
+using Inceptus.DocumentEngine.Contracts.Presentation;
 
 namespace Inceptus.DocumentEngine.Contracts.Canvas2D;
 
@@ -31,9 +32,18 @@ public sealed class Canvas2DScenePresentationContext
         ModelProfileViewStateSnapshot modelProfileViewState,
         ModelProfileElementViewStateSnapshot modelProfileElementViewState,
         IEnumerable<Canvas2DSceneItem> baseSceneItems)
+        : this(document, new ProcessScopePresentationContext(activeScopeId), modelProfileViewState,
+            modelProfileElementViewState, baseSceneItems)
+    {
+    }
+
+    public Canvas2DScenePresentationContext(DocumentSnapshot document, PresentationViewContext context,
+        ModelProfileViewStateSnapshot modelProfileViewState,
+        ModelProfileElementViewStateSnapshot modelProfileElementViewState,
+        IEnumerable<Canvas2DSceneItem> baseSceneItems)
     {
         ArgumentNullException.ThrowIfNull(document);
-        ArgumentNullException.ThrowIfNull(activeScopeId);
+        ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(modelProfileViewState);
         ArgumentNullException.ThrowIfNull(modelProfileElementViewState);
         ArgumentNullException.ThrowIfNull(baseSceneItems);
@@ -47,7 +57,7 @@ public sealed class Canvas2DScenePresentationContext
         }
 
         Document = document;
-        ActiveScopeId = activeScopeId;
+        PresentationContext = context;
         ModelProfileViewState = modelProfileViewState;
         ModelProfileElementViewState = modelProfileElementViewState;
         BaseSceneItems = [.. items.OrderBy(static item => item.Layer)
@@ -58,7 +68,10 @@ public sealed class Canvas2DScenePresentationContext
 
     public DocumentSnapshot Document { get; }
 
-    public DocumentScopeId ActiveScopeId { get; }
+    public PresentationViewContext PresentationContext { get; }
+
+    public DocumentScopeId ActiveScopeId => PresentationContext is ProcessScopePresentationContext process
+        ? process.ScopeId : throw new InvalidOperationException("A document presentation has no active process scope.");
 
     public ModelProfileViewStateSnapshot ModelProfileViewState { get; }
 

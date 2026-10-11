@@ -76,7 +76,7 @@ public sealed partial class DocumentCanvasHostTests
         Assert.Contains($">{undo}</button>", localized, StringComparison.Ordinal);
         Assert.Contains("data-property-field-id=\"name\"", localized, StringComparison.Ordinal);
         Assert.Contains("data-property-field-id=\"code\"", localized, StringComparison.Ordinal);
-        Assert.Contains("readonly", localized, StringComparison.Ordinal);
+        Assert.Matches("<select[^>]*-properties-type\"", localized);
         Assert.DoesNotContain("value=\"invalid\"", localized, StringComparison.Ordinal);
         Assert.Matches($"<legend[^>]*>{parameters}</legend>", localized);
         using (new ModelerCultureScope(culture))

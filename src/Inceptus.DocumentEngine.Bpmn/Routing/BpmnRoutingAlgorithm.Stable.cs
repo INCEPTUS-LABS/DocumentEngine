@@ -127,7 +127,7 @@ public sealed partial class BpmnRoutingAlgorithm
             if (outcome == BpmnRoutingOutcome.InvalidOutput)
             {
                 diagnostics.Add(new Diagnostic(BpmnAlgorithmDiagnosticCodes.InvalidRoutingOutput, DiagnosticSeverity.Error,
-                    $"BPMN Sequence Flow '{edgeId}' produced invalid routing geometry. {failureReason}", edgeId.Value));
+                    $"BPMN {ConnectorName(edge)} '{edgeId}' produced invalid routing geometry. {failureReason}", edgeId.Value));
                 return new ConnectorRoutingWorkResult([], diagnostics);
             }
             var proof = new ConnectorAutomaticRouteProof(BpmnAlgorithmIds.DefaultRouting, StablePolicyVersion, clearance, lead, source, target);
@@ -144,8 +144,8 @@ public sealed partial class BpmnRoutingAlgorithm
     private static ProjectedEdge RequireStableEdge(ProjectedGraph graph, ProjectedObjectId edgeId)
     {
         var edge = graph.Edges.FirstOrDefault(candidate => candidate.Id == edgeId);
-        if (edge is null || !IsSequenceFlow(edge) || edge.Source.VisualStateId is null)
-            throw new ArgumentException("Stable BPMN routing requires a Sequence Flow with persistent visual authority.", nameof(edgeId));
+        if (edge is null || !IsSupportedConnector(edge) || edge.Source.VisualStateId is null)
+            throw new ArgumentException("Stable BPMN routing requires a supported BPMN connector with persistent visual authority.", nameof(edgeId));
         return edge;
     }
 

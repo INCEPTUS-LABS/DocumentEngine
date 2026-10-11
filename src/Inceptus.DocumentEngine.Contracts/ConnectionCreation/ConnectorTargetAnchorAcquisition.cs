@@ -77,9 +77,9 @@ public static class ConnectorTargetAnchorAcquisition
             {
                 Anchor = anchor,
                 Distance = Math.Abs(
-                    ConnectorAnchorGeometryResolver.ResolveNormalizedPosition(
+                    (anchor.NormalizedPosition ?? ConnectorAnchorGeometryResolver.ResolveNormalizedPosition(
                         anchor.Order,
-                        sideAnchors.Length) - edgeParameter),
+                        sideAnchors.Length)) - edgeParameter),
             })
             .OrderBy(static candidate => candidate.Distance)
             .ThenBy(static candidate => candidate.Anchor.Order)
@@ -96,7 +96,7 @@ public static class ConnectorTargetAnchorAcquisition
                     bounds,
                     side,
                     existing.Anchor.Order,
-                    sideAnchors.Length));
+                    sideAnchors.Length, existing.Anchor.NormalizedPosition));
         }
 
         if (!ElementConnectorAnchorPolicyEvaluator.CanAdd(
@@ -115,6 +115,8 @@ public static class ConnectorTargetAnchorAcquisition
             edgeParameter);
         var proposedAnchorId = proposedAnchorIdFactory();
         ArgumentNullException.ThrowIfNull(proposedAnchorId);
+        var proposed = ConnectorAnchorInsertion.Insert(visualState, proposedAnchorId, side, ConnectorAnchorRole.Target, insertionIndex)
+            .ConnectorAnchors.Single(anchor => anchor.Id == proposedAnchorId);
         return TargetAnchorAcquisitionResult.Proposed(
             request.TargetSemanticElementId,
             request.TargetVisualStateId,
@@ -124,7 +126,7 @@ public static class ConnectorTargetAnchorAcquisition
                 bounds,
                 side,
                 insertionIndex,
-                sideAnchors.Length + 1),
+                sideAnchors.Length + 1, proposed.NormalizedPosition),
             insertionIndex);
     }
 }

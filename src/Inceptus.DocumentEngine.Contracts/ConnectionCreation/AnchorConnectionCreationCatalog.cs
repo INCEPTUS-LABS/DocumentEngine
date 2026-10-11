@@ -58,14 +58,18 @@ public sealed class AnchorConnectionCreationCatalog
     }
 
     public ImmutableArray<AnchorConnectionCreationRegistration> GetMatchingRegistrations(
-        AnchorConnectionCreationSourceRequest request)
+        AnchorConnectionCreationSourceRequest request) => GetMatchingRegistrations(request, null);
+
+    public ImmutableArray<AnchorConnectionCreationRegistration> GetMatchingRegistrations(
+        AnchorConnectionCreationSourceRequest request, AnchorConnectionCreationId? selectedCreationId)
     {
         ArgumentNullException.ThrowIfNull(request);
 
         var matches = ImmutableArray.CreateBuilder<AnchorConnectionCreationRegistration>();
         foreach (var registration in Registrations)
         {
-            if (registration.CommandFactory.CanStart(request))
+            if ((selectedCreationId is null ? registration.IsImplicitSourceGesture : registration.CreationId == selectedCreationId) &&
+                registration.CommandFactory.CanStart(request))
             {
                 matches.Add(registration);
             }

@@ -4,6 +4,7 @@ using Inceptus.DocumentEngine.Contracts.Commands;
 using Inceptus.DocumentEngine.Contracts.Documents;
 using Inceptus.DocumentEngine.Contracts.EditorState;
 using Inceptus.DocumentEngine.Contracts.History;
+using Inceptus.DocumentEngine.Contracts.Presentation;
 using Inceptus.DocumentEngine.Contracts.Primitives;
 using Inceptus.DocumentEngine.Contracts.Projection;
 using Inceptus.DocumentEngine.Runtime.Documents;
@@ -44,14 +45,22 @@ public sealed class PhaseEProjectionArchitectureTests
     [Fact]
     public void ProjectionEngineExposesOnlySnapshotBasedReadOnlyExecution()
     {
-        var constructor = Assert.Single(typeof(ProjectionEngine).GetConstructors());
+        var constructors = typeof(ProjectionEngine).GetConstructors();
+        Assert.Equal(2, constructors.Length);
+        var constructor = Assert.Single(constructors, constructor => constructor.GetParameters().Length == 1);
         Assert.Equal(
             [typeof(IEnumerable<ProjectionRuleRegistration>)],
             constructor.GetParameters().Select(parameter => parameter.ParameterType));
         Assert.True(constructor.GetParameters()[0].IsOptional);
+        var composedConstructor = Assert.Single(constructors, constructor => constructor.GetParameters().Length == 2);
+        Assert.Equal([typeof(IEnumerable<ProjectionRuleRegistration>), typeof(IEnumerable<PresentationViewProviderRegistration>)],
+            composedConstructor.GetParameters().Select(parameter => parameter.ParameterType));
+        Assert.All(composedConstructor.GetParameters(), parameter => Assert.False(parameter.IsOptional));
 
-        var projects = typeof(ProjectionEngine).GetMethods(DeclaredPublicMembers);
-        Assert.Equal(2, projects.Length);
+        var methods = typeof(ProjectionEngine).GetMethods(DeclaredPublicMembers);
+        Assert.Equal(6, methods.Length);
+        var projects = methods.Where(method => method.Name == nameof(ProjectionEngine.Project)).ToArray();
+        Assert.Equal(4, projects.Length);
         Assert.All(projects, project =>
         {
             Assert.Equal(nameof(ProjectionEngine.Project), project.Name);
@@ -63,7 +72,7 @@ public sealed class PhaseEProjectionArchitectureTests
             rootProject.GetParameters().Select(parameter => parameter.ParameterType));
         Assert.True(rootProject.GetParameters()[1].IsOptional);
         Assert.True(rootProject.GetParameters()[2].IsOptional);
-        var scopedProject = Assert.Single(projects, method => method.GetParameters().Length == 4);
+        var scopedProject = Assert.Single(projects, method => method.GetParameters()[1].ParameterType == typeof(DocumentScopeId));
         Assert.Equal(
             [
                 typeof(DocumentSnapshot),
@@ -75,6 +84,23 @@ public sealed class PhaseEProjectionArchitectureTests
         Assert.False(scopedProject.GetParameters()[1].IsOptional);
         Assert.True(scopedProject.GetParameters()[2].IsOptional);
         Assert.True(scopedProject.GetParameters()[3].IsOptional);
+        foreach (var viewType in new[] { typeof(PresentationViewContext), typeof(PresentationViewPlan) })
+        {
+            var composedProject = Assert.Single(projects, method => method.GetParameters()[1].ParameterType == viewType);
+            Assert.Equal([typeof(DocumentSnapshot), viewType, typeof(ProjectionContext), typeof(CancellationToken)],
+                composedProject.GetParameters().Select(parameter => parameter.ParameterType));
+            Assert.False(composedProject.GetParameters()[1].IsOptional);
+            Assert.True(composedProject.GetParameters()[2].IsOptional);
+            Assert.True(composedProject.GetParameters()[3].IsOptional);
+        }
+        var contexts = Assert.Single(methods, method => method.Name == nameof(ProjectionEngine.GetDocumentContexts));
+        Assert.Equal(typeof(ImmutableArray<DocumentPresentationContext>), contexts.ReturnType);
+        Assert.Equal([typeof(DocumentSnapshot)], contexts.GetParameters().Select(parameter => parameter.ParameterType));
+        var resolve = Assert.Single(methods, method => method.Name == nameof(ProjectionEngine.ResolvePresentation));
+        Assert.Equal(typeof(PresentationViewResolution), resolve.ReturnType);
+        Assert.Equal([typeof(DocumentSnapshot), typeof(PresentationViewContext)],
+            resolve.GetParameters().Select(parameter => parameter.ParameterType));
+        Assert.All(methods, method => Assert.Equal(typeof(DocumentSnapshot), method.GetParameters()[0].ParameterType));
         Assert.DoesNotContain(
             GetPublicSignatureTypes(typeof(ProjectionEngine)),
             type => type == typeof(Document));

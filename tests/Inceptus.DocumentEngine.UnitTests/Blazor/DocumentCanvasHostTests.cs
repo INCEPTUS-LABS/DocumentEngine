@@ -121,9 +121,11 @@ public sealed partial class DocumentCanvasHostTests
             assignment => Assert.Equal(poolId, assignment.ContainerSemanticElementId));
         Assert.Equal(poolId, added.EditorState.SemanticSceneSelection);
         Assert.Empty(added.EditorState.Selection);
-        Assert.Equal(before.ProjectedGraph!.Nodes.AsEnumerable(), added.ProjectedGraph!.Nodes.AsEnumerable());
+        Assert.Equal(before.ProjectedGraph!.Nodes.AsEnumerable(), added.ProjectedGraph!.Nodes.Where(node => node.RegionEnvelope is null));
+        var poolNode = Assert.Single(added.ProjectedGraph.Nodes, node => node.Source.SemanticElementId == poolId);
+        Assert.NotNull(poolNode.RegionEnvelope);
         Assert.Equal(before.ProjectedGraph.Edges.AsEnumerable(), added.ProjectedGraph.Edges.AsEnumerable());
-        Assert.Equal(before.LayoutResult!.Nodes.AsEnumerable(), added.LayoutResult!.Nodes.AsEnumerable());
+        Assert.Equal(before.LayoutResult!.Nodes.AsEnumerable(), added.LayoutResult!.Nodes.Where(node => node.ProjectedObjectId != poolNode.Id));
         var poolTransform = added.CurrentScene!.SpatialPresentationPlan!.Regions.Single(
             region => region.ContainerSemanticElementId == poolId).LocalToSceneTransform;
         Assert.Equal(before.RoutingResult!.Routes.Length, added.RoutingResult!.Routes.Length);
@@ -147,7 +149,7 @@ public sealed partial class DocumentCanvasHostTests
         Assert.Null(properties.VisualStateId);
         Assert.False(properties.CanEditBounds);
         Assert.Equal(OrganizationalSemanticTypes.Pool, properties.TypeId);
-        Assert.Equal(["name", "description"],
+        Assert.Equal(["name", "participant", "description"],
             properties.DataFields.Select(static field => field.FieldId.Value));
         var draft = new DocumentCanvasPropertiesDraft(properties);
         Assert.True(draft.TryGetDataField(new ElementPropertyFieldId("name"), out var name));
@@ -254,7 +256,7 @@ public sealed partial class DocumentCanvasHostTests
         Assert.Equal(visiblePlan.MovementBottomBoundaryRegionId, hiddenPlan.MovementBottomBoundaryRegionId);
         Assert.Empty(hiddenPlan.ResizeTargets);
         Assert.DoesNotContain(hidden.CurrentScene.Items,
-            item => item.Origin.SemanticElementId == firstPool || item.Origin.SemanticElementId == secondPool);
+            item => item.IsVisible && (item.Origin.SemanticElementId == firstPool || item.Origin.SemanticElementId == secondPool));
         Assert.Same(snapshot, document.CaptureSnapshot());
         Assert.Equal(expanded.HistoryStatus, hidden.HistoryStatus);
     }
@@ -500,7 +502,7 @@ public sealed partial class DocumentCanvasHostTests
     {
         var scene = Session(host).CaptureState().CurrentScene!;
         var header = scene.Items.Single(item => item.Origin.SemanticElementId == poolId &&
-            Canvas2DSemanticSceneInteractionMetadata.IsInteractionCapable(item));
+            Canvas2DSemanticSceneInteractionMetadata.IsInteractionCapable(item) && !Canvas2DNodeBodyMetadata.IsNodeBody(item));
         await PointerObserver(host).ContextMenuDocumentPointAsync(scene, Center(header.Bounds));
     }
     [Fact]
@@ -1542,12 +1544,16 @@ public sealed partial class DocumentCanvasHostTests
         Assert.Equal(expectedBounds, body.Bounds);
         Assert.Equal(new PointD(850d, 350d), Center(body.Bounds));
 
-        Assert.Null(await host.OpenPropertiesAsync(createdVisual.Id));
-        Assert.False(host.TryCaptureSelectedProperties(createdVisual.Id, out var properties));
+        Assert.NotNull(await host.OpenPropertiesAsync(createdVisual.Id));
+        Assert.True(host.TryCaptureSelectedProperties(createdVisual.Id, out var properties));
         Assert.NotNull(properties);
         Assert.Equal(expectedBounds, properties.Bounds);
-        Assert.Null(await host.OpenPropertiesAsync(createdVisual.Id));
-        Assert.False(host.CaptureState().PropertiesFormOpen);
+        Assert.True(properties.CanEditType);
+        Assert.False(properties.CanEditData);
+        Assert.False(properties.CanEditBounds);
+        Assert.Empty(new DocumentCanvasPropertiesDraft(properties).DataFields);
+        Assert.True(host.CaptureState().PropertiesFormOpen);
+        Assert.True(host.UpdatePropertiesFormState(false, null, false));
         Assert.Equal(expectedBounds, body.Bounds);
 
         var panned = await session.UpdateViewportAsync(
@@ -1597,10 +1603,10 @@ public sealed partial class DocumentCanvasHostTests
         await host.InitializeAsync("canvas", "container");
         var session = Session(host);
         var document = AttachedDocument(session);
-        var catalog = new ToolboxCatalog(BpmnPluginRegistration.N1.ToolboxContributions);
+        var catalog = new ToolboxCatalog(BpmnPluginRegistration.N100.ToolboxContributions);
         var task = catalog.Items.Single(item => item.ElementTypeId == BpmnSemanticTypes.Task);
-        var inclusive = catalog.Items.Single(
-            item => item.ElementTypeId == BpmnSemanticTypes.InclusiveGateway);
+        var gateway = catalog.Items.Single(
+            item => item.ElementTypeId == BpmnSemanticTypes.ExclusiveGateway);
         var before = document.CaptureSnapshot();
         var state = host.CaptureState().Session!;
         var existingTask = state.CurrentScene!.Items.First(item =>
@@ -1609,7 +1615,7 @@ public sealed partial class DocumentCanvasHostTests
 
         Assert.True(selection.Select(task.ItemId));
         await host.RefreshToolboxPlacementAsync();
-        Assert.True(selection.Select(inclusive.ItemId));
+        Assert.True(selection.Select(gateway.ItemId));
         await host.RefreshToolboxPlacementAsync();
 
         Assert.Equal(before, document.CaptureSnapshot());
@@ -1618,9 +1624,9 @@ public sealed partial class DocumentCanvasHostTests
             Center(existingTask.Bounds));
         await session.WaitForIdleAsync();
         Assert.Same(before, document.CaptureSnapshot());
-        Assert.Equal(inclusive.ItemId, selection.SelectedItemId);
+        Assert.Equal(gateway.ItemId, selection.SelectedItemId);
         Assert.Empty(session.CaptureState().EditorState.Selection);
-        Assert.Equal(BpmnSemanticTypes.InclusiveGateway, Assert.Single(
+        Assert.Equal(BpmnSemanticTypes.ExclusiveGateway, Assert.Single(
             session.CaptureState().EditorState.TemporaryFeedback).PlacementPreview!.SemanticTypeId);
         Assert.False(Assert.Single(session.CaptureState().EditorState.TemporaryFeedback).PlacementPreview!.IsAllowed);
         await PointerObserver(host).ClickDocumentPointAsync(
@@ -1628,7 +1634,7 @@ public sealed partial class DocumentCanvasHostTests
         await session.WaitForIdleAsync();
         var after = document.CaptureSnapshot();
         var created = Assert.Single(after.SemanticModel.Elements.Where(item =>
-            item.TypeId == BpmnSemanticTypes.InclusiveGateway &&
+            item.TypeId == BpmnSemanticTypes.ExclusiveGateway &&
             !before.SemanticModel.Elements.Any(old => old.Id == item.Id)));
         var visual = Assert.Single(after.VisualModel.VisualStates,
             item => item.SemanticElementId == created.Id);
@@ -3243,7 +3249,7 @@ public sealed partial class DocumentCanvasHostTests
     }
 
     [Fact]
-    public async Task TimerDefinitionSchemaAndCommandsRemainIntactWhileEventPropertiesAreUnavailable()
+    public async Task TimerDefinitionSchemaAndCommandsRemainIntactWhileEventPropertiesExposeOnlyType()
     {
         var execution = new RecordingRenderExecution();
         var observer = new RecordingSurfaceObserver(new Canvas2DSurfaceSize(720d, 480d, 1d));
@@ -3267,8 +3273,10 @@ public sealed partial class DocumentCanvasHostTests
         await PointerObserver(host).ClickDocumentPointAsync(scene, Center(timerBody.Bounds));
         Assert.Equal(target, Assert.Single(host.CaptureState().Session!.EditorState.Selection));
 
-        Assert.Null(await host.OpenPropertiesAsync(target));
-        Assert.False(host.CaptureState().PropertiesFormOpen);
+        var typeOnlySnapshot = Assert.IsType<DocumentCanvasPropertySnapshot>(await host.OpenPropertiesAsync(target));
+        Assert.True(host.CaptureState().PropertiesFormOpen);
+        Assert.True(typeOnlySnapshot.CanEditType);
+        Assert.Empty(new DocumentCanvasPropertiesDraft(typeOnlySnapshot).DataFields);
         Assert.True(DocumentCanvasPropertySnapshot.TryCreate(beforeDocument, target,
             new ElementPropertiesSchemaCatalog(BpmnPluginRegistration.N100.PropertiesSchemas), out var authoritative));
         Assert.Equal(string.Empty, DataEditorValue(authoritative, TimerDefinitionFieldId));
@@ -3281,7 +3289,7 @@ public sealed partial class DocumentCanvasHostTests
         await Session(host).WaitForIdleAsync();
 
         Assert.True(committed.IsCommitted);
-        Assert.False(host.CaptureState().PropertiesFormOpen);
+        Assert.True(host.CaptureState().PropertiesFormOpen);
         var after = host.CaptureState().Session!;
         Assert.Equal(before.DocumentRevision.Increment(), after.DocumentRevision);
         Assert.Equal(before.HistoryStatus.EntryCount + 1, after.HistoryStatus.EntryCount);
@@ -3751,7 +3759,7 @@ public sealed partial class DocumentCanvasHostTests
 
         var after = host.CaptureState();
         Assert.Equal(DocumentCanvasPropertiesApplyStatus.ValidationFailed, result.Status);
-        Assert.Contains("one Data field, routing type, or visual bounds", result.Message,
+        Assert.Contains("one Data field, element type, routing type, or visual bounds", result.Message,
             StringComparison.Ordinal);
         Assert.Equal(before.Session!.DocumentRevision, after.Session!.DocumentRevision);
         Assert.Equal(before.Session.HistoryStatus, after.Session.HistoryStatus);

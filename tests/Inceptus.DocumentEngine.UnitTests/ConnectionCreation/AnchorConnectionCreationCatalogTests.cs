@@ -117,6 +117,30 @@ public sealed class AnchorConnectionCreationCatalogTests
             AnchorConnectionCreationCatalog.Empty.GetMatchingRegistrations(null!));
     }
 
+    [Fact]
+    public void ExplicitSelectionUsesOnlyItsRegistrationAndNeverFallsBackToTheImplicitTool()
+    {
+        var request = SourceRequest();
+        var implicitFactory = new MatchingFactory(matches: true);
+        var explicitFactory = new MatchingFactory(matches: true);
+        var implicitRegistration = new AnchorConnectionCreationRegistration(
+            new("test:sequence"), implicitFactory);
+        var explicitRegistration = new AnchorConnectionCreationRegistration(
+            new("test:message"), explicitFactory, null, isImplicitSourceGesture: false);
+        var catalog = new AnchorConnectionCreationCatalog([explicitRegistration, implicitRegistration]);
+
+        Assert.Same(implicitRegistration, Assert.Single(catalog.GetMatchingRegistrations(request)));
+        Assert.Null(explicitFactory.LastRequest);
+        Assert.Same(explicitRegistration, Assert.Single(catalog.GetMatchingRegistrations(request,
+            explicitRegistration.CreationId)));
+        Assert.Empty(catalog.GetMatchingRegistrations(request, new("test:unknown")));
+
+        var unavailable = new AnchorConnectionCreationRegistration(new("test:unavailable"),
+            new MatchingFactory(matches: false), null, isImplicitSourceGesture: false);
+        Assert.Empty(new AnchorConnectionCreationCatalog([implicitRegistration, unavailable])
+            .GetMatchingRegistrations(request, unavailable.CreationId));
+    }
+
     private static AnchorConnectionCreationRegistration Registration(
         string id,
         bool matches = true) =>

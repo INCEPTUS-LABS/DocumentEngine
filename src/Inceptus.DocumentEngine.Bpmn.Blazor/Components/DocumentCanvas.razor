@@ -13,6 +13,7 @@
 @using Inceptus.DocumentEngine.Contracts.Documents
 @using Inceptus.DocumentEngine.Contracts.Geometry
 @using Inceptus.DocumentEngine.Contracts.Primitives
+@using Inceptus.DocumentEngine.Contracts.Presentation
 @using Inceptus.DocumentEngine.Contracts.Properties
 @using Inceptus.DocumentEngine.Contracts.Profiles
 @using Inceptus.DocumentEngine.Contracts.Toolbox
@@ -118,6 +119,19 @@
                           SelectedItemIdChanged="SelectToolboxItemAsync" />
             <div class="document-editor-workspace">
         <div class="editor-toolbar" role="toolbar" aria-label="@Text["Accessibility_EditorToolbar"]">
+            @if (PresentationViewChoices.Length > 1)
+            {
+                <label class="presentation-view-selector" for="@DomId("presentation-view")">
+                    @Text["Navigation_PresentationView"]
+                    <select id="@DomId("presentation-view")" value="@SelectedPresentationView"
+                            disabled="@(!CanNavigateScope)" @onchange="SelectPresentationViewAsync">
+                        @foreach (var view in PresentationViewChoices)
+                        {
+                            <option value="@ViewChoiceValue(view.Context)">@(view.ResourceKey is { } key ? Text[key] : view.Label)</option>
+                        }
+                    </select>
+                </label>
+            }
             <nav class="scope-breadcrumb" aria-label="@Text["Accessibility_ProcessScope"]">
                 @for (var index = 0; index < ScopeBreadcrumb.Length; index++)
                 {
@@ -198,6 +212,9 @@
                         @onclick="RedoAsync">@Text["Toolbar_Redo"]</button>
             </div>
 
+            <SmartEditToggle Enabled="@(_state?.SmartEditEnabled ?? true)"
+                             Disabled="@(_state is not { IsInitialized: true, IsDisposed: false })"
+                             EnabledChanged="SetSmartEditEnabled" />
             <div class="toolbar-group zoom-controls" role="group" aria-label="@Text["Accessibility_Zoom"]">
                 <button id="@DomId("zoom-out")"
                         type="button"
@@ -220,6 +237,12 @@
                         @onclick="ZoomInAsync">+</button>
             </div>
             <div class="toolbar-group validation-controls" role="group" aria-label="@Text["Accessibility_ModelValidation"]">
+                <button id="@DomId("auto-arrange")"
+                        type="button"
+                        disabled="@(!CanAutoArrange)"
+                        title="@Text["Toolbar_AutoArrange"]"
+                        aria-label="@Text["Toolbar_AutoArrange"]"
+                        @onclick="AutoArrangeAsync">@Text["Toolbar_AutoArrange"]</button>
                 <button id="@DomId("validate")"
                         type="button"
                         disabled="@(!CanValidate)"
@@ -229,6 +252,9 @@
         </div>
 
         <div id="@ContainerElementId" class="document-canvas-surface">
+            <ElementToolbox @key="_state?.SmartEditEnabled" State="@(_newDiagramConfirmationOpen || _publicationDialogOpen ? null : _state?.ElementToolbox)"
+                            Properties="OpenElementToolboxPropertiesAsync" AutoPoints="AutoPointsAsync"
+                            Delete="DeleteToolboxElementAsync" Create="SmartCreateAsync" Dismiss="DismissElementToolbox" />
             <canvas id="@CanvasElementId"
                     class="@CanvasClass(CanvasElementId)"
                     tabindex="@CanvasTabIndex(CanvasElementId)"
@@ -490,79 +516,111 @@
                                 @onclick="CancelProperties">×</button>
                     </header>
 
-                    <fieldset data-property-group="data">
-                        <legend>@Text["Properties_Data"]</legend>
-                        @foreach (var field in draft.DataFields)
-                        {
-                            <label class="@(field.Definition.EditorKind == ElementPropertyEditorKind.MultilineText ? "properties-field-long-form" : "properties-field-compact")">
-                                @PropertyFieldLabel(field.Definition)
-                                @switch (field.Definition.EditorKind)
-                                {
-                                    case ElementPropertyEditorKind.SingleLineText:
-                                        <input id="@PropertiesFieldControlId(field.FieldId)"
-                                               data-property-field-id="@field.FieldId.Value"
-                                               type="text"
-                                               value="@field.EditorValue"
-                                               readonly="@(!field.CanEdit)"
-                                               disabled="@_propertiesApplying"
-                                               @oninput="eventArgs => UpdateDataDraftValue(field.FieldId, eventArgs.Value)" />
-                                        break;
-                                    case ElementPropertyEditorKind.Integer:
-                                        <input id="@PropertiesFieldControlId(field.FieldId)"
-                                               data-property-field-id="@field.FieldId.Value"
-                                               type="number"
-                                               step="1"
-                                               inputmode="numeric"
-                                               value="@field.EditorValue"
-                                               readonly="@(!field.CanEdit)"
-                                               disabled="@_propertiesApplying"
-                                               @oninput="eventArgs => UpdateDataDraftValue(field.FieldId, eventArgs.Value)" />
-                                        break;
-                                    case ElementPropertyEditorKind.MultilineText:
-                                        <textarea id="@PropertiesFieldControlId(field.FieldId)"
-                                                  data-property-field-id="@field.FieldId.Value"
-                                                  class="properties-long-form-editor"
-                                                  rows="10"
-                                                  value="@field.EditorValue"
-                                                  readonly="@(!field.CanEdit)"
-                                                  disabled="@_propertiesApplying"
-                                                  @oninput="eventArgs => UpdateDataDraftValue(field.FieldId, eventArgs.Value)"></textarea>
-                                        break;
-                                    case ElementPropertyEditorKind.Boolean:
-                                        <input id="@PropertiesFieldControlId(field.FieldId)"
-                                               data-property-field-id="@field.FieldId.Value"
-                                               type="checkbox"
-                                               checked="@ResolveBooleanEditorValue(field)"
-                                               disabled="@(_propertiesApplying || !field.CanEdit)"
-                                               @onchange="eventArgs => UpdateDataDraftValue(field.FieldId, eventArgs.Value)" />
-                                        break;
-                                    default:
-                                        throw new InvalidOperationException(
-                                            "The element Properties editor kind is unsupported.");
-                                }
-                            </label>
-                        }
-                        @if (draft.Authoritative.CanEditRoutingType)
-                        {
-                            <label class="properties-field-compact">@Text["Properties_RoutingType"]
-                                <select id="@DomId("properties-routing-type")"
-                                        value="@draft.RoutingTypeValue"
-                                        disabled="@_propertiesApplying"
-                                        @onchange="UpdateRoutingTypeDraftValue">
-                                    <option value="automatic">@Text["RoutingType_Automatic"]</option>
-                                    <option value="straight">@Text["RoutingType_Straight"]</option>
-                                    <option value="manual">@Text["RoutingType_Manual"]</option>
-                                </select>
-                            </label>
-                        }
-                    </fieldset>
+                    @if (!draft.DataFields.IsEmpty || draft.Authoritative.CanEditRoutingType)
+                    {
+                        var compactDataLayout = HasCompactPropertiesDataLayout(draft.DataFields);
+                        <fieldset data-property-group="data" class="@(compactDataLayout ? "properties-data-grid" : null)">
+                            <legend>@Text["Properties_Data"]</legend>
+                            @foreach (var field in PropertiesDataFieldsForLayout(draft.DataFields, compactDataLayout))
+                            {
+                                <label class="@(field.Definition.EditorKind == ElementPropertyEditorKind.MultilineText ? "properties-field-long-form" : "properties-field-compact") @(compactDataLayout && field.FieldId.Value is not ("code" or "element-number") ? "properties-data-full-width" : null)">
+                                    @PropertyFieldLabel(field.Definition)
+                                    @switch (field.Definition.EditorKind)
+                                    {
+                                        case ElementPropertyEditorKind.SingleLineText when ModelerPropertyEditing.IsParticipantField(draft.Authoritative.TypeId, field.Definition):
+                                            <select id="@PropertiesFieldControlId(field.FieldId)"
+                                                    data-property-field-id="@field.FieldId.Value"
+                                                    value="@field.EditorValue"
+                                                    disabled="@(_propertiesApplying || !field.CanEdit)"
+                                                    @onchange="eventArgs => UpdateDataDraftValue(field.FieldId, eventArgs.Value)">
+                                                <option value="">@Text["Properties_ParticipantNone"]</option>
+                                                @foreach (var participant in draft.Authoritative.ParticipantOptions)
+                                                {
+                                                    <option value="@participant.Key.Value">@(string.IsNullOrWhiteSpace(participant.Value) ? Text["Properties_UnnamedParticipant"] : participant.Value)</option>
+                                                }
+                                            </select>
+                                            break;
+                                        case ElementPropertyEditorKind.SingleLineText:
+                                            <input id="@PropertiesFieldControlId(field.FieldId)"
+                                                   data-property-field-id="@field.FieldId.Value"
+                                                   type="text"
+                                                   value="@field.EditorValue"
+                                                   readonly="@(!field.CanEdit)"
+                                                   disabled="@_propertiesApplying"
+                                                   @oninput="eventArgs => UpdateDataDraftValue(field.FieldId, eventArgs.Value)" />
+                                            break;
+                                        case ElementPropertyEditorKind.Integer:
+                                            <input id="@PropertiesFieldControlId(field.FieldId)"
+                                                   data-property-field-id="@field.FieldId.Value"
+                                                   type="number"
+                                                   step="1"
+                                                   inputmode="numeric"
+                                                   value="@field.EditorValue"
+                                                   readonly="@(!field.CanEdit)"
+                                                   disabled="@_propertiesApplying"
+                                                   @oninput="eventArgs => UpdateDataDraftValue(field.FieldId, eventArgs.Value)" />
+                                            break;
+                                        case ElementPropertyEditorKind.MultilineText:
+                                            <textarea id="@PropertiesFieldControlId(field.FieldId)"
+                                                      data-property-field-id="@field.FieldId.Value"
+                                                      class="properties-long-form-editor"
+                                                      rows="10"
+                                                      value="@field.EditorValue"
+                                                      readonly="@(!field.CanEdit)"
+                                                      disabled="@_propertiesApplying"
+                                                      @oninput="eventArgs => UpdateDataDraftValue(field.FieldId, eventArgs.Value)"></textarea>
+                                            break;
+                                        case ElementPropertyEditorKind.Boolean:
+                                            <input id="@PropertiesFieldControlId(field.FieldId)"
+                                                   data-property-field-id="@field.FieldId.Value"
+                                                   type="checkbox"
+                                                   checked="@ResolveBooleanEditorValue(field)"
+                                                   disabled="@(_propertiesApplying || !field.CanEdit)"
+                                                   @onchange="eventArgs => UpdateDataDraftValue(field.FieldId, eventArgs.Value)" />
+                                            break;
+                                        default:
+                                            throw new InvalidOperationException(
+                                                "The element Properties editor kind is unsupported.");
+                                    }
+                                </label>
+                            }
+                            @if (draft.Authoritative.CanEditRoutingType)
+                            {
+                                <label class="properties-field-compact">@Text["Properties_RoutingType"]
+                                    <select id="@DomId("properties-routing-type")"
+                                            value="@draft.RoutingTypeValue"
+                                            disabled="@_propertiesApplying"
+                                            @onchange="UpdateRoutingTypeDraftValue">
+                                        <option value="automatic">@Text["RoutingType_Automatic"]</option>
+                                        <option value="straight">@Text["RoutingType_Straight"]</option>
+                                        <option value="manual">@Text["RoutingType_Manual"]</option>
+                                    </select>
+                                </label>
+                            }
+                        </fieldset>
+                    }
 
                     <fieldset data-property-group="parameters">
                         <legend>@Text["Properties_Parameters"]</legend>
                         <label class="properties-field-compact">@Text["Properties_Type"]
-                            <input id="@DomId("properties-type")"
-                                   value="@draft.Authoritative.TypeId.Value"
-                                   readonly />
+                            @if (draft.Authoritative.CanEditType)
+                            {
+                                <select id="@DomId("properties-type")"
+                                        value="@draft.TypeIdValue"
+                                        disabled="@_propertiesApplying"
+                                        @onchange="UpdateTypeDraftValue">
+                                    @foreach (var typeId in draft.Authoritative.SwitchableTypes)
+                                    {
+                                        <option value="@typeId.Value">@ModelerLabels.SemanticTypeLabel(Text, typeId)</option>
+                                    }
+                                </select>
+                            }
+                            else
+                            {
+                                <input id="@DomId("properties-type")"
+                                       value="@draft.Authoritative.TypeId.Value"
+                                       readonly />
+                            }
                         </label>
                     </fieldset>
                     @if (!string.IsNullOrWhiteSpace(draft.Feedback))
@@ -647,7 +705,7 @@
                                             <span class="issue-severity" aria-hidden="true"></span>
                                             <span class="issue-content">
                                                 <strong>@issue.Code</strong>
-                                                <span>@issue.Message</span>
+                                                <span>@ModelerDiagnosticLabels.Message(Text, issue.Code, issue.Message)</span>
                                                 <small>@ValidationTargetLabel(issue.Target)</small>
                                             </span>
                                         </button>
@@ -724,7 +782,7 @@
                             {
                                 <strong>@target</strong>
                             }
-                            <p>@diagnostic.Message</p>
+                            <p>@ModelerDiagnosticLabels.Message(Text, diagnostic.Code, diagnostic.Message)</p>
                             @if (diagnostic.Context.TryGetValue("SuggestedAction", out var hint))
                             {
                                 <p>@hint</p>
@@ -862,6 +920,13 @@
     private readonly FloatingIssuesPanelState _issuesPanel = new();
     private DocumentCanvasHost? _host;
     private DocumentCanvasHostState? _state;
+
+    private void SetSmartEditEnabled(bool enabled)
+    {
+        if (_host is not { } host) return;
+        host.SetSmartEditEnabled(enabled);
+        RefreshHostState(host);
+    }
     private DocumentCanvasPropertiesDraft? _propertiesDraft;
     private DocumentCanvasModelViewPropertiesDraft? _modelViewPropertiesDraft;
     private IJSObjectReference? _issuesPanelModule;
@@ -945,7 +1010,8 @@
 
     private string DocumentId => _state?.Session?.DocumentId.Value ?? string.Empty;
 
-    private string ActiveScopeId => _state?.Session?.ActiveScopeId.Value ?? string.Empty;
+    private string ActiveScopeId => _state?.Session?.PresentationContext is ProcessScopePresentationContext process
+        ? process.ScopeId.Value : string.Empty;
 
     private ImmutableArray<DocumentCanvasScopeBreadcrumbSegment> ScopeBreadcrumb =>
         _state?.ScopeBreadcrumb ?? DocumentCanvasScopeBreadcrumb.Empty;
@@ -1261,7 +1327,7 @@
         _state is { ValidationSnapshot: { } validation, Session: { } session } &&
         validation.DocumentId == session.DocumentId &&
         validation.SourceRevision == session.DocumentRevision &&
-        validation.ScopeId == session.ActiveScopeId
+        validation.PresentationContext == session.PresentationContext
             ? validation
             : null;
 
@@ -1314,7 +1380,21 @@
         $"width: {Format(_issuesPanel.Width)}px;",
         $"height: {Format(_issuesPanel.Height)}px;");
 
-    private string StatusMessage => _state switch
+    private string? ConnectionGuidance
+    {
+        get
+        {
+            var editor = _state?.Session?.EditorState;
+            if (editor is null || Inceptus.DocumentEngine.Contracts.ConnectionCreation.ConnectionToolState.GetSelection(editor) is not { } selected)
+                return null;
+            var item = ToolboxCatalog.ConnectionItems.SingleOrDefault(item => item.CreationId == selected);
+            if (item is null) return null;
+            return Text[Inceptus.DocumentEngine.Contracts.ConnectionCreation.ConnectionToolState.GetPendingSource(editor) is null
+                ? "Flow_SelectSource" : "Flow_SelectTarget", ModelerLabels.ToolboxLabel(Text, item)];
+        }
+    }
+
+    private string StatusMessage => ConnectionGuidance ?? _state switch
     {
         { IsDisposed: true } or { Session.IsClosed: true } => Text["Status_Disposed"],
         { Session.Status: EditingSessionStatus.Ready, LatestPresentationSucceeded: true }
@@ -1339,8 +1419,8 @@
 
     private string? ErrorMessage => Diagnostics
         .FirstOrDefault(static diagnostic =>
-            diagnostic.Severity == Inceptus.DocumentEngine.Contracts.Diagnostics.DiagnosticSeverity.Error)
-        ?.Message;
+            diagnostic.Severity == Inceptus.DocumentEngine.Contracts.Diagnostics.DiagnosticSeverity.Error) is { } diagnostic
+        ? ModelerDiagnosticLabels.Message(Text, diagnostic.Code, diagnostic.Message) : null;
 
     private IEnumerable<Inceptus.DocumentEngine.Contracts.Diagnostics.Diagnostic> Diagnostics =>
         (_state?.HostDiagnostics ?? [])
@@ -2246,6 +2326,12 @@
         not AccessViolationException;
 
     private async Task OpenPropertiesAsync()
+        => await OpenPropertiesForTargetAsync(null);
+
+    private async Task OpenElementToolboxPropertiesAsync()
+        => await OpenPropertiesForTargetAsync(_state?.ElementToolbox?.VisualId);
+
+    private async Task OpenPropertiesForTargetAsync(VisualStateId? elementToolboxTarget)
     {
         DocumentCanvasHost? host;
         VisualStateId? targetVisualStateId;
@@ -2259,8 +2345,8 @@
             }
 
             host = _host;
-            targetVisualStateId = _state?.ContextMenu?.TargetVisualStateId;
-            targetSemanticElementId = _state?.ContextMenu?.TargetSemanticElementId;
+            targetVisualStateId = elementToolboxTarget ?? _state?.ContextMenu?.TargetVisualStateId;
+            targetSemanticElementId = elementToolboxTarget is null ? _state?.ContextMenu?.TargetSemanticElementId : null;
         }
 
         if (host is null ||
@@ -2514,7 +2600,9 @@
     private async Task SelectToolboxItemAsync(ToolboxItemId itemId)
     {
         ArgumentNullException.ThrowIfNull(itemId);
-        if (!ToolboxCatalog.TryGetItem(itemId, out _) || !_toolboxSelection.Select(itemId))
+        var isConnection = ToolboxCatalog.TryGetConnectionItem(itemId, out var connection);
+        if ((!isConnection && !ToolboxCatalog.TryGetItem(itemId, out _)) ||
+            !_toolboxSelection.Select(itemId, connection?.CreationId))
         {
             return;
         }
@@ -2932,7 +3020,7 @@
         DocumentScopeId scopeId) =>
         state.ModelViewPropertiesFormOpen &&
         state.Session is { IsClosed: false } session &&
-        session.ActiveScopeId == scopeId;
+        session.PresentationContext == new ProcessScopePresentationContext(scopeId);
 
     private string BackgroundActionControlId(CanvasBackgroundActionId actionId) =>
         DomId($"background-action-{CreateHtmlIdFragment(actionId.Value)}");
@@ -2975,6 +3063,14 @@
                 isDirty: false);
             RefreshHostState(host);
         }
+    }
+
+    private void UpdateTypeDraftValue(ChangeEventArgs args)
+    {
+        if (_propertiesDraft is not { Authoritative.CanEditType: true } draft || _propertiesApplying)
+            return;
+        draft.TypeIdValue = args.Value?.ToString() ?? string.Empty;
+        PublishUpdatedPropertiesDraft(draft);
     }
 
     private void UpdateRoutingTypeDraftValue(ChangeEventArgs args)
@@ -3049,6 +3145,21 @@
 
     private string PropertiesFieldControlId(ElementPropertyFieldId fieldId) =>
         DomId($"properties-data-field-{fieldId.Value}");
+
+    private static readonly string[] CompactPropertiesDataFieldOrder =
+        ["code", "element-number", "name", "description"];
+
+    private static bool HasCompactPropertiesDataLayout(ImmutableArray<DocumentCanvasDataPropertyDraft> fields) =>
+        CompactPropertiesDataFieldOrder.All(id => fields.Any(field => field.FieldId.Value == id));
+
+    // Order the rendered controls, not just their CSS positions, so keyboard order matches the rows.
+    private static IEnumerable<DocumentCanvasDataPropertyDraft> PropertiesDataFieldsForLayout(
+        ImmutableArray<DocumentCanvasDataPropertyDraft> fields,
+        bool compactDataLayout) =>
+        compactDataLayout
+            ? CompactPropertiesDataFieldOrder.Select(id => fields.Single(field => field.FieldId.Value == id))
+                .Concat(fields.Where(field => !CompactPropertiesDataFieldOrder.Contains(field.FieldId.Value)))
+            : fields;
 
     private static bool ResolveBooleanEditorValue(DocumentCanvasDataPropertyDraft field) =>
         field.TryParseBoolean(out var value) && value;
@@ -3322,6 +3433,43 @@
 
     private Task UndoAsync() => ExecuteHistoryOperationAsync(isUndo: true);
 
+    private void DismissElementToolbox()
+    {
+        _host?.DismissElementToolbox();
+        if (_host is { } host) RefreshHostState(host);
+    }
+
+    private async Task SmartCreateAsync(ToolboxItemId itemId)
+    {
+        if (_host is not { } host) return;
+        await host.SmartCreateAsync(itemId, _componentLifetime.Token);
+        RefreshHostState(host);
+    }
+
+    private async Task AutoPointsAsync()
+    {
+        if (_host is not { } host) return;
+        await host.AutoPointsAsync(_componentLifetime.Token);
+        RefreshHostState(host);
+    }
+
+    private async Task DeleteToolboxElementAsync()
+    {
+        if (_host is not { } host) return;
+        await host.DeleteToolboxElementAsync(_componentLifetime.Token);
+        RefreshHostState(host);
+    }
+
+    private bool CanAutoArrange => CanNavigateScope && !AnyPropertiesApplying && _state?.CanAutoArrange == true;
+
+    private async Task AutoArrangeAsync()
+    {
+        var host = _host;
+        if (!CanAutoArrange || host is null) return;
+        await host.AutoArrangeAsync(_componentLifetime.Token);
+        RefreshHostState(host);
+    }
+
     private Task RedoAsync() => ExecuteHistoryOperationAsync(isUndo: false);
 
     private Task ZoomOutAsync() => ExecuteZoomOperationAsync(
@@ -3413,6 +3561,11 @@
     private string ValidationTargetLabel(ModelValidationTarget target)
     {
         ArgumentNullException.ThrowIfNull(target);
+        if (_host?.GetValidationTargetName(target) is { } name)
+        {
+            return name;
+        }
+
         if (target.VisualStateId is { } visualStateId)
         {
             return Text["Target_VisualSemantic", visualStateId.Value, target.SemanticElementId!.Value];

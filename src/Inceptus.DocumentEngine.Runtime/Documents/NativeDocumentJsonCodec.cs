@@ -218,6 +218,7 @@ internal static partial class NativeDocumentJsonCodec
                 writer.WriteString("side", anchor.Side.ToString());
                 writer.WriteString("role", anchor.Role.ToString());
                 writer.WriteNumber("order", anchor.Order);
+                if (anchor.NormalizedPosition is { } position) writer.WriteNumber("normalizedPosition", position);
                 writer.WriteEndObject();
             }
 
@@ -242,6 +243,7 @@ internal static partial class NativeDocumentJsonCodec
 
         writer.WriteEndArray();
         WriteRoutingScopes(writer, visualModel.RoutingScopes!.Value);
+        WriteDocumentRoutingStates(writer, visualModel.DocumentRoutingStates);
         writer.WriteEndObject();
     }
 
@@ -628,7 +630,8 @@ internal static partial class NativeDocumentJsonCodec
         DocumentId documentId,
         DocumentRevision revision)
     {
-        ValidateObject(value, path, "visualStates", "profileElementPresentations", "routingScopes");
+        ValidateObjectWithOptionalProperties(value, path,
+            ["visualStates", "profileElementPresentations", "routingScopes"], ["documentRoutingStates"]);
         return new VisualModelSnapshot(
             documentId,
             revision,
@@ -643,7 +646,10 @@ internal static partial class NativeDocumentJsonCodec
             ReadArray(
                 Required(value, "routingScopes"),
                 $"{path}.routingScopes",
-                ReadRoutingScope));
+                ReadRoutingScope),
+            value.TryGetProperty("documentRoutingStates", out var documentRoutingStates)
+                ? ReadArray(documentRoutingStates, $"{path}.documentRoutingStates", ReadDocumentRoutingState)
+                : []);
     }
 
     private static VisualStateSnapshot ReadVisualState(JsonElement value, string path)
@@ -694,12 +700,13 @@ internal static partial class NativeDocumentJsonCodec
 
     private static ConnectorAnchor ReadConnectorAnchor(JsonElement value, string path)
     {
-        ValidateObject(value, path, "id", "side", "role", "order");
+        ValidateObjectWithOptionalProperties(value, path, ["id", "side", "role", "order"], ["normalizedPosition"]);
         return new ConnectorAnchor(
             new ConnectorAnchorId(ReadDataString(Required(value, "id"), $"{path}.id")),
             ReadEnum<ConnectorAnchorSide>(Required(value, "side"), $"{path}.side"),
             ReadEnum<ConnectorAnchorRole>(Required(value, "role"), $"{path}.role"),
-            ReadInt32(Required(value, "order"), $"{path}.order"));
+            ReadInt32(Required(value, "order"), $"{path}.order"),
+            value.TryGetProperty("normalizedPosition", out var position) ? ReadDouble(position, $"{path}.normalizedPosition") : null);
     }
 
     private static BoundaryAttachmentPlacement? ReadBoundaryAttachment(

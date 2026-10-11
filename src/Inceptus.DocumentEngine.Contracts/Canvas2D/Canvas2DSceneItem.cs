@@ -1,6 +1,7 @@
 using Inceptus.DocumentEngine.Contracts.Geometry;
 using Inceptus.DocumentEngine.Contracts.Primitives;
 using Inceptus.DocumentEngine.Contracts.Properties;
+using Inceptus.DocumentEngine.Contracts.Presentation;
 
 namespace Inceptus.DocumentEngine.Contracts.Canvas2D;
 
@@ -22,6 +23,29 @@ public sealed class Canvas2DSceneItem : IEquatable<Canvas2DSceneItem>
         RectD? bounds = null,
         Canvas2DSpatialRegion? spatialRegion = null,
         Canvas2DConnectorPresentationMapping? connectorPresentationMapping = null)
+        : this(null, id, layer, zIndex, geometry, origin, transform, clip, style, isVisible,
+            hitTestPolicy, persistentAppearance, metadata, bounds, spatialRegion, connectorPresentationMapping)
+    {
+    }
+
+    public Canvas2DSceneItem(
+        PresentationScopePlacement? processPlacement,
+        SceneObjectId id,
+        Canvas2DSceneLayer layer,
+        int zIndex,
+        Canvas2DSceneGeometry geometry,
+        Canvas2DSceneOriginTrace origin,
+        Matrix2D? transform = null,
+        RectD? clip = null,
+        Canvas2DSceneStyle? style = null,
+        bool isVisible = true,
+        Canvas2DHitTestPolicy? hitTestPolicy = null,
+        IEnumerable<KeyValuePair<string, PropertyValue>>? persistentAppearance = null,
+        IEnumerable<KeyValuePair<string, PropertyValue>>? metadata = null,
+        RectD? bounds = null,
+        Canvas2DSpatialRegion? spatialRegion = null,
+        Canvas2DConnectorPresentationMapping? connectorPresentationMapping = null,
+        Canvas2DDerivedRegionMapping? derivedRegionMapping = null)
     {
         ArgumentNullException.ThrowIfNull(id);
         ArgumentNullException.ThrowIfNull(geometry);
@@ -46,6 +70,8 @@ public sealed class Canvas2DSceneItem : IEquatable<Canvas2DSceneItem>
         Metadata = new PropertyMap(metadata);
         SpatialRegion = spatialRegion;
         ConnectorPresentationMapping = connectorPresentationMapping;
+        ProcessPlacement = processPlacement;
+        DerivedRegionMapping = derivedRegionMapping;
     }
 
     public SceneObjectId Id { get; }
@@ -81,6 +107,24 @@ public sealed class Canvas2DSceneItem : IEquatable<Canvas2DSceneItem>
     /// </summary>
     public Canvas2DConnectorPresentationMapping? ConnectorPresentationMapping { get; }
 
+    public Canvas2DDerivedRegionMapping? DerivedRegionMapping { get; }
+
+    /// <summary>
+    /// Maps this item's authoritative local coordinates into its document presentation.
+    /// For node origins the derived translation includes any saved local region offset;
+    /// connector origins use their authoritative expanded Process path coordinates.
+    /// </summary>
+    public PresentationScopePlacement? ProcessPlacement { get; }
+
+    public PointD MapPresentationToLocal(PointD point) => DerivedRegionMapping?.CoordinateMap.MapSceneToLogical(point) ?? ConnectorPresentationMapping?.MapSceneGuidanceToCanonical(point) ??
+        SpatialRegion?.MapSceneToLocal(point) ?? ProcessPlacement?.MapViewToLocal(point) ?? point;
+
+    public RectD MapPresentationToLocal(RectD bounds) => SpatialRegion?.MapSceneToLocal(bounds) ??
+        ProcessPlacement?.MapViewToLocal(bounds) ?? bounds;
+
+    public PointD MapLocalToPresentation(PointD point) => DerivedRegionMapping?.CoordinateMap.MapLogicalToScene(point) ?? SpatialRegion?.MapLocalToScene(point) ??
+        ProcessPlacement?.MapLocalToView(point) ?? point;
+
     public bool Equals(Canvas2DSceneItem? other) =>
         ReferenceEquals(this, other) ||
         other is not null &&
@@ -91,12 +135,13 @@ public sealed class Canvas2DSceneItem : IEquatable<Canvas2DSceneItem>
         HitTestPolicy.Equals(other.HitTestPolicy) && Origin.Equals(other.Origin) &&
         PersistentAppearance.Equals(other.PersistentAppearance) && Metadata.Equals(other.Metadata) &&
         Equals(SpatialRegion, other.SpatialRegion) &&
-        Equals(ConnectorPresentationMapping, other.ConnectorPresentationMapping);
+        Equals(ConnectorPresentationMapping, other.ConnectorPresentationMapping) && Equals(ProcessPlacement, other.ProcessPlacement) &&
+        Equals(DerivedRegionMapping, other.DerivedRegionMapping);
 
     public override bool Equals(object? obj) => Equals(obj as Canvas2DSceneItem);
 
     public override int GetHashCode() => HashCode.Combine(
-        HashCode.Combine(Id, Layer, ZIndex, Geometry, Bounds, Transform, Clip),
+        HashCode.Combine(HashCode.Combine(Id, Layer, ZIndex, Geometry, Bounds, Transform, Clip, ProcessPlacement), DerivedRegionMapping),
         HashCode.Combine(
             Style,
             IsVisible,

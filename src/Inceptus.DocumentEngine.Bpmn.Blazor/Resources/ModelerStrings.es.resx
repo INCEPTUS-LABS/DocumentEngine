@@ -116,6 +116,8 @@
   <data name="Context_Collapse" xml:space="preserve"><value>Contraer</value></data>
   <data name="Context_MoveUp" xml:space="preserve"><value>Mover hacia arriba</value></data>
   <data name="Context_MoveDown" xml:space="preserve"><value>Mover hacia abajo</value></data>
+  <data name="Context_MoveLaneUp" xml:space="preserve"><value>Mover carril hacia arriba</value></data>
+  <data name="Context_MoveLaneDown" xml:space="preserve"><value>Mover carril hacia abajo</value></data>
   <data name="Context_OpenSubProcess" xml:space="preserve"><value>Abrir subproceso</value></data>
   <data name="Navigation_MainProcess" xml:space="preserve"><value>Proceso principal</value></data>
   <data name="Navigation_Scope" xml:space="preserve"><value>Ámbito</value></data>
@@ -157,7 +159,7 @@
   <data name="Validation_Required" xml:space="preserve"><value>El campo «{0}» debe contener al menos un carácter que no sea un espacio.</value></data>
   <data name="Validation_Integer" xml:space="preserve"><value>El campo «{0}» debe contener un entero dentro del intervalo admitido.</value></data>
   <data name="Validation_Boolean" xml:space="preserve"><value>El campo «{0}» debe contener true o false.</value></data>
-  <data name="Validation_Conflicting" xml:space="preserve"><value>Aplique un campo de datos o las dimensiones antes de editar otro grupo de propiedades.</value></data>
+  <data name="Validation_Conflicting" xml:space="preserve"><value>Aplique un campo de datos, el tipo de elemento, el tipo de enrutamiento o los límites visuales antes de editar otro grupo de propiedades.</value></data>
   <data name="Validation_MinWidth" xml:space="preserve"><value>La anchura debe ser de al menos {0}.</value></data>
   <data name="Validation_MinHeight" xml:space="preserve"><value>La altura debe ser de al menos {0}.</value></data>
   <data name="Validation_Bounds" xml:space="preserve"><value>Las dimensiones solicitadas deben ser finitas y representables.</value></data>
@@ -173,4 +175,78 @@
   <data name="Status_RegionWidth" xml:space="preserve"><value>Ancho del conjunto</value></data>
   <data name="Status_RegionResizeAllowed" xml:space="preserve"><value>{0}: {1} (mínimo {2}). Arrastre para cambiar; Escape cancela.</value></data>
   <data name="Status_RegionResizeRejected" xml:space="preserve"><value>{0}: {1} rechazado (mínimo {2}). Deben caber todos los cuerpos; Escape cancela.</value></data>
+  <data name="Toolbox_CatchEvent" xml:space="preserve"><value>Evento de captura</value></data>
+  <data name="Toolbox_ThrowEvent" xml:space="preserve"><value>Evento de lanzamiento</value></data>
+  <data name="Toolbox_BoundaryEvent" xml:space="preserve"><value>Evento de borde</value></data>
+  <data name="Toolbox_Gateway" xml:space="preserve"><value>Compuerta</value></data>
+  <data name="Validation_ElementType" xml:space="preserve"><value>Seleccione un tipo de elemento compatible.</value></data>
+  <data name="Navigation_PresentationView" xml:space="preserve"><value>Vista</value></data>
+  <data name="Toolbox_Flow" xml:space="preserve"><value>Flujos</value></data>
+  <data name="Element_SequenceFlow" xml:space="preserve"><value>Flujo de secuencia</value></data>
+  <data name="Element_MessageFlow" xml:space="preserve"><value>Flujo de mensaje</value></data>
+  <data name="Element_Participant" xml:space="preserve"><value>Participante</value></data>
+  <data name="Element_Collaboration" xml:space="preserve"><value>Colaboración</value></data>
+  <data name="Accessibility_ConnectionTool" xml:space="preserve"><value>Crear: {0}</value></data>
+  <data name="Diagnostic_CollaborationInvalid" xml:space="preserve"><value>La colaboración seleccionada no está disponible. Seleccione una colaboración existente.</value></data>
+  <data name="Diagnostic_ParticipantVisualMissing" xml:space="preserve"><value>Un participante necesita un límite y una posición explícita del proceso antes de abrir esta vista.</value></data>
+  <data name="Diagnostic_ParticipantOwnershipInvalid" xml:space="preserve"><value>El participante tiene una referencia de colaboración o proceso no válida.</value></data>
+  <data name="Diagnostic_ParticipantOwnershipMissing" xml:space="preserve"><value>El extremo no pertenece a ningún participante. Asigne primero su proceso a un participante.</value></data>
+  <data name="Diagnostic_ParticipantOwnershipAmbiguous" xml:space="preserve"><value>Más de un participante hace referencia a este proceso. La pertenencia del extremo debe ser inequívoca.</value></data>
+  <data name="Diagnostic_CollaborationPublicationUnsupported" xml:space="preserve"><value>La publicación solo admite vistas de proceso. Abra una vista de proceso antes de publicar.</value></data>
+  <data name="Diagnostic_PresentationContextInvalid" xml:space="preserve"><value>Esta vista no corresponde al documento actual. Vuelva a seleccionar una vista disponible.</value></data>
+  <data name="Diagnostic_MessageFlowEndpointMissing" xml:space="preserve">
+    <value>Seleccione un elemento existente en cada extremo del flujo de mensaje.</value>
+  </data>
+  <data name="Diagnostic_MessageFlowSourceInvalid" xml:space="preserve">
+    <value>Este elemento no puede enviar un flujo de mensaje.</value>
+  </data>
+  <data name="Diagnostic_MessageFlowTargetInvalid" xml:space="preserve">
+    <value>Este elemento no puede recibir un flujo de mensaje.</value>
+  </data>
+  <data name="Diagnostic_MessageFlowSameParticipant" xml:space="preserve">
+    <value>Un flujo de mensaje debe conectar participantes distintos.</value>
+  </data>
+  <data name="Diagnostic_MessageFlowDifferentCollaborations" xml:space="preserve">
+    <value>Ambos participantes deben pertenecer a la misma colaboración.</value>
+  </data>
+  <data name="Diagnostic_MessageFlowBoundaryAttachmentInvalid" xml:space="preserve">
+    <value>El evento de mensaje de borde debe permanecer adjunto a una actividad válida.</value>
+  </data>
+  <data name="Diagnostic_MessageFlowPresentationUnavailable" xml:space="preserve">
+    <value>Ambos extremos necesitan una posición explícita en la misma vista de colaboración.</value>
+  </data>
+  <data name="Diagnostic_MessageFlowAnchorInvalid" xml:space="preserve">
+    <value>Seleccione un anclaje de borde válido para el extremo del flujo de mensaje.</value>
+  </data>
+  <data name="Diagnostic_MessageFlowStateMismatch" xml:space="preserve">
+    <value>El flujo de mensaje ha cambiado. Selecciónelo de nuevo y vuelva a intentarlo.</value>
+  </data>
+  <data name="Diagnostic_MessageFlowCommandInvalid" xml:space="preserve">
+    <value>El cambio del flujo de mensaje no es válido.</value>
+  </data>
+  <data name="Diagnostic_MessageFlowTypeChangeInvalid" xml:space="preserve">
+    <value>Este tipo invalidaría un flujo de mensaje conectado.</value>
+  </data>
+  <data name="Flow_SelectSource" xml:space="preserve"><value>{0} — Seleccione el elemento de origen.</value></data>
+  <data name="Flow_SelectTarget" xml:space="preserve"><value>{0} — Seleccione el elemento de destino.</value></data>
+  <data name="Diagnostic_FlowSourceInvalid" xml:space="preserve"><value>Seleccione un elemento de origen válido para esta herramienta de flujo.</value></data>
+  <data name="Diagnostic_FlowTargetInvalid" xml:space="preserve"><value>Seleccione un elemento de destino válido en la vista actual.</value></data>
+  <data name="Diagnostic_FlowPointPlanInvalid" xml:space="preserve"><value>Los puntos del borde han cambiado o no están disponibles. Seleccione el destino de nuevo.</value></data>
+  <data name="Diagnostic_FlowNoRoute" xml:space="preserve"><value>No se pudo preparar una ruta válida entre los puntos disponibles. Seleccione otro destino.</value></data>
+  <data name="Field_Participant" xml:space="preserve"><value>Participante</value></data>
+  <data name="Properties_ParticipantNone" xml:space="preserve"><value>Ninguno</value></data>
+  <data name="Properties_UnnamedParticipant" xml:space="preserve"><value>Participante sin nombre</value></data>
+  <data name="Toolbar_AutoArrange" xml:space="preserve"><value>Organizar automáticamente</value></data>
+  <data name="Diagnostic_AutoArrangeFailed" xml:space="preserve"><value>No se pudo preparar una disposición válida. Revise el diagrama e inténtelo de nuevo.</value></data>
+  <data name="Diagnostic_AutoArrangeStale" xml:space="preserve"><value>El diagrama cambió durante la disposición. Ejecute de nuevo la disposición automática.</value></data>
+  <data name="ElementToolbox_Actions" xml:space="preserve"><value>Acciones del elemento</value></data>
+  <data name="ElementToolbox_Create" xml:space="preserve"><value>Crear el siguiente elemento</value></data>
+  <data name="ElementToolbox_AutoPoints" xml:space="preserve"><value>Optimizar puntos</value></data>
+  <data name="ElementToolbox_PropertiesHint" xml:space="preserve"><value>Abrir las propiedades del elemento seleccionado.</value></data>
+  <data name="ElementToolbox_Failed" xml:space="preserve"><value>No se pudo completar la acción del elemento.</value></data>
+  <data name="ElementToolbox_Properties" xml:space="preserve"><value>Propiedades</value></data>
+  <data name="ElementToolbox_Delete" xml:space="preserve"><value>Eliminar</value></data>
+  <data name="SmartEdit_Label" xml:space="preserve"><value>Edición inteligente</value></data>
+  <data name="SmartEdit_On" xml:space="preserve"><value>SÍ</value></data>
+  <data name="SmartEdit_Off" xml:space="preserve"><value>NO</value></data>
 </root>

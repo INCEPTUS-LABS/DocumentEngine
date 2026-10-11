@@ -1,3 +1,4 @@
+using Inceptus.DocumentEngine.Bpmn.Commands;
 using System.Collections.Immutable;
 using Inceptus.DocumentEngine.Blazor.Demo;
 using Inceptus.DocumentEngine.Bpmn;
@@ -214,6 +215,10 @@ public sealed class PhaseN102NativeDocumentImportExportIntegrationTests
                     OrganizationalModelProfile.Id,
                     isAvailable: true)]));
         var rootState = session.CaptureState();
+        await ExecuteCommittedAsync(session, new CreateBpmnTaskCommand(document.DocumentId, document.Revision,
+            new SemanticElementId("native:independent"), new VisualStateId("native:independent:visual"),
+            new PointD(100d, 100d), new SizeD(120d, 80d), "INDEPENDENT", "Independent", 998,
+            VisualPlacementMode.Pinned, targetScopeId: rootState.ActiveScopeId));
         await ExecuteCommittedAsync(
             session,
             new CreateOrganizationalPoolCommand(
@@ -224,7 +229,7 @@ public sealed class PhaseN102NativeDocumentImportExportIntegrationTests
                 OrganizationalPoolCreationMode.AdoptEligibleUnassigned,
                 "Native I/O session pool"));
         var assignmentToUnassign = document.SemanticModel.ProfileAssignments.First(
-            static assignment => assignment.ProfileId == OrganizationalModelProfile.Id);
+            static assignment => assignment.SemanticElementId == new SemanticElementId("native:independent"));
         var scope = document.CaptureSnapshot().VisualModel.RoutingScopes!.Value
             .Single(candidate => candidate.ScopeId == rootState.ActiveScopeId);
         var unassigned = scope.Geometry.Regions.Single(static region => region.ContainerSemanticElementId is null);

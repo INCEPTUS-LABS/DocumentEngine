@@ -106,7 +106,7 @@ public sealed partial class CommandProcessor
             return false;
         foreach (var intent in routingIntents)
         {
-            var record = scopes.SelectMany(static scope => scope.Connectors)
+            var record = before.VisualModel.EnumerateConnectorRoutingRecords()
                 .FirstOrDefault(candidate => candidate.VisualStateId == intent.VisualStateId);
             if (record is null) return false;
             if (intent.Kind == ConnectorRoutingIntentKind.SetType && record.RoutingType == intent.RoutingType)
@@ -158,7 +158,7 @@ public sealed partial class CommandProcessor
     }
 
     internal static DocumentSnapshot WithoutRoutingScopes(DocumentSnapshot document) =>
-        ReplaceRoutingScopes(document, null);
+        ReplaceRoutingScopes(document, null, []);
 
     private static DocumentSnapshot ApplyReplayNodeGeometrySeeds(DocumentSnapshot document,
         ImmutableArray<NodeGeometryHistorySeed> seeds)
@@ -180,9 +180,11 @@ public sealed partial class CommandProcessor
     }
 
     private static DocumentSnapshot ReplaceRoutingScopes(DocumentSnapshot document,
-        IEnumerable<ScopeRoutingSnapshot>? scopes) => new(document.SemanticModel,
+        IEnumerable<ScopeRoutingSnapshot>? scopes,
+        IEnumerable<DocumentRoutingSnapshot>? documentRoutingStates = null) => new(document.SemanticModel,
             new VisualModelSnapshot(document.DocumentId, document.Revision, document.VisualModel.VisualStates,
-                document.VisualModel.ProfileElementPresentations, scopes), document.Metadata, document.Publication);
+                document.VisualModel.ProfileElementPresentations, scopes,
+                documentRoutingStates ?? document.VisualModel.DocumentRoutingStates), document.Metadata, document.Publication);
 
     internal static bool ContentEqualsIgnoringRevision(DocumentSnapshot before, DocumentSnapshot after) =>
         DocumentSnapshotCloner.CloneAtRevision(before, after.Revision).Equals(after);
@@ -194,9 +196,8 @@ public sealed partial class CommandProcessor
     {
         if (before.VisualModel.RoutingScopes is not { } beforeScopes) return [];
         var diagnostics = ImmutableArray.CreateBuilder<Diagnostic>();
-        var afterRecords = prepared.VisualModel.RoutingScopes.GetValueOrDefault()
-            .SelectMany(static scope => scope.Connectors).ToDictionary(static record => record.VisualStateId);
-        foreach (var record in beforeScopes.SelectMany(static scope => scope.Connectors))
+        var afterRecords = prepared.VisualModel.EnumerateConnectorRoutingRecords().ToDictionary(static record => record.VisualStateId);
+        foreach (var record in before.VisualModel.EnumerateConnectorRoutingRecords())
         {
             if (!afterRecords.TryGetValue(record.VisualStateId, out var after)) continue;
             var intents = routingIntents.Where(intent => intent.VisualStateId == record.VisualStateId).ToArray();

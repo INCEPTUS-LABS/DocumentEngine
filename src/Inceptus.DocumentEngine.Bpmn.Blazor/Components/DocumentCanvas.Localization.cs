@@ -34,7 +34,7 @@ public partial class DocumentCanvas
 
         // Canonical diagnostics remain English contract data. Only their UI wrapper changes.
         return draft.FeedbackDiagnostic is { } diagnostic
-            ? $"{Text["Properties_Failed"]} {diagnostic.Message}"
+            ? $"{Text["Properties_Failed"]} {ModelerDiagnosticLabels.Message(Text, diagnostic.Code, diagnostic.Message)}"
             : Text["Properties_Failed"];
     }
 
@@ -42,6 +42,6 @@ public partial class DocumentCanvas
         draft.IsStale
             ? Text["Properties_ModelStale"]
             : draft.FeedbackDiagnostic is { } diagnostic
-                ? $"{Text["Properties_ModelFailed"]} {diagnostic.Message}"
+                ? $"{Text["Properties_ModelFailed"]} {ModelerDiagnosticLabels.Message(Text, diagnostic.Code, diagnostic.Message)}"
                 : Text["Properties_ModelFailed"];
 }

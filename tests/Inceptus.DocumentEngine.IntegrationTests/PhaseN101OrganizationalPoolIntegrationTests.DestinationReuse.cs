@@ -22,13 +22,13 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
 
         // The second center is in the initially empty destination, below the first small Event.
         // It must not disappear from the usable band when that first Event becomes its content.
-        var timer = await PlaceInUnassignedAsync(fixture, "timer-catch-event", new PointD(80d, 40d), identity);
-        Assert.Equal(new SizeD(36d, 36d), timer.Size);
+        var catchEvent = await PlaceInUnassignedAsync(fixture, "message-catch-event", new PointD(80d, 40d), identity);
+        Assert.Equal(new SizeD(36d, 36d), catchEvent.Size);
         var task = await PlaceInUnassignedAsync(fixture, "task", new PointD(320d, 140d), identity);
         await MoveToRegionAsync(fixture, DragFixture.TaskIds[0], null, new PointD(500d, 40d), identity);
         await PlaceInUnassignedAsync(fixture, "exclusive-gateway", new PointD(640d, 180d), identity);
         await MoveToRegionAsync(fixture, DragFixture.TaskIds[2], null, new PointD(40d, 180d), identity);
-        await MoveToRegionAsync(fixture, timer.Id, null, timer.Position + new VectorD(20d, 0d), identity);
+        await MoveToRegionAsync(fixture, catchEvent.Id, null, catchEvent.Position + new VectorD(20d, 0d), identity);
         await MoveToRegionAsync(fixture, task.Id, PoolAId, new PointD(340d, 80d), identity);
         await MoveToRegionAsync(fixture, task.Id, null, new PointD(400d, 230d), identity);
         await PlaceInUnassignedAsync(fixture, "start-event", new PointD(620d, 290d), identity);
@@ -36,7 +36,7 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
         Assert.Equal(initial.DocumentRevision.Value + 9, fixture.State.DocumentRevision.Value);
         Assert.Equal(initial.HistoryStatus.EntryCount + 9, fixture.State.HistoryStatus.EntryCount);
         Assert.Equal(initial.ActiveScopeId, fixture.State.ActiveScopeId);
-        Assert.True(fixture.Document.SemanticModel.TryGetElement(timer.SemanticElementId, out _));
+        Assert.True(fixture.Document.SemanticModel.TryGetElement(catchEvent.SemanticElementId, out _));
         Assert.Null(AssignedPool(fixture.Document, task.SemanticElementId));
         Assert.Null(AssignedPool(fixture.Document, fixture.Visual(DragFixture.TaskIds[0]).SemanticElementId));
         Assert.Null(AssignedPool(fixture.Document, fixture.Visual(DragFixture.TaskIds[2]).SemanticElementId));
@@ -47,11 +47,11 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
     {
         await using var fixture = await DragFixture.CreateAsync(includeUnassignedTasks: false);
         var identity = UnassignedRegion(fixture).Id;
-        var timer = await PlaceInUnassignedAsync(fixture, "timer-catch-event", new PointD(80d, 40d), identity);
+        var catchEvent = await PlaceInUnassignedAsync(fixture, "message-catch-event", new PointD(80d, 40d), identity);
         var populated = fixture.Document;
         await fixture.ExecuteAsync(state => new DeleteBpmnFlowNodeCommand(
-            state.DocumentId, state.DocumentRevision, timer.SemanticElementId, timer.Id));
-        Assert.DoesNotContain(fixture.Document.VisualModel.VisualStates, visual => visual.Id == timer.Id);
+            state.DocumentId, state.DocumentRevision, catchEvent.SemanticElementId, catchEvent.Id));
+        Assert.DoesNotContain(fixture.Document.VisualModel.VisualStates, visual => visual.Id == catchEvent.Id);
         AssertReusableDestination(fixture, identity);
         var empty = fixture.Document;
 
@@ -64,7 +64,7 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
         AssertEquivalentIgnoringRevision(empty, fixture.Document);
         AssertReusableDestination(fixture, identity);
 
-        await PlaceInUnassignedAsync(fixture, "timer-catch-event", new PointD(80d, 40d), identity);
+        await PlaceInUnassignedAsync(fixture, "message-catch-event", new PointD(80d, 40d), identity);
         await PlaceInUnassignedAsync(fixture, "task", new PointD(320d, 140d), identity);
         await MoveToRegionAsync(fixture, DragFixture.TaskIds[2], null, new PointD(500d, 80d), identity);
     }
@@ -86,7 +86,7 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
         }
         AssertReusableDestination(fixture, identity);
 
-        await PlaceInUnassignedAsync(fixture, "timer-catch-event", new PointD(80d, 40d), identity);
+        await PlaceInUnassignedAsync(fixture, "message-catch-event", new PointD(80d, 40d), identity);
         await MoveToRegionAsync(fixture, DragFixture.TaskIds[0], null, new PointD(400d, 80d), identity);
     }
 
@@ -104,7 +104,7 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
             owner.SemanticElementId, BoundaryAttachmentSide.Bottom, 0.4d,
             new RectD(owner.Position.X, owner.Position.Y, owner.Size.Width, owner.Size.Height),
             "Timer", "PT5M", targetScopeId: state.ActiveScopeId));
-        await PlaceInUnassignedAsync(fixture, "timer-catch-event", new PointD(80d, 40d), identity);
+        await PlaceInUnassignedAsync(fixture, "message-catch-event", new PointD(80d, 40d), identity);
         var before = fixture.Document;
         var boundary = fixture.Visual(boundaryId);
         var boundarySemantic = before.SemanticModel.Elements.Single(element => element.Id == boundarySemanticId);

@@ -385,6 +385,10 @@ public static class BpmnSemanticFactory
             targetId,
             OptionalProperties(name, description));
 
+    public static SemanticRelationshipSnapshot CreateMessageFlow(SemanticElementId id,
+        SemanticElementId sourceId, SemanticElementId targetId, string? name = null, string? description = null) =>
+        new(id, BpmnSemanticTypes.MessageFlow, sourceId, targetId, OptionalProperties(name, description));
+
     private static List<KeyValuePair<string, PropertyValue>> OptionalProperties(
         string? name,
         string? description)

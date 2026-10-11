@@ -20,7 +20,7 @@ public sealed partial class Canvas2DSceneBuilder
         IReadOnlyDictionary<ModelProfileId, double> requestedWidths,
         ITextMetricsService textMetrics,
         Func<string, Canvas2DSceneStyle, double, TextMeasurementRequest> requestFactory,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, ScopeGeometryInputs? previousInputs = null)
     {
         var textConfiguration = requestFactory(string.Empty, NodeLabelStyle,
             NodeLabelStyle.FontSize * _nodeLabelLayout.LineHeightMultiplier);
@@ -63,7 +63,7 @@ public sealed partial class Canvas2DSceneBuilder
             if (registration.Contributor is not ICanvas2DScopeGeometryContributor provider)
                 throw new InvalidOperationException($"Contributor '{registration.Descriptor.ContributorId}' does not support saved scope geometry.");
             var context = new Canvas2DScopeGeometryBaseContext(inputs, graph, layout,
-                _configuration, registration.Descriptor, textConfiguration);
+                _configuration, registration.Descriptor, textConfiguration, previousInputs);
             var baseResult = provider.PrepareBase(context);
             if (!baseResult.Succeeded)
                 throw new InvalidOperationException(string.Join(" ", baseResult.Diagnostics.Select(static item => item.Message)));
@@ -92,7 +92,7 @@ public sealed partial class Canvas2DSceneBuilder
         var layouts = layout.Nodes.ToDictionary(static node => node.ProjectedObjectId);
         var captionsByVisual = captions.GroupBy(static caption => caption.OwnerVisualStateId)
             .ToDictionary(static group => group.Key, static group => group.ToArray());
-        var nodeExtents = graph.Nodes.Select(node =>
+        var nodeExtents = graph.Nodes.Where(static node => node.RegionEnvelope is null).Select(node =>
         {
             var value = layouts[node.Id];
             var id = Canvas2DSceneObjectIdentity.ForProjected(node.Id, "node");
@@ -135,7 +135,7 @@ public sealed partial class Canvas2DSceneBuilder
         var placements = spatialPlan?.VisualPlacements.ToDictionary(static placement => placement.VisualStateId);
         if (placements is not null)
         {
-            var expectedIds = graph.Nodes.Select(static node => node.Source.VisualStateId!).ToHashSet();
+            var expectedIds = graph.Nodes.Where(static node => node.RegionEnvelope is null).Select(static node => node.Source.VisualStateId!).ToHashSet();
             var activeRegions = regions.Where(static region => region.LocalToScopeTransform is not null)
                 .Select(static region => region.Id).ToHashSet();
             if (!expectedIds.SetEquals(placements.Keys) || placements.Values.Any(placement => !activeRegions.Contains(placement.RegionId)))
@@ -143,7 +143,7 @@ public sealed partial class Canvas2DSceneBuilder
         }
         else if (regions.Any(static region => region.LocalToScopeTransform is not null))
             throw new InvalidOperationException("Active saved regions require a complete spatial presentation plan.");
-        var nodes = graph.Nodes.Select(node =>
+        var nodes = graph.Nodes.Where(static node => node.RegionEnvelope is null).Select(node =>
         {
             var current = layouts[node.Id];
             var visualId = node.Source.VisualStateId!;

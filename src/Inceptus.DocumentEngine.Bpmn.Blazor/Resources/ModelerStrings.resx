@@ -116,6 +116,8 @@
   <data name="Context_Collapse" xml:space="preserve"><value>Collapse</value></data>
   <data name="Context_MoveUp" xml:space="preserve"><value>Move up</value></data>
   <data name="Context_MoveDown" xml:space="preserve"><value>Move down</value></data>
+  <data name="Context_MoveLaneUp" xml:space="preserve"><value>Move Lane Up</value></data>
+  <data name="Context_MoveLaneDown" xml:space="preserve"><value>Move Lane Down</value></data>
   <data name="Context_OpenSubProcess" xml:space="preserve"><value>Open SubProcess</value></data>
   <data name="Navigation_MainProcess" xml:space="preserve"><value>Main Process</value></data>
   <data name="Navigation_Scope" xml:space="preserve"><value>Scope</value></data>
@@ -157,7 +159,7 @@
   <data name="Validation_Required" xml:space="preserve"><value>{0} must contain at least one non-whitespace character.</value></data>
   <data name="Validation_Integer" xml:space="preserve"><value>{0} must be an integer within the supported range.</value></data>
   <data name="Validation_Boolean" xml:space="preserve"><value>{0} must be true or false.</value></data>
-  <data name="Validation_Conflicting" xml:space="preserve"><value>Apply one Data field or visual bounds before editing another property group.</value></data>
+  <data name="Validation_Conflicting" xml:space="preserve"><value>Apply one Data field, element type, routing type, or visual bounds before editing another property group.</value></data>
   <data name="Validation_MinWidth" xml:space="preserve"><value>Width must be at least {0}.</value></data>
   <data name="Validation_MinHeight" xml:space="preserve"><value>Height must be at least {0}.</value></data>
   <data name="Validation_Bounds" xml:space="preserve"><value>The requested bounds must be finite and renderable.</value></data>
@@ -173,4 +175,78 @@
   <data name="Status_RegionWidth" xml:space="preserve"><value>Stack width</value></data>
   <data name="Status_RegionResizeAllowed" xml:space="preserve"><value>{0}: {1} (minimum {2}). Drag to resize; Escape cancels.</value></data>
   <data name="Status_RegionResizeRejected" xml:space="preserve"><value>{0}: {1} rejected (minimum {2}). Complete child bodies must fit; Escape cancels.</value></data>
+  <data name="Toolbox_CatchEvent" xml:space="preserve"><value>Catch Event</value></data>
+  <data name="Toolbox_ThrowEvent" xml:space="preserve"><value>Throw Event</value></data>
+  <data name="Toolbox_BoundaryEvent" xml:space="preserve"><value>Boundary Event</value></data>
+  <data name="Toolbox_Gateway" xml:space="preserve"><value>Gateway</value></data>
+  <data name="Validation_ElementType" xml:space="preserve"><value>Select a compatible element type.</value></data>
+  <data name="Navigation_PresentationView" xml:space="preserve"><value>View</value></data>
+  <data name="Toolbox_Flow" xml:space="preserve"><value>Flow</value></data>
+  <data name="Element_SequenceFlow" xml:space="preserve"><value>Sequence Flow</value></data>
+  <data name="Element_MessageFlow" xml:space="preserve"><value>Message Flow</value></data>
+  <data name="Element_Participant" xml:space="preserve"><value>Participant</value></data>
+  <data name="Element_Collaboration" xml:space="preserve"><value>Collaboration</value></data>
+  <data name="Accessibility_ConnectionTool" xml:space="preserve"><value>Create {0}</value></data>
+  <data name="Diagnostic_CollaborationInvalid" xml:space="preserve"><value>The selected Collaboration is unavailable. Select an existing Collaboration.</value></data>
+  <data name="Diagnostic_ParticipantVisualMissing" xml:space="preserve"><value>A Participant needs an explicit boundary and Process placement before this view can open.</value></data>
+  <data name="Diagnostic_ParticipantOwnershipInvalid" xml:space="preserve"><value>The Participant has an invalid Collaboration or Process reference.</value></data>
+  <data name="Diagnostic_ParticipantOwnershipMissing" xml:space="preserve"><value>The endpoint has no owning Participant. Assign its Process to a Participant first.</value></data>
+  <data name="Diagnostic_ParticipantOwnershipAmbiguous" xml:space="preserve"><value>More than one Participant references this Process. Endpoint ownership must be unambiguous.</value></data>
+  <data name="Diagnostic_CollaborationPublicationUnsupported" xml:space="preserve"><value>Publication supports Process views only. Open a Process view before publishing.</value></data>
+  <data name="Diagnostic_PresentationContextInvalid" xml:space="preserve"><value>This view does not match the current document. Select an available view again.</value></data>
+  <data name="Diagnostic_MessageFlowEndpointMissing" xml:space="preserve">
+    <value>Choose an existing element at each end of the Message Flow.</value>
+  </data>
+  <data name="Diagnostic_MessageFlowSourceInvalid" xml:space="preserve">
+    <value>This element cannot send a Message Flow.</value>
+  </data>
+  <data name="Diagnostic_MessageFlowTargetInvalid" xml:space="preserve">
+    <value>This element cannot receive a Message Flow.</value>
+  </data>
+  <data name="Diagnostic_MessageFlowSameParticipant" xml:space="preserve">
+    <value>Message Flow must connect different Participants.</value>
+  </data>
+  <data name="Diagnostic_MessageFlowDifferentCollaborations" xml:space="preserve">
+    <value>Both Participants must belong to the same Collaboration.</value>
+  </data>
+  <data name="Diagnostic_MessageFlowBoundaryAttachmentInvalid" xml:space="preserve">
+    <value>The Message Boundary Event must remain attached to a valid Activity.</value>
+  </data>
+  <data name="Diagnostic_MessageFlowPresentationUnavailable" xml:space="preserve">
+    <value>Both endpoints need an explicit placement in the same Collaboration view.</value>
+  </data>
+  <data name="Diagnostic_MessageFlowAnchorInvalid" xml:space="preserve">
+    <value>Choose a valid boundary anchor for the Message Flow endpoint.</value>
+  </data>
+  <data name="Diagnostic_MessageFlowStateMismatch" xml:space="preserve">
+    <value>The Message Flow has changed. Select it again and retry.</value>
+  </data>
+  <data name="Diagnostic_MessageFlowCommandInvalid" xml:space="preserve">
+    <value>The Message Flow change is invalid.</value>
+  </data>
+  <data name="Diagnostic_MessageFlowTypeChangeInvalid" xml:space="preserve">
+    <value>This type would invalidate a connected Message Flow.</value>
+  </data>
+  <data name="Flow_SelectSource" xml:space="preserve"><value>{0} — Select the source element.</value></data>
+  <data name="Flow_SelectTarget" xml:space="preserve"><value>{0} — Select the target element.</value></data>
+  <data name="Diagnostic_FlowSourceInvalid" xml:space="preserve"><value>Select an eligible source element for this Flow tool.</value></data>
+  <data name="Diagnostic_FlowTargetInvalid" xml:space="preserve"><value>Select an eligible target element in the current view.</value></data>
+  <data name="Diagnostic_FlowPointPlanInvalid" xml:space="preserve"><value>The boundary points have changed or are unavailable. Select the target again.</value></data>
+  <data name="Diagnostic_FlowNoRoute" xml:space="preserve"><value>No valid route could be prepared between the available boundary points. Select another target.</value></data>
+  <data name="Field_Participant" xml:space="preserve"><value>Participant</value></data>
+  <data name="Properties_ParticipantNone" xml:space="preserve"><value>None</value></data>
+  <data name="Properties_UnnamedParticipant" xml:space="preserve"><value>Unnamed Participant</value></data>
+  <data name="Toolbar_AutoArrange" xml:space="preserve"><value>Auto Arrange</value></data>
+  <data name="Diagnostic_AutoArrangeFailed" xml:space="preserve"><value>Auto Arrange could not prepare a valid diagram. Review the diagram and try again.</value></data>
+  <data name="Diagnostic_AutoArrangeStale" xml:space="preserve"><value>The diagram changed while arranging. Run Auto Arrange again.</value></data>
+  <data name="ElementToolbox_Actions" xml:space="preserve"><value>Element actions</value></data>
+  <data name="ElementToolbox_Create" xml:space="preserve"><value>Create next element</value></data>
+  <data name="ElementToolbox_AutoPoints" xml:space="preserve"><value>Auto Points</value></data>
+  <data name="ElementToolbox_PropertiesHint" xml:space="preserve"><value>Open the Properties form for the selected element.</value></data>
+  <data name="ElementToolbox_Failed" xml:space="preserve"><value>The element action could not be completed.</value></data>
+  <data name="ElementToolbox_Properties" xml:space="preserve"><value>Properties</value></data>
+  <data name="ElementToolbox_Delete" xml:space="preserve"><value>Delete</value></data>
+  <data name="SmartEdit_Label" xml:space="preserve"><value>Smart Edit</value></data>
+  <data name="SmartEdit_On" xml:space="preserve"><value>ON</value></data>
+  <data name="SmartEdit_Off" xml:space="preserve"><value>OFF</value></data>
 </root>

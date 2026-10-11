@@ -63,7 +63,8 @@ internal static class BpmnModelerComposition
         var configuration = new EditingSessionConfiguration(
             new ProjectionEngine(
                 BpmnRegistration.ProjectionRules.AddRange(
-                    OrganizationalRegistration.ProjectionRules)),
+                    OrganizationalRegistration.ProjectionRules),
+                BpmnRegistration.PresentationViewProviders),
             new LayoutEngine(BpmnRegistration.LayoutAlgorithms),
             BpmnAlgorithmIds.DefaultLayout,
             new RoutingEngine(BpmnRegistration.RoutingAlgorithms),

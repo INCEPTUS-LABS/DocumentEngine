@@ -12,7 +12,6 @@ internal enum ToolboxViewMode
 internal sealed class ToolboxPresentationState
 {
     private ImmutableHashSet<ToolboxGroupId> _knownGroupIds = [];
-    private bool _initialized;
 
     internal ToolboxViewMode ViewMode { get; private set; } = ToolboxViewMode.Expanded;
 
@@ -30,14 +29,11 @@ internal sealed class ToolboxPresentationState
         }
 
         _knownGroupIds = orderedIds.ToImmutableHashSet();
-        if (!_initialized ||
-            ExpandedToolboxGroupId is not null &&
+        if (ExpandedToolboxGroupId is not null &&
             !_knownGroupIds.Contains(ExpandedToolboxGroupId))
         {
             ExpandedToolboxGroupId = orderedIds.FirstOrDefault();
         }
-
-        _initialized = true;
     }
 
     internal bool ToggleGroup(ToolboxGroupId groupId)

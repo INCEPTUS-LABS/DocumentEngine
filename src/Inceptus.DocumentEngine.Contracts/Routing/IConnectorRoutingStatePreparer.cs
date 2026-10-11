@@ -88,11 +88,14 @@ public sealed class ConnectorRoutingStatePreparationResult
     private ConnectorRoutingStatePreparationResult(
         bool succeeded,
         IEnumerable<ScopeRoutingSnapshot> routingScopes,
-        IEnumerable<Diagnostic>? diagnostics)
+        IEnumerable<Diagnostic>? diagnostics,
+        IEnumerable<DocumentRoutingSnapshot>? documentRoutingStates = null)
     {
         Succeeded = succeeded;
         RoutingScopes = RoutingStateCollection.Unique(routingScopes,
             static scope => scope.ScopeId.Value, nameof(routingScopes));
+        DocumentRoutingStates = RoutingStateCollection.Unique(documentRoutingStates ?? [],
+            static state => state.OwnerId.Value, nameof(documentRoutingStates));
         Diagnostics = RoutingDiagnosticCollection.CopyAndOrder(diagnostics, nameof(diagnostics));
         if (succeeded && Diagnostics.Any(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error))
             throw new ArgumentException("Successful preparation cannot contain errors.", nameof(diagnostics));
@@ -102,11 +105,17 @@ public sealed class ConnectorRoutingStatePreparationResult
 
     public bool Succeeded { get; }
     public ImmutableArray<ScopeRoutingSnapshot> RoutingScopes { get; }
+    public ImmutableArray<DocumentRoutingSnapshot> DocumentRoutingStates { get; }
     public ImmutableArray<Diagnostic> Diagnostics { get; }
 
     public static ConnectorRoutingStatePreparationResult Success(
         IEnumerable<ScopeRoutingSnapshot> routingScopes, IEnumerable<Diagnostic>? diagnostics = null) =>
-        new(true, routingScopes, diagnostics);
+        Success(routingScopes, diagnostics, null);
+
+    public static ConnectorRoutingStatePreparationResult Success(
+        IEnumerable<ScopeRoutingSnapshot> routingScopes, IEnumerable<Diagnostic>? diagnostics,
+        IEnumerable<DocumentRoutingSnapshot>? documentRoutingStates) =>
+        new(true, routingScopes, diagnostics, documentRoutingStates);
 
     public static ConnectorRoutingStatePreparationResult Failure(IEnumerable<Diagnostic> diagnostics) =>
         new(false, [], diagnostics);

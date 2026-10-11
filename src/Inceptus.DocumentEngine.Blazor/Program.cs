@@ -2,6 +2,7 @@ using System.Globalization;
 using Inceptus.DocumentEngine.Blazor.Demo;
 using Inceptus.DocumentEngine.Blazor;
 using Inceptus.DocumentEngine.Bpmn.Blazor;
+using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 
@@ -14,7 +15,6 @@ CultureInfo.CurrentUICulture = uiCulture;
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
 builder.Services.AddInceptusBpmnModeler();
-builder.Services.AddSingleton<IBpmnModelerStartupDocumentProvider>(
-    BpmnDemoStartupDocumentProvider.Instance);
+builder.Services.AddSingleton<IBpmnModelerStartupDocumentProvider>(BpmnPoolDemoStartupDocumentProvider.Instance);
 
 await builder.Build().RunAsync();

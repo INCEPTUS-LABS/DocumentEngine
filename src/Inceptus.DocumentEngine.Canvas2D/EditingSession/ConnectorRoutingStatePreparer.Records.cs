@@ -14,22 +14,34 @@ namespace Inceptus.DocumentEngine.Canvas2D.EditingSession;
 public sealed partial class ConnectorRoutingStatePreparer
 {
     private static ImmutableArray<ConnectorRoutingRecord> PrepareRecords(
-        ConnectorRoutingStatePreparationRequest request, DocumentScopeId scopeId,
+        ConnectorRoutingStatePreparationRequest request,
         ProjectedGraph graph, LayoutResult layout, RoutingContext context,
-        ScopeRoutingSnapshot? currentScope, ScopeRoutingSnapshot? proposedScope,
-        ImmutableArray<ScopeRoutingSnapshot> beforeScopes, IStableConnectorRoutingPolicy policy,
-        List<Diagnostic> diagnostics, bool strict, CancellationToken cancellationToken)
+        ImmutableArray<ConnectorRoutingRecord> current, ImmutableArray<ConnectorRoutingRecord> proposedRecords,
+        IEnumerable<ConnectorRoutingRecord> beforeRecords, IStableConnectorRoutingPolicy policy,
+        List<Diagnostic> diagnostics, bool strict, CancellationToken cancellationToken,
+        ScopeGeometrySnapshot? currentGeometry = null, bool unchangedDocumentGeometry = false)
     {
         var edges = graph.Edges.ToDictionary(edge => edge.Source.VisualStateId
             ?? throw new InvalidOperationException("Saved connectors require Visual State identity."));
-        var current = currentScope?.Connectors ?? [];
-        var survivors = current.Where(record => edges.ContainsKey(record.VisualStateId)).ToArray();
+        // Focused replay can seed an exact earlier route and priority. It is still assessed against current geometry below.
+        var currentById = current.ToDictionary(record => record.VisualStateId);
+        var hasReplaySeeds = request.IsHistoryReplay && request.RoutingIntents.IsEmpty &&
+            (request.NodeGeometryImpact is { HasExplicitChanges: true } || !request.SpatialHeightIntents.IsEmpty || !request.SpatialWidthIntents.IsEmpty) &&
+            SemanticDefinitionsUnchanged(request.Before, request.ProposedDocument) &&
+            current.Length == proposedRecords.Length && proposedRecords.All(record =>
+                currentById.TryGetValue(record.VisualStateId, out var prior) && prior.RoutingType == record.RoutingType &&
+                prior.ManualDefinition.HasValue == record.ManualDefinition.HasValue &&
+                (!prior.ManualDefinition.HasValue || prior.ManualDefinition.Value.AsSpan().SequenceEqual(record.ManualDefinition!.Value.AsSpan()))) &&
+            !current.AsSpan().SequenceEqual(proposedRecords.AsSpan());
+        var replaySeeds = hasReplaySeeds ? proposedRecords.ToDictionary(record => record.VisualStateId) : [];
+        var survivors = (hasReplaySeeds ? proposedRecords.Concat(current.Where(record => !replaySeeds.ContainsKey(record.VisualStateId))) : current)
+            .Where(record => edges.ContainsKey(record.VisualStateId)).ToArray();
         var survivorIds = survivors.Select(static record => record.VisualStateId).ToHashSet();
-        var allCurrent = beforeScopes.SelectMany(static scope => scope.Connectors).ToDictionary(static record => record.VisualStateId);
-        var proposed = (proposedScope?.Connectors ?? []).ToDictionary(static record => record.VisualStateId);
+        var allCurrent = beforeRecords.ToDictionary(static record => record.VisualStateId);
+        var proposed = proposedRecords.ToDictionary(static record => record.VisualStateId);
         var newIds = request.RoutingIntents.Where(static intent => intent.Kind == ConnectorRoutingIntentKind.Initialize)
             .Select(static intent => intent.VisualStateId)
-            .Concat((proposedScope?.Connectors ?? []).Select(static record => record.VisualStateId))
+            .Concat(proposedRecords.Select(static record => record.VisualStateId))
             .Concat(edges.Keys.OrderBy(static id => id.Value, StringComparer.Ordinal))
             .Where(id => edges.ContainsKey(id) && !survivorIds.Contains(id)).Distinct().ToArray();
         var order = survivors.Select(static record => record.VisualStateId).Concat(newIds).ToArray();
@@ -45,7 +57,7 @@ public sealed partial class ConnectorRoutingStatePreparer
         {
             cancellationToken.ThrowIfCancellationRequested();
             var edge = edges[id];
-            var original = allCurrent.GetValueOrDefault(id) ?? proposed.GetValueOrDefault(id);
+            var original = replaySeeds.GetValueOrDefault(id) ?? allCurrent.GetValueOrDefault(id) ?? proposed.GetValueOrDefault(id);
             var candidate = original;
             var mode = candidate?.RoutingType ?? ConnectorRoutingType.Automatic;
             var definition = candidate?.ManualDefinition;
@@ -59,9 +71,9 @@ public sealed partial class ConnectorRoutingStatePreparer
             if (assessment.Diagnostics.Any(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error))
                 throw new InvalidOperationException("Current connector endpoint assessment failed.");
             if (!strict && candidate?.RoutingType == ConnectorRoutingType.Automatic &&
-                candidate.Outcome == ConnectorRoutingOutcome.Path && currentScope is not null &&
+                candidate.Outcome == ConnectorRoutingOutcome.Path && currentGeometry is not null &&
                 context.PreparedInput?.LogicalGeometry is { } logical &&
-                TryTransportFrame(candidate, currentScope.Geometry, logical.Geometry, assessment, out var transported))
+                TryTransportFrame(candidate, currentGeometry, logical.Geometry, assessment, out var transported))
             {
                 candidate = transported;
                 assessment = policy.Assess(graph, layout, context, edge.Id, candidate, cancellationToken);
@@ -152,9 +164,10 @@ public sealed partial class ConnectorRoutingStatePreparer
         bool IsUnchangedNoRoute(ConnectorRoutingRecord? record, ConnectorRoutingAssessment assessment) =>
             record?.Outcome == ConnectorRoutingOutcome.NoRoute &&
             record.AutomaticProof == assessment.AcceptedProof &&
-            (strict || currentScope is not null && context.PreparedInput?.LogicalGeometry is { } logicalBasis &&
-                currentScope.Geometry.Nodes.AsSpan().SequenceEqual(logicalBasis.Geometry.Nodes.AsSpan()) &&
-                currentScope.Geometry.Regions.AsSpan().SequenceEqual(logicalBasis.Geometry.Regions.AsSpan()));
+            (strict || unchangedDocumentGeometry ||
+                currentGeometry is not null && context.PreparedInput?.LogicalGeometry is { } logicalBasis &&
+                currentGeometry.Nodes.AsSpan().SequenceEqual(logicalBasis.Geometry.Nodes.AsSpan()) &&
+                currentGeometry.Regions.AsSpan().SequenceEqual(logicalBasis.Geometry.Regions.AsSpan()));
         if (pending.Count > 0)
         {
             var repaired = policy.RouteAffected(graph, layout, context, [.. pending], cancellationToken);
@@ -167,6 +180,14 @@ public sealed partial class ConnectorRoutingStatePreparer
                     ConnectorRoutingType.Automatic, record.Outcome, record.Path, pendingDefinitions[record.VisualStateId],
                     record.AutomaticProof, record.NoRouteReason));
         }
+        // Translating existing region frames changes routing observations, not connector priority.
+        // Repairs still use the same affected-route assessment above, including cross-frame endpoints.
+        if (request.RoutingIntents.IsEmpty && currentGeometry is not null &&
+            context.PreparedInput?.LogicalGeometry is { } prepared &&
+            request.Before.VisualModel.VisualStates.AsSpan().SequenceEqual(request.ProposedDocument.VisualModel.VisualStates.AsSpan()) &&
+            IsRegionFrameTranslation(currentGeometry, prepared.Geometry))
+            return [.. order.Select(id => results[id])];
+        if (hasReplaySeeds) return [.. order.Select(id => results[id])];
         var unchanged = new List<ConnectorRoutingRecord>();
         var changed = new List<ConnectorRoutingRecord>();
         foreach (var record in survivors)
@@ -179,6 +200,28 @@ public sealed partial class ConnectorRoutingStatePreparer
             (equal ? unchanged : changed).Add(result);
         }
         return [.. unchanged, .. changed, .. newIds.Select(id => results[id])];
+    }
+
+    private static bool IsRegionFrameTranslation(ScopeGeometrySnapshot before, ScopeGeometrySnapshot after)
+    {
+        if (!before.Nodes.AsSpan().SequenceEqual(after.Nodes.AsSpan()) || before.Regions.Length != after.Regions.Length)
+            return false;
+        var changed = false;
+        for (var index = 0; index < before.Regions.Length; index++)
+        {
+            var previous = before.Regions[index];
+            var current = after.Regions[index];
+            if (previous == current) continue;
+            if (previous.Id != current.Id || previous.ProfileId != current.ProfileId ||
+                previous.ContainerSemanticElementId != current.ContainerSemanticElementId || previous.ExpandedHeight != current.ExpandedHeight ||
+                previous.ContentBounds is not { } oldBounds || current.ContentBounds is not { } bounds || oldBounds.Size != bounds.Size ||
+                previous.LocalToScopeTransform is not { } oldTransform || current.LocalToScopeTransform is not { } transform ||
+                oldTransform != Matrix2D.CreateTranslation(oldTransform.OffsetX, oldTransform.OffsetY) ||
+                transform != Matrix2D.CreateTranslation(oldTransform.OffsetX + bounds.X - oldBounds.X, oldTransform.OffsetY + bounds.Y - oldBounds.Y))
+                return false;
+            changed = true;
+        }
+        return changed;
     }
 
     private static ConnectorRoutingRecord ExplicitRecord(VisualStateId id, ConnectorRoutingType mode,
@@ -195,7 +238,12 @@ public sealed partial class ConnectorRoutingStatePreparer
 
     private static bool SameBinding(ConnectorRoutingRecord left, ConnectorRoutingRecord right) =>
         left.AutomaticProof is not { } before || right.AutomaticProof is not { } after ||
-        before.Source == after.Source && before.Target == after.Target;
+        SameEndpointObservation(before.Source, after.Source) && SameEndpointObservation(before.Target, after.Target);
+
+    private static bool SameEndpointObservation(ConnectorRoutingEndpointObservation before, ConnectorRoutingEndpointObservation after) =>
+        before.SemanticElementId == after.SemanticElementId && before.VisualStateId == after.VisualStateId &&
+        before.AnchorId == after.AnchorId && before.Role == after.Role && before.Side == after.Side &&
+        before.Point == after.Point && before.Direction == after.Direction;
 
     private static bool SamePersistentBindings(DocumentSnapshot before, DocumentSnapshot after,
         Dictionary<SemanticElementId, VisualStateSnapshot[]> beforeOwners,
@@ -218,9 +266,12 @@ public sealed partial class ConnectorRoutingStatePreparer
             if (anchorId is null) return true;
             var oldAnchor = oldOwners[0].ConnectorAnchors.FirstOrDefault(anchor => anchor.Id == anchorId);
             var newAnchor = newOwners[0].ConnectorAnchors.FirstOrDefault(anchor => anchor.Id == anchorId);
-            return oldAnchor is not null && oldAnchor.Equals(newAnchor) &&
-                oldOwners[0].ConnectorAnchors.Count(anchor => anchor.Side == oldAnchor.Side) ==
-                newOwners[0].ConnectorAnchors.Count(anchor => anchor.Side == newAnchor!.Side);
+            return oldAnchor is not null && newAnchor is not null && oldAnchor.Id == newAnchor.Id &&
+                oldAnchor.Role == newAnchor.Role && oldAnchor.Side == newAnchor.Side &&
+                (oldAnchor.NormalizedPosition ?? ConnectorAnchorGeometryResolver.ResolveNormalizedPosition(oldAnchor.Order,
+                    oldOwners[0].ConnectorAnchors.Count(anchor => anchor.Side == oldAnchor.Side))) ==
+                (newAnchor.NormalizedPosition ?? ConnectorAnchorGeometryResolver.ResolveNormalizedPosition(newAnchor.Order,
+                    newOwners[0].ConnectorAnchors.Count(anchor => anchor.Side == newAnchor.Side)));
         }
     }
 

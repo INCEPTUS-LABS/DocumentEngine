@@ -275,7 +275,7 @@ public sealed class Canvas2DConnectorRouteContextAction
         IEnumerable<PointD> points) =>
         points
             .Select(connector.Transform.TransformPoint)
-            .Select(point => connector.SpatialRegion?.MapSceneToLocal(point) ?? point)
+            .Select(connector.MapPresentationToLocal)
             .ToImmutableArray();
 
     private static PointD ProjectOntoSegment(PointD start, PointD end, PointD point)

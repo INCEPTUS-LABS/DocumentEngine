@@ -1,4 +1,6 @@
 using Inceptus.DocumentEngine.Contracts.Documents;
+using Inceptus.DocumentEngine.Contracts.ConnectionCreation;
+using Inceptus.DocumentEngine.Contracts.Presentation;
 using Inceptus.DocumentEngine.Contracts.Primitives;
 using Inceptus.DocumentEngine.Contracts.Visuals;
 
@@ -17,6 +19,17 @@ public sealed class ConnectorEndpointReconnectionStartRequest
         ConnectorEndpointKind endpointKind,
         SemanticElementId currentSemanticElementId,
         ConnectorAnchorId currentAnchorId)
+        : this(null, null, document, expectedRevision, relationshipId, connectorVisualStateId,
+            endpointKind, currentSemanticElementId, currentAnchorId)
+    {
+    }
+
+    public ConnectorEndpointReconnectionStartRequest(
+        PresentationViewContext? presentationContext, PresentationViewPlan? presentationPlan,
+        DocumentSnapshot document, DocumentRevision expectedRevision,
+        SemanticElementId relationshipId, VisualStateId connectorVisualStateId,
+        ConnectorEndpointKind endpointKind, SemanticElementId currentSemanticElementId,
+        ConnectorAnchorId currentAnchorId)
     {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(relationshipId);
@@ -33,6 +46,9 @@ public sealed class ConnectorEndpointReconnectionStartRequest
         EndpointKind = endpointKind;
         CurrentSemanticElementId = currentSemanticElementId;
         CurrentAnchorId = currentAnchorId;
+        ConnectionPresentationRequest.Validate(document, presentationContext, presentationPlan);
+        PresentationContext = presentationContext;
+        PresentationPlan = presentationPlan;
     }
 
     public DocumentSnapshot Document { get; }
@@ -48,6 +64,10 @@ public sealed class ConnectorEndpointReconnectionStartRequest
     public SemanticElementId CurrentSemanticElementId { get; }
 
     public ConnectorAnchorId CurrentAnchorId { get; }
+
+    public PresentationViewContext? PresentationContext { get; }
+
+    public PresentationViewPlan? PresentationPlan { get; }
 
     internal static void ValidateEndpointKind(
         ConnectorEndpointKind endpointKind,

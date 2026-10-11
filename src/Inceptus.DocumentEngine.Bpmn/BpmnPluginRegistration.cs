@@ -8,6 +8,7 @@ using Inceptus.DocumentEngine.Bpmn.History;
 using Inceptus.DocumentEngine.Bpmn.Layout;
 using Inceptus.DocumentEngine.Bpmn.Navigation;
 using Inceptus.DocumentEngine.Bpmn.Placement;
+using Inceptus.DocumentEngine.Bpmn.Presentation;
 using Inceptus.DocumentEngine.Bpmn.Profiles;
 using Inceptus.DocumentEngine.Bpmn.Properties;
 using Inceptus.DocumentEngine.Bpmn.Projection;
@@ -26,6 +27,7 @@ using Inceptus.DocumentEngine.Contracts.EndpointReconnection;
 using Inceptus.DocumentEngine.Contracts.History;
 using Inceptus.DocumentEngine.Contracts.Layout;
 using Inceptus.DocumentEngine.Contracts.Primitives;
+using Inceptus.DocumentEngine.Contracts.Presentation;
 using Inceptus.DocumentEngine.Contracts.Profiles;
 using Inceptus.DocumentEngine.Contracts.Properties;
 using Inceptus.DocumentEngine.Contracts.Projection;
@@ -1127,8 +1129,8 @@ public sealed class BpmnPluginRegistration
         RoutingAlgorithms = n91.RoutingAlgorithms;
         SceneContributors = [BpmnCanvas2DSceneContributor.NodesRegistration,
             BpmnCanvas2DSceneContributor.PlacementRegistration];
-        ToolboxContributions = n91.ToolboxContributions;
-        ToolboxPlacementRegistrations = n91.ToolboxPlacementRegistrations;
+        ToolboxContributions = [BpmnToolboxContribution.A22Definition];
+        ToolboxPlacementRegistrations = BpmnToolboxPlacementContribution.A21Registrations;
         PropertiesSchemas = n91.PropertiesSchemas;
         ConnectorAnchorPolicies = n91.ConnectorAnchorPolicies;
         AnchorConnectionCreationRegistrations =
@@ -1150,6 +1152,39 @@ public sealed class BpmnPluginRegistration
             new CommandHistoryPolicyRegistration(UpdateBpmnSequenceFlowNameCommand.KnownTypeId,
                 new BpmnSequenceFlowNameHistoryPolicy())];
         PropertiesSchemas = [.. PropertiesSchemas, BpmnSequenceFlowPropertiesSchema.Definition];
+        CommandHandlers = [.. CommandHandlers,
+            Handler<ChangeBpmnElementTypeCommand>(ChangeBpmnElementTypeCommand.KnownTypeId,
+                new BpmnElementTypeCommandHandler())];
+        CommandValidators = [.. CommandValidators,
+            Validator(ChangeBpmnElementTypeCommand.KnownTypeId, "bpmn:validator/change-element-type",
+                new BpmnElementTypeCommandHandler())];
+        HistoryPolicies = [.. HistoryPolicies,
+            new CommandHistoryPolicyRegistration(ChangeBpmnElementTypeCommand.KnownTypeId,
+                new BpmnElementTypeHistoryPolicy())];
+        ProjectionRules = [.. ProjectionRules, BpmnParticipantPresentationContribution.ProjectionRegistration];
+        PresentationViewProviders = [BpmnParticipantPresentationContribution.ViewRegistration];
+        ConnectorAnchorPolicies = [.. ConnectorAnchorPolicies, BpmnParticipantPresentationContribution.AnchorRegistration, BpmnConnectorAnchorPolicies.PoolRegistration];
+        CommandHandlers = [.. CommandHandlers, .. BpmnMessageFlowContribution.CommandHandlers,
+            new(BpmnSmartCreateCommand.KnownTypeId, new BpmnCommandEnvelopeValidator<BpmnSmartCreateCommand>(), new BpmnSmartCreateCommandHandler()),
+            new(BpmnAutoPointsCommand.KnownTypeId, new BpmnCommandEnvelopeValidator<BpmnAutoPointsCommand>(), new BpmnAutoPointsCommandHandler()),
+            new(RestoreBpmnSmartCreateCommand.KnownTypeId, new BpmnCommandEnvelopeValidator<RestoreBpmnSmartCreateCommand>(), new RestoreBpmnSmartCreateCommandHandler()),
+            new(BpmnAutoArrangeCommand.KnownTypeId, new BpmnCommandEnvelopeValidator<BpmnAutoArrangeCommand>(), new BpmnAutoArrangeCommandHandler())];
+        CommandValidators = [.. CommandValidators, .. BpmnMessageFlowContribution.CommandValidators];
+        HistoryPolicies = [.. HistoryPolicies, .. BpmnMessageFlowContribution.HistoryPolicies,
+            new(BpmnSmartCreateCommand.KnownTypeId, new BpmnSmartCreateHistoryPolicy()),
+            new(RestoreBpmnSmartCreateCommand.KnownTypeId, new BpmnSmartCreateReplayHistoryPolicy()),
+            new(BpmnAutoPointsCommand.KnownTypeId, new BpmnAutoPointsHistoryPolicy()),
+            new(BpmnAutoArrangeCommand.KnownTypeId, new BpmnAutoArrangeHistoryPolicy())];
+        PropertiesSchemas = [.. PropertiesSchemas, .. BpmnMessageFlowContribution.PropertiesSchemas];
+        ModelValidationRules = [.. ModelValidationRules, .. BpmnMessageFlowContribution.ModelValidationRules];
+        ProjectionRules = [.. ProjectionRules, BpmnMessageFlowProjectionRule.Registration];
+        ConnectorEndpointReconnectionRegistrations = [.. ConnectorEndpointReconnectionRegistrations,
+            BpmnMessageFlowEndpointReconnectionContribution.Registration];
+        AnchorConnectionCreationRegistrations = [.. AnchorConnectionCreationRegistrations,
+            .. BpmnMessageFlowConnectionCreationContribution.Registrations];
+        ConnectorAnchorPolicies = [.. ConnectorAnchorPolicies.Where(registration =>
+            registration.ElementTypeId != BpmnSemanticTypes.MessageBoundaryEvent),
+            BpmnConnectorAnchorPolicies.MessageBoundaryMessageFlowRegistration];
     }
 
     private BpmnPluginRegistration(BpmnPluginRegistration n100, N101RegistrationMarker _)
@@ -1159,6 +1194,7 @@ public sealed class BpmnPluginRegistration
         CommandValidators = n100.CommandValidators;
         HistoryPolicies = n100.HistoryPolicies;
         ProjectionRules = n100.ProjectionRules;
+        PresentationViewProviders = n100.PresentationViewProviders;
         LayoutAlgorithms = n100.LayoutAlgorithms;
         RoutingAlgorithms = n100.RoutingAlgorithms;
         SceneContributors = n100.SceneContributors;
@@ -1256,6 +1292,8 @@ public sealed class BpmnPluginRegistration
     public ImmutableArray<CommandHistoryPolicyRegistration> HistoryPolicies { get; }
 
     public ImmutableArray<ProjectionRuleRegistration> ProjectionRules { get; }
+
+    public ImmutableArray<PresentationViewProviderRegistration> PresentationViewProviders { get; } = [];
 
     public ImmutableArray<LayoutAlgorithmRegistration> LayoutAlgorithms { get; }
 

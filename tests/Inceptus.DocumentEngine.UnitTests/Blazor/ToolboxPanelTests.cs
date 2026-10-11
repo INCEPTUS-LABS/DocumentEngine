@@ -31,7 +31,7 @@ public sealed partial class ToolboxPanelTests
             StringComparison.Ordinal);
         Assert.Contains("data-toolbox-view-mode=\"expanded\"", markup,
             StringComparison.Ordinal);
-        Assert.Contains("data-expanded-toolbox-group-id=\"demo:toolbox:generic\"", markup,
+        Assert.Contains("data-expanded-toolbox-group-id=\"\"", markup,
             StringComparison.Ordinal);
         Assert.Contains("aria-label=\"Collapse Toolbox\"", markup,
             StringComparison.Ordinal);
@@ -40,7 +40,7 @@ public sealed partial class ToolboxPanelTests
         Assert.Equal(3, Count(markup, "class=\"toolbox-item\""));
         Assert.Equal(5, Count(markup, "type=\"button\""));
         Assert.Equal(3, Count(markup, "aria-pressed=\"false\""));
-        Assert.Equal(1, Count(markup, "aria-expanded=\"true\""));
+        Assert.Equal(1, Count(markup, "aria-expanded=\"false\""));
         Assert.Contains("title=\"Element\"", markup, StringComparison.Ordinal);
         Assert.Contains("aria-label=\"Element\"", markup, StringComparison.Ordinal);
         Assert.Contains("data-toolbox-icon-key=\"generic:element\"", markup,
@@ -124,8 +124,8 @@ public sealed partial class ToolboxPanelTests
             StringComparison.Ordinal);
         Assert.Contains("data-toolbox-group-icon-key=\"test:tasks\"", markup,
             StringComparison.Ordinal);
-        Assert.Equal(1, Count(markup, "aria-expanded=\"true\""));
-        Assert.Equal(1, Count(markup, "aria-expanded=\"false\""));
+        Assert.Equal(0, Count(markup, "aria-expanded=\"true\""));
+        Assert.Equal(2, Count(markup, "aria-expanded=\"false\""));
         Assert.Contains("title=\"Event\"", markup, StringComparison.Ordinal);
         Assert.Contains("aria-label=\"Event\"", markup, StringComparison.Ordinal);
     }
@@ -140,7 +140,7 @@ public sealed partial class ToolboxPanelTests
         state.Reconcile([events, tasks, gateways]);
 
         Assert.Equal(ToolboxViewMode.Expanded, state.ViewMode);
-        Assert.Equal(events, state.ExpandedToolboxGroupId);
+        Assert.Null(state.ExpandedToolboxGroupId);
         Assert.True(state.ToggleGroup(tasks));
         Assert.Equal(tasks, state.ExpandedToolboxGroupId);
         state.ToggleViewMode();

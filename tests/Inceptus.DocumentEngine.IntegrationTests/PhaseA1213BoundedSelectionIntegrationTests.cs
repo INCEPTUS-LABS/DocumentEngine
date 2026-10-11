@@ -39,7 +39,7 @@ public sealed class PhaseA1213BoundedSelectionIntegrationTests
         var uploads = test.Execution.FullUploadCount;
         var reuse = test.Pipeline.SelectionReuses;
         var events = test.Events.Count;
-        var visual = await test.PlaceActivityAsync(type, FreePlacementCenter(test));
+        var visual = await test.PlaceActivityAsync(type, FreePlacementCenter(test), switchToRequestedType: false);
         Assert.Equal(full + 1, test.Pipeline.FullRuns);
         Assert.Equal(rebuilds, test.Pipeline.Rebuilds);
         Assert.Equal(uploads + 1, test.Execution.FullUploadCount);
@@ -49,6 +49,7 @@ public sealed class PhaseA1213BoundedSelectionIntegrationTests
         Assert.Equal(visual.Id, Assert.Single(test.State.EditorState.Selection));
         Assert.NotNull(test.State.CurrentScene!.BoundedPresentation);
         await AssertFullSceneEquivalentAsync(test);
+        await test.SwitchActivityTypeAsync(visual, type);
         await AssertActivityInteractionAsync(test, visual.Id);
     }
 

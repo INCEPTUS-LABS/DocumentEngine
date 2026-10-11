@@ -122,13 +122,13 @@ public sealed partial class Canvas2DSpatialPoolInteractionTests
             AssertSuccessfulSpatialMutation(fixture, before, state);
             Assert.Empty(OrganizationalDecoration(fixture));
         }
-        var timer = await Place(null, "timer-catch-event", new PointD(200d, 40d));
+        var catchEvent = await Place(null, "message-catch-event", new PointD(200d, 40d));
         var task = await Place(null, "task", new PointD(400d, 180d));
         await Move(Fixture.RegionNodes[0], null, new PointD(120d, 270d));
         await Place(Fixture.PoolB, "exclusive-gateway", new PointD(380d, 80d));
         await Move(task, Fixture.PoolA, new PointD(300d, 100d));
         await Move(Fixture.RegionNodes[2], null, new PointD(420d, 270d));
-        await Move(timer, null, new PointD(220d, 70d));
+        await Move(catchEvent, null, new PointD(220d, 70d));
         var hiddenItems = ProcessPresentationItems(fixture);
         var beforeShow = fixture.Document;
         await SetOrganizationalGraphicsAsync(fixture, true);
@@ -143,6 +143,7 @@ public sealed partial class Canvas2DSpatialPoolInteractionTests
         await using var fixture = await Fixture.CreateDragRegressionAsync();
         var header = fixture.State.CurrentScene!.Items.Single(item =>
             item.Origin.SemanticElementId == Fixture.PoolA &&
+            !Canvas2DNodeBodyMetadata.IsNodeBody(item) &&
             item.HitTestPolicy.Mode != Canvas2DHitTestMode.None);
         var headerPoint = Center(header.Bounds);
         await fixture.Controller.SelectSemanticSceneTargetAsync(Fixture.PoolA);

@@ -53,7 +53,7 @@ public sealed class OrganizationalCommandAndSpatialPlannerTests
         new("test:organizational:nested-scope");
 
     [Fact]
-    public void PoolProjectionIsExplicitlyConsumedWithoutCreatingAGraphNode()
+    public void PoolProjectionProvidesDerivedContainerWithoutDuplicatingNodeGeometry()
     {
         var snapshot = Snapshot(
             [Task(TaskAId), Pool(PoolAId)],
@@ -69,8 +69,11 @@ public sealed class OrganizationalCommandAndSpatialPlannerTests
 
         Assert.True(result.IsSuccessful, Diagnostics(result.Diagnostics));
         Assert.NotNull(result.Graph);
-        Assert.Single(result.Graph.Nodes);
-        Assert.Equal(TaskAId, result.Graph.Nodes[0].Source.SemanticElementId);
+        Assert.Equal(2, result.Graph.Nodes.Length);
+        Assert.Null(Assert.Single(result.Graph.Nodes, node => node.Source.SemanticElementId == TaskAId).RegionEnvelope);
+        var pool = Assert.Single(result.Graph.Nodes, node => node.Source.SemanticElementId == PoolAId);
+        Assert.NotNull(pool.RegionEnvelope);
+        Assert.Null(pool.Source.VisualStateId);
         Assert.DoesNotContain(
             result.Diagnostics,
             diagnostic => diagnostic.Code ==
@@ -270,7 +273,7 @@ public sealed class OrganizationalCommandAndSpatialPlannerTests
             presentations: [Presentation(PoolAId, 0)]);
         var harness = CreateHarness(initial);
         Assert.Equal(
-            ["Name", "Description"],
+            ["Name", "Participant", "Description"],
             OrganizationalPoolPropertiesSchema.Definition.Fields.Select(
                 static field => field.DisplayName));
 

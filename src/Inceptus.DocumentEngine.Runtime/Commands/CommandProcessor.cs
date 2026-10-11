@@ -714,7 +714,7 @@ public sealed partial class CommandProcessor
                 return (Failure(transaction.DocumentId, command, CommandExecutionStatus.ProposedStateValidationFailed,
                     transaction.BaseRevision, preparation.Diagnostics), false, null);
             }
-            committedSnapshot = ReplaceRoutingScopes(committedSnapshot, preparation.RoutingScopes);
+            committedSnapshot = ReplaceRoutingScopes(committedSnapshot, preparation.RoutingScopes, preparation.DocumentRoutingStates);
             var ownershipErrors = ValidateRoutingOwnership(transaction.BaseSnapshot, committedSnapshot,
                 routingIntents, spatialHeightIntents, spatialWidthIntents);
             if (!ownershipErrors.IsEmpty)
@@ -811,7 +811,9 @@ public sealed partial class CommandProcessor
             var committedRouting = committedSnapshot.VisualModel.RoutingScopes;
             if ((previousRouting.HasValue != committedRouting.HasValue ||
                 !(previousRouting ?? []).AsSpan().SequenceEqual((committedRouting ?? []).AsSpan())) &&
-                !OnlySavedCaptionsChanged(previousRouting, committedRouting))
+                !OnlySavedCaptionsChanged(previousRouting, committedRouting) ||
+                !transaction.BaseSnapshot.VisualModel.DocumentRoutingStates.AsSpan().SequenceEqual(
+                    committedSnapshot.VisualModel.DocumentRoutingStates.AsSpan()))
             {
                 // Prepared geometry and paths belong to this installed revision. A Scene-only
                 // declared edit must restore its artifacts from that new state, not rebind old paths.

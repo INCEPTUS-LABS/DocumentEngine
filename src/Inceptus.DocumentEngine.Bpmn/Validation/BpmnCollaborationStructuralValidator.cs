@@ -112,7 +112,8 @@ public static class BpmnCollaborationStructuralValidator
                 target));
         }
 
-        if (!validateReferences)
+        if (!validateReferences || !participant.Properties.ContainsKey(BpmnSemanticProperties.CollaborationId) &&
+            !participant.Properties.ContainsKey(BpmnSemanticProperties.ProcessScopeId))
         {
             return;
         }

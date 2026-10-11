@@ -69,7 +69,7 @@ public sealed class PhaseM0ConnectorAnchorPolicyArchitectureTests
             .Order(StringComparer.Ordinal);
 
         Assert.Equal(["Id", "Order", "RoleCapability", "Side"], definitionProperties);
-        Assert.Equal(["Id", "Order", "Role", "Side"], dynamicProperties);
+        Assert.Equal(["Id", "NormalizedPosition", "Order", "Role", "Side"], dynamicProperties);
         Assert.DoesNotContain(
             typeof(VisualStateSnapshot).GetProperties(),
             property => property.Name.Contains("Predefined", StringComparison.Ordinal));

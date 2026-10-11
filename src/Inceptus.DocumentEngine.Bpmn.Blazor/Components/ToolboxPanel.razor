@@ -69,16 +69,17 @@
                                 {
                                     <button type="button"
                                             class="@ItemClass(item.ItemId)"
-                                            title="@ModelerLabels.ToolboxLabel(Text, item)"
-                                            aria-label="@ModelerLabels.ToolboxLabel(Text, item)"
+                                            title="@ItemLabel(item)"
+                                            aria-label="@ItemAccessibleLabel(item)"
                                             aria-pressed="@BooleanValue(IsSelected(item.ItemId))"
                                             data-toolbox-item-id="@item.ItemId.Value"
-                                            data-toolbox-element-type-id="@item.ElementTypeId.Value"
+                                            data-toolbox-element-type-id="@item.Element?.ElementTypeId.Value"
+                                            data-toolbox-connection-creation-id="@item.Connection?.CreationId.Value"
                                             data-toolbox-icon-key="@item.Icon.IconKey"
                                             @onclick="() => SelectItemAsync(item.ItemId)"
                                             @key="item.ItemId">
                                         <span class="toolbox-item-icon" aria-hidden="true">@ResolveGlyph(item.Icon)</span>
-                                        <span class="toolbox-item-label">@ModelerLabels.ToolboxLabel(Text, item)</span>
+                                        <span class="toolbox-item-label">@ItemLabel(item)</span>
                                     </button>
                                 }
                             </div>
@@ -115,16 +116,17 @@
                         {
                             <button type="button"
                                     class="@ItemClass(item.ItemId)"
-                                    title="@ModelerLabels.ToolboxLabel(Text, item)"
-                                    aria-label="@ModelerLabels.ToolboxLabel(Text, item)"
+                                    title="@ItemLabel(item)"
+                                    aria-label="@ItemAccessibleLabel(item)"
                                     aria-pressed="@BooleanValue(IsSelected(item.ItemId))"
                                     data-toolbox-item-id="@item.ItemId.Value"
-                                    data-toolbox-element-type-id="@item.ElementTypeId.Value"
+                                    data-toolbox-element-type-id="@item.Element?.ElementTypeId.Value"
+                                    data-toolbox-connection-creation-id="@item.Connection?.CreationId.Value"
                                     data-toolbox-icon-key="@item.Icon.IconKey"
                                     @onclick="() => SelectItemAsync(item.ItemId)"
                                     @key="item.ItemId">
                                 <span class="toolbox-item-icon" aria-hidden="true">@ResolveGlyph(item.Icon)</span>
-                                <span class="toolbox-item-label">@ModelerLabels.ToolboxLabel(Text, item)</span>
+                                <span class="toolbox-item-label">@ItemLabel(item)</span>
                             </button>
                         }
                     </div>
@@ -160,7 +162,9 @@
         .Select((group, index) => new VisibleToolboxGroup(
             index,
             group,
-            Catalog.GetItems(group.GroupId)))
+            [.. Catalog.GetItems(group.GroupId).Select(item => new VisibleToolboxItem(item, null))
+                .Concat(Catalog.GetConnectionItems(group.GroupId).Select(item => new VisibleToolboxItem(null, item)))
+                .OrderBy(static item => item.Order).ThenBy(static item => item.ItemId.Value, StringComparer.Ordinal)]))
         .Where(static entry => !entry.Items.IsEmpty)
         .ToArray();
 
@@ -227,7 +231,7 @@
     internal async Task<bool> SelectItemAsync(ToolboxItemId itemId)
     {
         ArgumentNullException.ThrowIfNull(itemId);
-        if (!Catalog.TryGetItem(itemId, out _))
+        if (!Catalog.TryGetItem(itemId, out _) && !Catalog.TryGetConnectionItem(itemId, out _))
         {
             return false;
         }
@@ -252,6 +256,12 @@
     private static string ResolveGlyph(ToolboxIconDescriptor? icon) =>
         icon?.FallbackGlyph ?? UnknownIconFallbackGlyph;
 
+    private string ItemLabel(VisibleToolboxItem item) => item.Element is { } element
+        ? ModelerLabels.ToolboxLabel(Text, element) : ModelerLabels.ToolboxLabel(Text, item.Connection!);
+
+    private string ItemAccessibleLabel(VisibleToolboxItem item) => item.Connection is null
+        ? ItemLabel(item) : Text["Accessibility_ConnectionTool", ItemLabel(item)];
+
     private string Disclosure(ToolboxGroupId groupId) => IsExpanded(groupId) ? "▾" : "▸";
 
     private string SectionHeadingId(int index) => DomId($"toolbox-section-{index}");
@@ -273,5 +283,12 @@
     private sealed record VisibleToolboxGroup(
         int Index,
         ToolboxGroupDefinition Group,
-        System.Collections.Immutable.ImmutableArray<ToolboxItemDefinition> Items);
+        System.Collections.Immutable.ImmutableArray<VisibleToolboxItem> Items);
+
+    private sealed record VisibleToolboxItem(ToolboxItemDefinition? Element, ToolboxConnectionItemDefinition? Connection)
+    {
+        internal ToolboxItemId ItemId => Element?.ItemId ?? Connection!.ItemId;
+        internal ToolboxIconDescriptor Icon => Element?.Icon ?? Connection!.Icon;
+        internal int Order => Element?.Order ?? Connection!.Order;
+    }
 }

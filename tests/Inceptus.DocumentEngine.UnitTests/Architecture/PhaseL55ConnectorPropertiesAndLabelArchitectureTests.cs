@@ -180,7 +180,7 @@ public sealed class PhaseL55ConnectorPropertiesAndLabelArchitectureTests
             "DocumentCanvas.razor");
         var data = Between(
             component,
-            "<fieldset data-property-group=\"data\">",
+            "<fieldset data-property-group=\"data\"",
             "</fieldset>");
         var schemas = ReadProductionFile(
             "Inceptus.DocumentEngine.Blazor",
@@ -191,7 +191,7 @@ public sealed class PhaseL55ConnectorPropertiesAndLabelArchitectureTests
             "NeutralDemoPipeline.NeutralEdgeTypeId,",
             "    ];");
 
-        Assert.Contains("@foreach (var field in draft.DataFields)", data,
+        Assert.Contains("@foreach (var field in PropertiesDataFieldsForLayout(draft.DataFields, compactDataLayout))", data,
             StringComparison.Ordinal);
         Assert.Contains("data-property-field-id=\"@field.FieldId.Value\"", data,
             StringComparison.Ordinal);

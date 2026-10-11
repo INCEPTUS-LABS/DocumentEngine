@@ -106,7 +106,7 @@ internal sealed class UpdateConnectionRouteCommandHandler : ICommandHandler
             document.VisualModel.VisualStates.Select(visualState =>
                 visualState.Id == replacement.Id ? replacement : visualState),
             document.VisualModel.ProfileElementPresentations,
-            document.VisualModel.RoutingScopes);
+            document.VisualModel.RoutingScopes, document.VisualModel.DocumentRoutingStates);
         var proposedDocument = new DocumentSnapshot(
             document.SemanticModel,
             proposedVisualModel,

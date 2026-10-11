@@ -74,7 +74,7 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
         }
 
         await AddAsync(PoolAId, "task", new PointD(900d, 300d));
-        await AddAsync(PoolAId, "timer-catch-event", new PointD(20d, 20d));
+        await AddAsync(PoolAId, "message-catch-event", new PointD(20d, 20d));
         await AddAsync(PoolBId, "task", new PointD(900d, 160d));
         await AddAsync(null, "task", new PointD(520d, 160d));
         await SetPlacementGraphicsAsync(fixture, false);
@@ -155,7 +155,7 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
     public async Task PlacementRepeatedMixedAddsLeaveBothPoolAndUnassignedReusableWithoutSiblingDrift()
     {
         await using var fixture = await CreatePlacementStabilityFixtureAsync();
-        var types = new[] { "task", "task", "task", "timer-catch-event", "exclusive-gateway" };
+        var types = new[] { "task", "task", "task", "message-catch-event", "exclusive-gateway" };
         foreach (var poolId in new SemanticElementId?[] { PoolAId, PoolBId, null })
         {
             for (var index = 0; index < types.Length; index++)
@@ -227,7 +227,7 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
         // slot so their setup does not depend on the former overlap/centre-only insertion policy.
         var region = PlacementRegion(fixture, poolId);
         var local = region.MapSceneToLocal(region.Bounds);
-        var bodies = fixture.State.CurrentScene!.Items.Where(Canvas2DNodeBodyMetadata.IsNodeBody).ToArray();
+        var bodies = fixture.State.CurrentScene!.Items.Where(item => Canvas2DNodeBodyMetadata.IsNodeBody(item) && item.DerivedRegionMapping is null).ToArray();
         var points = new List<PointD>();
         for (var y = 40d; y + 40d <= local.Bottom; y += 20d)
         {
@@ -303,7 +303,7 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
             Assert.True(node.Bounds == current!.Bounds,
                 $"Retained node {node.ProjectedObjectId} changed from {node.Bounds} to {current.Bounds}.");
         }
-        foreach (var item in before.State.CurrentScene!.Items.Where(Canvas2DNodeBodyMetadata.IsNodeBody))
+        foreach (var item in before.State.CurrentScene!.Items.Where(item => Canvas2DNodeBodyMetadata.IsNodeBody(item) && item.DerivedRegionMapping is null))
         {
             var visualId = Assert.IsType<VisualStateId>(item.Origin.VisualStateId);
             var current = fixture.Node(visualId);

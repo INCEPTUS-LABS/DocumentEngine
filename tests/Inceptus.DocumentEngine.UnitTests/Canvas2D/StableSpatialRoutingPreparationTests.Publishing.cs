@@ -57,7 +57,7 @@ public sealed partial class StableSpatialRoutingPreparationTests
                 connector => connector.Id == edge.Source.SemanticElementId.Value);
             Assert.Equal(displayed.Select(static point => new PublishedPoint(point.X, point.Y)), published.Points);
         }
-        foreach (var node in compact.ProjectedGraph.Nodes)
+        foreach (var node in compact.ProjectedGraph.Nodes.Where(node => node.RegionEnvelope is null))
         {
             var body = compact.Scene.Items.Single(item => item.Id == Canvas2DSceneObjectIdentity.ForProjected(node.Id, "node"));
             var published = package.Snapshot.Presentation.Nodes.Single(item => item.Id == node.Source.SemanticElementId.Value);

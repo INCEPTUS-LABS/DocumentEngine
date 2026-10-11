@@ -15,7 +15,7 @@ internal sealed record ManualRouteHistoryDelta(VisualStateId VisualStateId,
     internal static ImmutableArray<ManualRouteHistoryDelta> Capture(
         ICommand command, DocumentSnapshot before, DocumentSnapshot committed)
     {
-        if (command is not CompoundDocumentCommand compound || before.VisualModel.RoutingScopes is null) return [];
+        if (command is not CompoundDocumentCommand compound) return [];
         var result = ImmutableArray.CreateBuilder<ManualRouteHistoryDelta>();
         foreach (var id in compound.Commands.OfType<UpdateConnectionRouteCommand>()
             .Select(static child => child.TargetVisualStateId).Distinct())

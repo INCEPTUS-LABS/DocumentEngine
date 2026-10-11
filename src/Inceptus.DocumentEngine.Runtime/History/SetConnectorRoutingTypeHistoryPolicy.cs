@@ -28,7 +28,7 @@ internal sealed class SetConnectorRoutingTypeHistoryPolicy : ICommandHistoryPoli
                 [new ConnectorRoutingTypeHistoryDelta(change.TargetVisualStateId, oldRoute.RoutingType, newRoute.RoutingType)], []);
     }
     internal static ConnectorRoutingRecord? Find(DocumentSnapshot snapshot, VisualStateId id) =>
-        snapshot.VisualModel.RoutingScopes?.SelectMany(static scope => scope.Connectors)
+        snapshot.VisualModel.EnumerateConnectorRoutingRecords()
             .SingleOrDefault(route => route.VisualStateId == id);
     private sealed class Factory(VisualStateId id, ConnectorRoutingType type) : IHistoryCommandFactory
     {

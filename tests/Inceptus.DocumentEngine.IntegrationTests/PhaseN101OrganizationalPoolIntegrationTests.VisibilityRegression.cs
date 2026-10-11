@@ -79,8 +79,11 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
             else
             {
                 Assert.Empty(VisibilityGraphics(current.CurrentScene));
+                // Canonical boundary targets remain in the graph; a hidden profile
+                // must suppress both their painting and their hit-test participation.
                 Assert.DoesNotContain(current.CurrentScene.Items, item =>
-                    item.Origin.SemanticElementId == PoolAId || item.Origin.SemanticElementId == PoolBId);
+                    (item.Origin.SemanticElementId == PoolAId || item.Origin.SemanticElementId == PoolBId) &&
+                    (item.IsVisible || item.HitTestPolicy != Canvas2DHitTestPolicy.None));
             }
         }
     }
@@ -96,7 +99,7 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
         await fixture.MoveAsync(VisibilityFixture.B1, null, new PointD(340d, 100d));
         await fixture.MoveAsync(VisibilityFixture.U1, PoolAId, new PointD(500d, 100d));
         var newTask = await fixture.PlaceAsync("task", PoolBId, new PointD(400d, 220d));
-        var newEvent = await fixture.PlaceAsync("timer-catch-event", null, new PointD(80d, 40d));
+        var newEvent = await fixture.PlaceAsync("message-catch-event", null, new PointD(80d, 40d));
         await fixture.MoveAsync(VisibilityFixture.U1, PoolBId, new PointD(80d, 100d));
 
         Assert.Equal(initial.HistoryStatus.EntryCount + 5, fixture.State.HistoryStatus.EntryCount);
@@ -169,6 +172,11 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
     public async Task VisibilityHiddenPoolDeletionPreservesProcessAndUndoRestoresSpatialAssignments()
     {
         await using var fixture = await VisibilityFixture.CreateAsync();
+        // Remove the cross-Lane Flow before removing one endpoint's Participant ownership.
+        var visual = fixture.Visual(VisibilityFixture.CrossFlow);
+        var relationship = fixture.Document.SemanticModel.Relationships.Single(flow => flow.Id == visual.SemanticElementId);
+        await fixture.ExecuteAsync(state => new DeleteBpmnSequenceFlowCommand(state.DocumentId, state.DocumentRevision,
+            relationship.Id, visual.Id, relationship.SourceId, relationship.TargetId, visual.SourceAnchorId!, visual.TargetAnchorId!));
         await fixture.SetVisibleAsync(false);
         var before = fixture.Document;
         var processItems = VisibilityProcessItems(fixture.State.CurrentScene!);
@@ -260,7 +268,7 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
         await WaitForReadyAsync(fixture.Session);
         var beforeMove = fixture.Document;
 
-        await fixture.MoveAsync(VisibilityFixture.A2, null, new PointD(360d, 100d));
+        await fixture.MoveAsync(VisibilityFixture.A2, PoolBId, new PointD(360d, 100d));
         Assert.Equal(reconnected, fixture.Visual(flowId));
         var connector = Assert.Single(fixture.State.CurrentScene!.Items, item => item.Origin.VisualStateId == flowId &&
             item.Layer == Canvas2DSceneLayer.Connector && item.Metadata.ContainsKey(Canvas2DConnectorPathMetadata.LogicalPathPointCount));
@@ -317,7 +325,7 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
         new(bounds.Left + bounds.Width / 2d, bounds.Top + bounds.Height / 2d);
 
     private static Canvas2DSceneItem[] VisibilityProcessItems(Canvas2DScene scene) =>
-        scene.Items.Where(item => item.Origin.VisualStateId is not null || item.Origin.ProjectedObjectId is not null)
+        scene.Items.Where(item => item.DerivedRegionMapping is null && (item.Origin.VisualStateId is not null || item.Origin.ProjectedObjectId is not null))
             .OrderBy(item => item.Id.Value, StringComparer.Ordinal).ToArray();
 
     private static Canvas2DSceneItem[] VisibilityGraphics(Canvas2DScene scene) =>
@@ -371,6 +379,8 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
                     poolId == PoolAId ? "A" : "B"));
             }
 
+            await BpmnModelerTestComposition.AssignSharedParticipantAsync(command => fixture.ExecuteAsync(_ => command),
+                () => fixture.Document, PoolAId, PoolBId);
             await PrepareRegionCapacitiesAsync(fixture.Session, 600d);
             foreach (var id in new[] { A1, A2, B1, B2, U1 })
             {

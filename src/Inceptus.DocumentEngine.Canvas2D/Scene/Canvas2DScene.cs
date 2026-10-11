@@ -4,6 +4,7 @@ using Inceptus.DocumentEngine.Contracts.Diagnostics;
 using Inceptus.DocumentEngine.Contracts.EditorState;
 using Inceptus.DocumentEngine.Contracts.Geometry;
 using Inceptus.DocumentEngine.Contracts.Primitives;
+using Inceptus.DocumentEngine.Contracts.Presentation;
 using Inceptus.DocumentEngine.Contracts.Properties;
 
 namespace Inceptus.DocumentEngine.Canvas2D.Scene;
@@ -31,7 +32,9 @@ public sealed class Canvas2DScene : IEquatable<Canvas2DScene>, IDisposable
         Canvas2DSpatialPresentationPlan? spatialPresentationPlan = null,
         Canvas2DScenePanReuseSource? panReuseSource = null,
         Canvas2DBoundaryGuidePresentation? boundaryGuides = null,
-        Canvas2DBoundedPresentation? movePreview = null)
+        Canvas2DBoundedPresentation? movePreview = null,
+        PresentationViewContext? presentationContext = null,
+        PresentationViewPlan? presentationPlan = null)
     {
         ArgumentNullException.ThrowIfNull(documentId);
         ArgumentNullException.ThrowIfNull(layoutAlgorithmId);
@@ -44,6 +47,8 @@ public sealed class Canvas2DScene : IEquatable<Canvas2DScene>, IDisposable
         ArgumentNullException.ThrowIfNull(items);
 
         DocumentId = documentId;
+        PresentationContext = presentationContext ?? new ProcessScopePresentationContext(new DocumentScopeId(documentId.Value));
+        PresentationPlan = presentationPlan;
         SourceRevision = sourceRevision;
         LayoutAlgorithmId = layoutAlgorithmId;
         RoutingAlgorithmId = routingAlgorithmId;
@@ -66,6 +71,10 @@ public sealed class Canvas2DScene : IEquatable<Canvas2DScene>, IDisposable
     }
 
     public DocumentId DocumentId { get; }
+
+    public PresentationViewContext PresentationContext { get; }
+
+    public PresentationViewPlan? PresentationPlan { get; }
 
     public DocumentRevision SourceRevision { get; }
 
@@ -119,6 +128,8 @@ public sealed class Canvas2DScene : IEquatable<Canvas2DScene>, IDisposable
         ImmutableArray<Canvas2DSceneItem> items, Canvas2DScenePanReuseSource? panSource)
     {
         DocumentId = previous.DocumentId;
+        PresentationContext = previous.PresentationContext;
+        PresentationPlan = previous.PresentationPlan;
         SourceRevision = previous.SourceRevision;
         LayoutAlgorithmId = previous.LayoutAlgorithmId;
         RoutingAlgorithmId = previous.RoutingAlgorithmId;
@@ -148,6 +159,8 @@ public sealed class Canvas2DScene : IEquatable<Canvas2DScene>, IDisposable
         Canvas2DBoundaryGuidePresentation boundaryGuides)
     {
         DocumentId = previous.DocumentId;
+        PresentationContext = previous.PresentationContext;
+        PresentationPlan = previous.PresentationPlan;
         SourceRevision = previous.SourceRevision;
         LayoutAlgorithmId = previous.LayoutAlgorithmId;
         RoutingAlgorithmId = previous.RoutingAlgorithmId;
@@ -205,7 +218,8 @@ public sealed class Canvas2DScene : IEquatable<Canvas2DScene>, IDisposable
             Items,
             Diagnostics,
             SpatialPresentationPlan,
-            boundaryGuides: BoundaryGuides);
+            boundaryGuides: BoundaryGuides,
+            presentationContext: PresentationContext, presentationPlan: PresentationPlan);
     }
 
     public void Dispose()
@@ -217,6 +231,8 @@ public sealed class Canvas2DScene : IEquatable<Canvas2DScene>, IDisposable
         ReferenceEquals(this, other) ||
         other is not null &&
         DocumentId == other.DocumentId &&
+        PresentationContext == other.PresentationContext &&
+        Equals(PresentationPlan, other.PresentationPlan) &&
         SourceRevision == other.SourceRevision &&
         LayoutAlgorithmId == other.LayoutAlgorithmId &&
         RoutingAlgorithmId == other.RoutingAlgorithmId &&
@@ -239,6 +255,8 @@ public sealed class Canvas2DScene : IEquatable<Canvas2DScene>, IDisposable
     {
         var hash = new HashCode();
         hash.Add(DocumentId);
+        hash.Add(PresentationContext);
+        hash.Add(PresentationPlan);
         hash.Add(SourceRevision);
         hash.Add(LayoutAlgorithmId);
         hash.Add(RoutingAlgorithmId);

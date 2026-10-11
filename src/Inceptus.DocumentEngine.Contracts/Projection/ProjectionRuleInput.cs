@@ -83,6 +83,18 @@ public abstract class ProjectionRuleInput
 
 public sealed class ElementProjectionRuleInput : ProjectionRuleInput
 {
+    public ElementProjectionRuleInput(Inceptus.DocumentEngine.Contracts.Documents.DocumentSnapshot document,
+        Inceptus.DocumentEngine.Contracts.Presentation.PresentationViewContext viewContext,
+        ProjectionContext context, SemanticElementSnapshot element, IEnumerable<VisualStateSnapshot>? visualStates = null)
+        : this(document.DocumentId, document.Revision, context, element, visualStates)
+    {
+        Document = document;
+        ViewContext = viewContext;
+    }
+
+    public Inceptus.DocumentEngine.Contracts.Documents.DocumentSnapshot? Document { get; }
+    public Inceptus.DocumentEngine.Contracts.Presentation.PresentationViewContext? ViewContext { get; }
+
     public ElementProjectionRuleInput(
         DocumentId documentId,
         DocumentRevision sourceRevision,

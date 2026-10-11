@@ -35,7 +35,7 @@ internal static class BpmnSequenceFlowConnectionCreationContribution
     }
 }
 
-internal sealed class BpmnSequenceFlowConnectionCreationCommandFactory :
+internal sealed partial class BpmnSequenceFlowConnectionCreationCommandFactory :
     IAnchorConnectionCreationCommandFactory,
     IAnchorConnectionTargetEligibility
 {

@@ -102,8 +102,16 @@ internal static class BpmnConnectorAnchorPolicies
         new(BpmnSemanticTypes.SignalBoundaryEvent, SourceOnly),
     ];
 
+    internal static ElementConnectorAnchorPolicyRegistration MessageBoundaryMessageFlowRegistration { get; } =
+        new(BpmnSemanticTypes.MessageBoundaryEvent, SourceOrTarget);
+
+    internal static ElementConnectorAnchorPolicyRegistration PoolRegistration { get; } =
+        new(Inceptus.DocumentEngine.Organizational.Semantics.OrganizationalSemanticTypes.Pool, SourceOrTarget);
+
     internal static IElementConnectorAnchorPolicyProvider Provider { get; } =
-        new ElementConnectorAnchorPolicyRegistry(N91Registrations);
+        new ElementConnectorAnchorPolicyRegistry([.. N91Registrations.Where(registration =>
+            registration.ElementTypeId != BpmnSemanticTypes.MessageBoundaryEvent), MessageBoundaryMessageFlowRegistration,
+            Presentation.BpmnParticipantPresentationContribution.AnchorRegistration, PoolRegistration]);
 
     private static ElementConnectorAnchorPolicy AllEdges(
         ConnectorAnchorRoleCapability roleCapability) =>

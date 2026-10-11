@@ -238,6 +238,9 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
                     pool == PoolAId ? "A" : "B"));
             }
             var sourceId = new SemanticElementId("a1211:isolation:source");
+            if (cross)
+                await BpmnModelerTestComposition.AssignSharedParticipantAsync(command => fixture.ExecuteAsync(_ => command),
+                    () => fixture.Document, PoolAId, PoolBId);
             var targetId = new SemanticElementId("a1211:isolation:target");
             await fixture.ExecuteAsync(state => new CreateBpmnStartEventCommand(
                 state.DocumentId, state.DocumentRevision, sourceId, IsolationSource,

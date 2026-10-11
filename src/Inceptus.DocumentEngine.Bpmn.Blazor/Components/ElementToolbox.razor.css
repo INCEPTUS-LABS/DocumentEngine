@@ -1,0 +1,13 @@
+.element-actions, .element-creation, .element-actions *, .element-creation * { box-sizing: border-box; }
+.element-actions, .element-creation { position: absolute; z-index: 8; color: #0f172a; background: #fff; border: 1px solid #cbd5e1; border-radius: 10px; box-shadow: 0 5px 18px #0f172a24; padding: 6px; }
+.element-actions { display: flex; gap: 4px; }
+button { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 34px; width: 34px; height: 34px; padding: 0; border: 1px solid #dbeafe; border-radius: 6px; background: #f8fafc; color: #1e40af; font: 22px "Segoe UI", sans-serif; cursor: pointer; }
+button:hover:enabled { background: #dbeafe; border-color: #60a5fa; }
+button:focus-visible { outline: 3px solid #2563eb; outline-offset: 2px; }
+button:disabled { opacity: .4; cursor: default; }
+button.destructive { color: #dc2626; }
+.element-creation { max-height: calc(100% - 16px); overflow: auto; }
+.element-creation-row { display: flex; align-items: center; gap: 8px; height: 48px; padding: 3px 2px; }
+.element-creation-row + .element-creation-row { border-top: 1px solid #e2e8f0; }
+.element-group-name { flex: 0 0 94px; font-size: 12px; font-weight: 600; }
+.element-candidates { display: flex; gap: 4px; overflow-x: auto; padding: 3px; scrollbar-width: thin; }

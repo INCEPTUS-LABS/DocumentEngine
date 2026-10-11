@@ -54,8 +54,15 @@ public static class ConnectorAnchorGeometryResolver
         int order,
         int count)
     {
+        return ResolvePoint(bounds, side, ResolveNormalizedPosition(order, count));
+    }
+
+    public static PointD ResolvePoint(RectD bounds, ConnectorAnchorSide side, int order, int count, double? position) =>
+        ResolvePoint(bounds, side, position ?? ResolveNormalizedPosition(order, count));
+
+    public static PointD ResolvePoint(RectD bounds, ConnectorAnchorSide side, double position)
+    {
         ValidateSide(side);
-        var position = ResolveNormalizedPosition(order, count);
         return side switch
         {
             ConnectorAnchorSide.Top =>
@@ -110,9 +117,10 @@ public static class ConnectorAnchorGeometryResolver
             .OrderBy(static anchor => anchor.Order)
             .ToArray();
         var parameter = Math.Clamp(edgeParameter, 0d, 1d);
+        ordered = ordered.OrderBy(anchor => anchor.NormalizedPosition ?? ResolveNormalizedPosition(anchor.Order, ordered.Length)).ToArray();
         for (var index = 0; index < ordered.Length; index++)
         {
-            if (ResolveNormalizedPosition(ordered[index].Order, ordered.Length) > parameter)
+            if ((ordered[index].NormalizedPosition ?? ResolveNormalizedPosition(ordered[index].Order, ordered.Length)) > parameter)
             {
                 return index;
             }

@@ -130,6 +130,7 @@
 }
 
 .properties-form {
+    container: inceptus-properties / inline-size;
     position: fixed;
     z-index: 32;
     top: 50%;
@@ -224,6 +225,24 @@
     padding: 0.75rem;
     border: 1px solid #e2e8f0;
     border-radius: 0.5rem;
+}
+
+.properties-form .properties-data-grid {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+}
+
+.properties-form .properties-data-grid > label {
+    width: 100%;
+}
+
+.properties-data-full-width {
+    grid-column: 1 / -1;
+}
+
+@container inceptus-properties (max-width: 40rem) {
+    .properties-form .properties-data-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
 }
 
 .properties-form legend {
@@ -336,6 +355,16 @@
 }
 
 .editor-toolbar {
+    --editor-control-background: #1e293b;
+    --editor-control-border: rgba(148, 163, 184, 0.32);
+    --editor-control-foreground: #e2e8f0;
+    --editor-control-on-foreground: #f8fafc;
+    --editor-control-active: #0284c7;
+    --editor-control-active-bright: #0ea5e9;
+    --editor-control-hover: #27364c;
+    --editor-control-focus: #38bdf8;
+    --editor-control-disabled: #64748b;
+    --editor-control-gap: 0.5rem;
     position: relative;
     z-index: 31;
     display: flex;
@@ -348,11 +377,24 @@
     border-bottom: 1px solid rgba(148, 163, 184, 0.18);
 }
 
+.presentation-view-selector {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-width: 0;
+}
+
+.presentation-view-selector select {
+    max-width: 18rem;
+    min-width: 0;
+    font: inherit;
+}
+
 .toolbar-group {
     display: flex;
     flex: 0 0 auto;
     align-items: center;
-    gap: 0.5rem;
+    gap: var(--editor-control-gap);
 }
 
 .scope-breadcrumb {
@@ -400,28 +442,28 @@
 .native-document-import-action {
     min-width: 2.35rem;
     padding: 0.45rem 0.9rem;
-    border: 1px solid rgba(148, 163, 184, 0.32);
+    border: 1px solid var(--editor-control-border);
     border-radius: 0.45rem;
-    color: #e2e8f0;
-    background: #1e293b;
+    color: var(--editor-control-foreground);
+    background: var(--editor-control-background);
     cursor: pointer;
 }
 
 .editor-toolbar button:hover:not(:disabled),
 .native-document-import-action:hover:not([aria-disabled="true"]) {
     border-color: rgba(56, 189, 248, 0.72);
-    background: #27364c;
+    background: var(--editor-control-hover);
 }
 
 .editor-toolbar button:focus-visible,
 .native-document-import-action:focus-within {
-    outline: 2px solid #38bdf8;
+    outline: 2px solid var(--editor-control-focus);
     outline-offset: 2px;
 }
 
 .editor-toolbar button:disabled,
 .native-document-import-action[aria-disabled="true"] {
-    color: #64748b;
+    color: var(--editor-control-disabled);
     cursor: default;
     opacity: 0.65;
 }

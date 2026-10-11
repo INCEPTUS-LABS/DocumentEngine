@@ -270,6 +270,12 @@ internal sealed partial class DocumentCanvasHost
             CancellationToken cancellationToken)
     {
         var editorState = session.CaptureState();
+        if (editorState.PresentationContext is Inceptus.DocumentEngine.Contracts.Presentation.DocumentPresentationContext)
+        {
+            return Failure(PublishedProcessHostOperationStatus.Failed,
+                PublishedProcessPackageBuilder.DocumentPresentationUnsupported,
+                "Publication supports Process views only. Open a Process view before publishing the document.");
+        }
         if (editorState.Status != EditingSessionStatus.Ready ||
             editorState.CurrentScene is null ||
             editorState.ProjectedGraph is null ||
@@ -329,7 +335,7 @@ internal sealed partial class DocumentCanvasHost
         if (current.Status != EditingSessionStatus.Ready ||
             current.DocumentId != capture.Capture.Document.DocumentId ||
             current.DocumentRevision != capture.Capture.Document.Revision ||
-            current.ActiveScopeId != capture.Capture.ActiveScopeId ||
+            current.PresentationContext != capture.Capture.PresentationContext ||
             current.Generation != capture.Capture.Generation)
         {
             return Failure(

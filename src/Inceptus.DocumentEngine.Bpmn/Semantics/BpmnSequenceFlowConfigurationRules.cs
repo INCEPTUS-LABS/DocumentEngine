@@ -27,6 +27,24 @@ internal sealed record BpmnSequenceFlowConfigurationViolation(
 /// </summary>
 internal static class BpmnSequenceFlowConfigurationRules
 {
+    // A prospective target has no incoming relations and inherits the source's scope and Pool.
+    // This query needs no synthetic semantic identities, document construction, layout or routing.
+    internal static bool CanAppendTargetType(DocumentSnapshot document, SemanticElementId sourceId, SemanticTypeId type)
+    {
+        if (!document.SemanticModel.TryGetElement(sourceId, out var source) || source is null ||
+            !BpmnSemanticTypes.IsFlowNode(source.TypeId) || source.TypeId == BpmnSemanticTypes.EndEvent ||
+            !BpmnSemanticTypes.IsFlowNode(type) || type == BpmnSemanticTypes.StartEvent ||
+            BpmnBoundaryEventSemanticTypes.IsBoundaryEvent(type)) return false;
+        if (source.TypeId != BpmnSemanticTypes.EventBasedGateway) return true;
+        if (!IsSupportedEventBasedGatewayTarget(type)) return false;
+        var targets = document.SemanticModel.Relationships.Where(flow => flow.SourceId == sourceId &&
+            flow.TypeId == BpmnSemanticTypes.SequenceFlow).Select(flow =>
+                document.SemanticModel.TryGetElement(flow.TargetId, out var target) ? target?.TypeId : null).ToArray();
+        return !(type == BpmnSemanticTypes.ReceiveTask && targets.Contains(BpmnSemanticTypes.MessageCatchEvent) ||
+            type == BpmnSemanticTypes.MessageCatchEvent && targets.Contains(BpmnSemanticTypes.ReceiveTask)) &&
+            Analyze(document).All(violation => violation.SourceId != sourceId);
+    }
+
     internal static bool IsSupportedEventBasedGatewayTarget(SemanticTypeId typeId)
     {
         ArgumentNullException.ThrowIfNull(typeId);

@@ -113,7 +113,7 @@ internal sealed partial class DocumentCanvasHost
         _placementEvaluatedState is { } evaluated &&
         (state.DocumentId != evaluated.DocumentId ||
          state.DocumentRevision != evaluated.DocumentRevision ||
-         state.ActiveScopeId != evaluated.ActiveScopeId ||
+         state.PresentationContext != evaluated.PresentationContext ||
          !state.EditorState.Viewport.Equals(evaluated.EditorState.Viewport) ||
          !state.ModelProfileState.Equals(evaluated.ModelProfileState) ||
          !state.ModelProfileViewState.Equals(evaluated.ModelProfileViewState) ||

@@ -1,0 +1,53 @@
+.smart-edit-toggle {
+    display: inline-grid;
+    grid-template-areas: "thumb icon label state";
+    grid-template-columns: 1.65rem 1.45rem auto minmax(2.2rem, auto);
+    align-items: center;
+    flex: 0 0 auto;
+    gap: var(--editor-control-gap);
+    min-height: 2.35rem;
+    padding: 0.25rem var(--editor-control-gap);
+    border: 1px solid var(--editor-control-border);
+    border-radius: 999px;
+    color: var(--editor-control-foreground);
+    background: var(--editor-control-background);
+    font: inherit;
+    font-size: 0.82rem;
+    cursor: pointer;
+}
+
+.smart-edit-toggle[aria-checked="true"] {
+    grid-template-areas: "icon label state thumb";
+    grid-template-columns: 1.45rem auto minmax(2.2rem, auto) 1.65rem;
+    color: var(--editor-control-on-foreground);
+    background: linear-gradient(110deg, var(--editor-control-active), var(--editor-control-active-bright));
+    border-color: var(--editor-control-focus);
+}
+
+.smart-edit-icon { grid-area: icon; }
+.smart-edit-label { grid-area: label; white-space: nowrap; font-weight: 600; }
+.smart-edit-state { grid-area: state; text-align: center; font-weight: 700; }
+.smart-edit-thumb {
+    grid-area: thumb;
+    width: 1.65rem;
+    height: 1.65rem;
+    border-radius: 50%;
+    background: var(--editor-control-on-foreground);
+    box-shadow: 0 1px 4px var(--editor-control-border);
+}
+
+.smart-edit-toggle:hover:not(:disabled) {
+    border-color: var(--editor-control-focus);
+    box-shadow: 0 0 0 2px var(--editor-control-hover);
+}
+
+.smart-edit-toggle:focus-visible {
+    outline: 2px solid var(--editor-control-focus);
+    outline-offset: 2px;
+}
+
+.smart-edit-toggle:disabled {
+    color: var(--editor-control-disabled);
+    opacity: 0.65;
+    cursor: default;
+}

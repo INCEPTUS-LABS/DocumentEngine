@@ -1,4 +1,7 @@
 using Inceptus.DocumentEngine.Contracts.Primitives;
+using Inceptus.DocumentEngine.Contracts.Diagnostics;
+using Inceptus.DocumentEngine.Contracts.Semantics;
+using System.Collections.Immutable;
 
 namespace Inceptus.DocumentEngine.Contracts.Publishing;
 
@@ -87,6 +90,9 @@ public sealed record PublishedTokenRoleClassification
 /// </summary>
 public interface IPublishedTokenRoleClassifier
 {
+    /// <summary>Notation policy may reject relationships that cannot be represented by the Process publisher.</summary>
+    ImmutableArray<Diagnostic> ValidateRelationship(SemanticRelationshipSnapshot relationship) => [];
+
     PublishedTokenRoleClassification Classify(
         PublishedTokenRoleClassificationRequest request);
 }

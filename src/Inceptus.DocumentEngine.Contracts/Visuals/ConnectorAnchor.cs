@@ -33,8 +33,14 @@ public sealed class ConnectorAnchor : IEquatable<ConnectorAnchor>
         ConnectorAnchorId id,
         ConnectorAnchorSide side,
         ConnectorAnchorRole role,
-        int order)
+        int order) : this(id, side, role, order, null) { }
+
+    public ConnectorAnchor(ConnectorAnchorId id, ConnectorAnchorSide side, ConnectorAnchorRole role,
+        int order, double? normalizedPosition)
     {
+        if (normalizedPosition is { } position && (!double.IsFinite(position) || position <= 0 || position >= 1))
+            throw new ArgumentOutOfRangeException(nameof(normalizedPosition));
+        NormalizedPosition = normalizedPosition;
         ArgumentNullException.ThrowIfNull(id);
         if (!Enum.IsDefined(side))
         {
@@ -72,17 +78,20 @@ public sealed class ConnectorAnchor : IEquatable<ConnectorAnchor>
     /// </summary>
     public int Order { get; }
 
+    /// <summary>Optional authored edge parameter. Absent values retain the legacy order distribution.</summary>
+    public double? NormalizedPosition { get; }
+
     public bool Equals(ConnectorAnchor? other) =>
         ReferenceEquals(this, other) ||
         other is not null &&
         Id == other.Id &&
         Side == other.Side &&
         Role == other.Role &&
-        Order == other.Order;
+        Order == other.Order && NormalizedPosition == other.NormalizedPosition;
 
     public override bool Equals(object? obj) => Equals(obj as ConnectorAnchor);
 
-    public override int GetHashCode() => HashCode.Combine(Id, Side, Role, Order);
+    public override int GetHashCode() => HashCode.Combine(Id, Side, Role, Order, NormalizedPosition);
 
     public static bool operator ==(ConnectorAnchor? left, ConnectorAnchor? right) =>
         EqualityComparer<ConnectorAnchor>.Default.Equals(left, right);

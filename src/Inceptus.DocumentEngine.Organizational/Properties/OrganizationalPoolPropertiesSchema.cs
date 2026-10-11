@@ -19,12 +19,20 @@ public static class OrganizationalPoolPropertiesSchema
                     isEditable: true,
                     order: 0),
                 new ElementPropertyFieldDefinition(
+                    new ElementPropertyFieldId("participant"),
+                    "Participant",
+                    OrganizationalSemanticProperties.ParticipantId,
+                    ElementPropertyEditorKind.SingleLineText,
+                    SemanticPropertyMutationKind.Property,
+                    isEditable: true,
+                    order: 1),
+                new ElementPropertyFieldDefinition(
                     new ElementPropertyFieldId("description"),
                     "Description",
                     OrganizationalSemanticProperties.Description,
                     ElementPropertyEditorKind.MultilineText,
                     SemanticPropertyMutationKind.Property,
                     isEditable: true,
-                    order: 1),
+                    order: 2),
             ]);
 }

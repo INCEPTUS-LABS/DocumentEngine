@@ -1,5 +1,6 @@
 using Inceptus.DocumentEngine.Canvas2D.Interaction;
 using Inceptus.DocumentEngine.Contracts.Canvas2D;
+using Inceptus.DocumentEngine.Contracts.ConnectionCreation;
 using Inceptus.DocumentEngine.Contracts.Diagnostics;
 using Inceptus.DocumentEngine.Contracts.EditorState;
 using Inceptus.DocumentEngine.Contracts.Geometry;
@@ -13,6 +14,30 @@ namespace Inceptus.DocumentEngine.Canvas2D.Scene;
 
 public sealed partial class Canvas2DSceneBuilder
 {
+    private static ProjectedConnectorAnchor[] FilterConnectionAnchors(EditorStateSnapshot editor,
+        VisualStateId visualId, ProjectedConnectorAnchor[] anchors, HashSet<ConnectorAnchorId> referencedAnchorIds)
+    {
+        if (editor.ActiveGesture is { Kind: Canvas2DAnchorConnectionGestureMetadata.Kind } creation &&
+            Canvas2DAnchorConnectionGestureMetadata.TryRead(creation.Properties, out var connection) && connection is not null)
+        {
+            if (!ConnectionCandidateMetadata.HasCapturedCandidates(creation.Properties)) return anchors;
+            return visualId == connection.SourceVisualStateId
+                ? ConnectorVisualMetadata.Resolve(creation.Properties).SourceDecoration != ConnectorEndpointDecoration.None
+                    ? [] : anchors.Where(anchor => anchor.Id == connection.SourceAnchorId).ToArray()
+                : ConnectionCandidateMetadata.AllowsVisual(creation.Properties, visualId)
+                    ? anchors.Where(anchor => anchor.AllowsTarget && !referencedAnchorIds.Contains(anchor.Id)).ToArray() : [];
+        }
+        if (editor.ActiveGesture is { Kind: Canvas2DConnectorEndpointReconnectionGestureMetadata.Kind } gesture &&
+            Canvas2DConnectorEndpointReconnectionGestureMetadata.TryRead(gesture.Properties, out var reconnection) && reconnection is not null)
+        {
+            if (!ConnectionCandidateMetadata.HasCapturedCandidates(gesture.Properties)) return anchors;
+            return ConnectionCandidateMetadata.AllowsVisual(gesture.Properties, visualId)
+                ? anchors.Where(anchor => (!referencedAnchorIds.Contains(anchor.Id) || anchor.Id == reconnection.OriginalAnchorId) &&
+                    (reconnection.EndpointKind == ConnectorEndpointKind.Source ? anchor.AllowsSource : anchor.AllowsTarget)).ToArray() : [];
+        }
+        return ConnectionToolState.GetSelection(editor) is not null ? [] : anchors;
+    }
+
     private static IEnumerable<Canvas2DSceneItem> CreateConnectorAnchorHandles(
         Canvas2DSceneItem target,
         VisualStateSnapshot visualState,
@@ -47,10 +72,11 @@ public sealed partial class Canvas2DSceneBuilder
             }
 
             var point = ConnectorAnchorGeometryResolver.ResolvePoint(
-                displayedBounds,
+                target.DerivedRegionMapping?.LogicalBounds ?? displayedBounds,
                 anchor.Side,
                 anchor.Order,
-                anchor.SideCount);
+                anchor.SideCount, anchor.NormalizedPosition);
+            if (target.DerivedRegionMapping is { } mapping) point = mapping.CoordinateMap.MapLogicalToScene(point);
             var bounds = new RectD(
                 point.X - halfExtent,
                 point.Y - halfExtent,
@@ -151,24 +177,30 @@ public sealed partial class Canvas2DSceneBuilder
         }
 
         var stableKey = $"anchor-connection-preview:{gesture.Id}";
+        var descriptor = ConnectorVisualMetadata.Resolve(gesture.Properties);
+        var previewPath = new[] { gesture.Origin, gesture.Current };
+        var previewOrigin = new Canvas2DSceneOriginTrace(
+            Canvas2DSceneOriginCategory.SemanticElement |
+            Canvas2DSceneOriginCategory.VisualState |
+            Canvas2DSceneOriginCategory.EditorState,
+            connection.SourceSemanticElementId,
+            connection.SourceVisualStateId,
+            stableSourceKey: stableKey);
         items.Add(new Canvas2DSceneItem(
             Canvas2DSceneObjectIdentity.ForEditorState(stableKey),
             Canvas2DSceneLayer.Overlay,
             Canvas2DAnchorConnectionGestureMetadata.PreviewZIndex,
-            Canvas2DSceneGeometry.Path([gesture.Origin, gesture.Current]),
-            new Canvas2DSceneOriginTrace(
-                Canvas2DSceneOriginCategory.SemanticElement |
-                Canvas2DSceneOriginCategory.VisualState |
-                Canvas2DSceneOriginCategory.EditorState,
-                connection.SourceSemanticElementId,
-                connection.SourceVisualStateId,
-                stableSourceKey: stableKey),
+            Canvas2DSceneGeometry.Path(previewPath),
+            previewOrigin,
             style: new Canvas2DSceneStyle(
                 stroke: "#2563eb",
                 strokeWidth: 2d,
-                dashPattern: [4d, 2d]),
+                dashPattern: descriptor.DashPattern),
             hitTestPolicy: Canvas2DHitTestPolicy.None,
             metadata: WithEditorKind(gesture.Kind, gesture.Properties)));
+        if (!descriptor.Equals(ConnectorVisualDescriptor.Default))
+            items.AddRange(CreatePreviewConnectorDecorations(stableKey, previewOrigin, previewPath,
+                descriptor, Canvas2DAnchorConnectionGestureMetadata.PreviewZIndex + 1));
         if (connection.HasProposedTarget)
         {
             const double extent = Canvas2DConnectorAnchorMetadata.HandleExtent;
@@ -1174,6 +1206,7 @@ public sealed partial class Canvas2DSceneBuilder
         var stableKey =
             $"connector-endpoint-reconnection-preview:{gesture.Id}:{target.Id.Value}";
         var categories = target.Origin.Categories | Canvas2DSceneOriginCategory.EditorState;
+        var descriptor = ConnectorVisualMetadata.Resolve(target.Metadata);
         items.Add(new Canvas2DSceneItem(
             Canvas2DSceneObjectIdentity.ForEditorState(stableKey),
             Canvas2DSceneLayer.Overlay,
@@ -1191,14 +1224,26 @@ public sealed partial class Canvas2DSceneBuilder
             style: new Canvas2DSceneStyle(
                 stroke: "#2563eb",
                 strokeWidth: 2d,
-                dashPattern: [4d, 2d],
+                dashPattern: descriptor.Equals(ConnectorVisualDescriptor.Default)
+                    ? [4d, 2d] : descriptor.DashPattern,
                 opacity: Math.Min(target.Style.Opacity, 0.8d)),
             isVisible: target.IsVisible,
             hitTestPolicy: Canvas2DHitTestPolicy.None,
             persistentAppearance: target.PersistentAppearance,
             metadata: WithEditorKind(gesture.Kind, gesture.Properties)));
 
-        if (reconnection.EndpointKind == ConnectorEndpointKind.Target &&
+        if (!descriptor.Equals(ConnectorVisualDescriptor.Default))
+        {
+            items.AddRange(CreatePreviewConnectorDecorations(stableKey,
+                new Canvas2DSceneOriginTrace(categories, reconnection.RelationshipId,
+                    reconnection.ConnectorVisualStateId, target.Origin.ProjectedObjectId, stableKey,
+                    target.Origin.RelatedProjectedObjectIds, [target.Id]),
+                displayedPoints, descriptor,
+                Canvas2DConnectorEndpointReconnectionGestureMetadata.PreviewZIndex + 1,
+                Math.Min(target.Style.Opacity, 0.8d),
+                sourceOnly: reconnection.EndpointKind == ConnectorEndpointKind.Source));
+        }
+        else if (reconnection.EndpointKind == ConnectorEndpointKind.Target &&
             Canvas2DConnectorArrowGeometry.Create(displayedPoints) is { } targetArrow)
         {
             var arrowStableKey =
@@ -1312,7 +1357,7 @@ public sealed partial class Canvas2DSceneBuilder
                 target.Transform,
                 target.Clip,
                 diagonal ? new Canvas2DSceneStyle(stroke: style.Stroke, strokeWidth: style.StrokeWidth,
-                    dashPattern: [4d, 2d], opacity: style.Opacity) : style,
+                    dashPattern: style.DashPattern.IsEmpty ? [4d, 2d] : style.DashPattern, opacity: style.Opacity) : style,
                 target.IsVisible,
                 Canvas2DHitTestPolicy.None,
                 target.PersistentAppearance,

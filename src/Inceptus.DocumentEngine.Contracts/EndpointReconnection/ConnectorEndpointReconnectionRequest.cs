@@ -1,4 +1,6 @@
 using Inceptus.DocumentEngine.Contracts.Documents;
+using Inceptus.DocumentEngine.Contracts.ConnectionCreation;
+using Inceptus.DocumentEngine.Contracts.Presentation;
 using Inceptus.DocumentEngine.Contracts.Primitives;
 using Inceptus.DocumentEngine.Contracts.Visuals;
 
@@ -21,6 +23,19 @@ public sealed class ConnectorEndpointReconnectionRequest
         SemanticElementId candidateSemanticElementId,
         VisualStateId candidateVisualStateId,
         ConnectorAnchorId candidateAnchorId)
+        : this(null, null, document, expectedRevision, relationshipId, connectorVisualStateId,
+            endpointKind, currentSemanticElementId, currentAnchorId, candidateSemanticElementId,
+            candidateVisualStateId, candidateAnchorId)
+    {
+    }
+
+    public ConnectorEndpointReconnectionRequest(
+        PresentationViewContext? presentationContext, PresentationViewPlan? presentationPlan,
+        DocumentSnapshot document, DocumentRevision expectedRevision,
+        SemanticElementId relationshipId, VisualStateId connectorVisualStateId,
+        ConnectorEndpointKind endpointKind, SemanticElementId currentSemanticElementId,
+        ConnectorAnchorId currentAnchorId, SemanticElementId candidateSemanticElementId,
+        VisualStateId candidateVisualStateId, ConnectorAnchorId candidateAnchorId)
     {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(relationshipId);
@@ -48,6 +63,9 @@ public sealed class ConnectorEndpointReconnectionRequest
         CandidateSemanticElementId = candidateSemanticElementId;
         CandidateVisualStateId = candidateVisualStateId;
         CandidateAnchorId = candidateAnchorId;
+        ConnectionPresentationRequest.Validate(document, presentationContext, presentationPlan);
+        PresentationContext = presentationContext;
+        PresentationPlan = presentationPlan;
     }
 
     public DocumentSnapshot Document { get; }
@@ -69,4 +87,8 @@ public sealed class ConnectorEndpointReconnectionRequest
     public VisualStateId CandidateVisualStateId { get; }
 
     public ConnectorAnchorId CandidateAnchorId { get; }
+
+    public PresentationViewContext? PresentationContext { get; }
+
+    public PresentationViewPlan? PresentationPlan { get; }
 }

@@ -42,18 +42,18 @@ public sealed partial class StableSpatialRoutingPreparationTests
             item.Geometry.Kind == Canvas2DSceneGeometryKind.Text);
         var currentLabel = compact.Items.Single(item => item.Id == oldLabel.Id);
         var arrow = compact.Items.Single(item => item.Id == arrowId);
-        Assert.Equal(new PointD(610, 671.6), arrow.Geometry.Points[0]);
+        Assert.Equal(new PointD(610, 631.6), arrow.Geometry.Points[0]);
         AssertBoundsNear(oldLabel.Bounds.Translate(delta), currentLabel.Bounds);
         AssertBoundsNear(expanded.Items.Single(item => item.Id == nodeId).Bounds.Translate(delta),
             compact.Items.Single(item => item.Id == nodeId).Bounds);
         var hit = new Canvas2DSceneHitTestService();
-        var nodePoint = new PointD(140, 641.6);
+        var nodePoint = new PointD(140, 601.6);
         Assert.Equal(source.Source.VisualStateId, hit.HitTest(compact, nodePoint)?.Origin.VisualStateId);
         Assert.NotEqual(source.Source.VisualStateId, hit.HitTest(compact, nodePoint - delta)?.Origin.VisualStateId);
         foreach (var (id, currentPoint) in new[]
         {
-            (connectorId, new PointD(300, 671.6)),
-            (arrowId, new PointD(605, 671.6)),
+            (connectorId, new PointD(300, 631.6)),
+            (arrowId, new PointD(605, 631.6)),
             (oldLabel.Id, CenterOf(currentLabel.Bounds)),
         })
         {
@@ -65,9 +65,9 @@ public sealed partial class StableSpatialRoutingPreparationTests
         var endpoint = Assert.Single(selected.Items, item => item.Origin.VisualStateId == flow.Source.VisualStateId &&
             item.Metadata.TryGetValue(Canvas2DConnectorEndpointMetadata.HandleRole, out var role) &&
             role.TextValue == Canvas2DConnectorEndpointMetadata.EndEndpointRole);
-        Assert.Equal(new PointD(610, 671.6), CenterOf(endpoint.Bounds));
-        Assert.Equal(endpoint.Id, hit.HitTest(selected, new PointD(610, 671.6))?.SceneObjectId);
-        Assert.NotEqual(endpoint.Id, hit.HitTest(selected, new PointD(610, 870))?.SceneObjectId);
+        Assert.Equal(new PointD(610, 631.6), CenterOf(endpoint.Bounds));
+        Assert.Equal(endpoint.Id, hit.HitTest(selected, new PointD(610, 631.6))?.SceneObjectId);
+        Assert.NotEqual(endpoint.Id, hit.HitTest(selected, new PointD(610, 830))?.SceneObjectId);
         Assert.Empty(fixture.Policy.Searches);
         Assert.Equal(bytes.AsEnumerable(), NativeDocumentSerializer.Export(snapshot).AsEnumerable());
 

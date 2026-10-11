@@ -153,11 +153,12 @@ public sealed class StableRoutingHistoryIntegrationTests
     public async Task SceneOnlyAssignmentPromotesArtifactInvalidationWhenSavedGeometryChanges()
     {
         var fixture = await StableRoutingPreparationTests.Fixture.CreateAsync();
+        await Execute(fixture, CreateNode(fixture, "assignment-node"));
         await EnableSpatialRegions(fixture);
         await Execute(fixture, Height(fixture, 600));
         var before = fixture.Document.CaptureSnapshot();
         var command = new UnassignOrganizationalElementCommand(before.DocumentId, before.Revision,
-            new SemanticElementId("a-source"));
+            new SemanticElementId("assignment-node"));
         Assert.Equal(PipelineInvalidation.Scene, CommandPipelineInvalidation.Resolve(command));
 
         var result = await fixture.Processor.ExecuteAsync(fixture.Document, command);

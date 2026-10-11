@@ -1,6 +1,8 @@
 using System.IO.Compression;
 using Inceptus.DocumentEngine.Blazor.Demo;
 using Inceptus.DocumentEngine.Bpmn.Publishing;
+using Inceptus.DocumentEngine.Bpmn.Commands;
+using Inceptus.DocumentEngine.Bpmn.Profiles;
 using Inceptus.DocumentEngine.Canvas2D.EditingSession;
 using Inceptus.DocumentEngine.Canvas2D.Publishing;
 using Inceptus.DocumentEngine.Canvas2D.Rendering;
@@ -9,6 +11,8 @@ using Inceptus.DocumentEngine.Contracts.Commands;
 using Inceptus.DocumentEngine.Contracts.EditorState;
 using Inceptus.DocumentEngine.Contracts.Geometry;
 using Inceptus.DocumentEngine.Contracts.Profiles;
+using Inceptus.DocumentEngine.Contracts.Presentation;
+using Inceptus.DocumentEngine.Contracts.Primitives;
 using Inceptus.DocumentEngine.Contracts.Publishing;
 using Inceptus.DocumentEngine.Contracts.Text;
 using Inceptus.DocumentEngine.Contracts.Visuals;
@@ -17,6 +21,49 @@ namespace Inceptus.DocumentEngine.IntegrationTests;
 
 public sealed class PhaseN104StaticPublishIntegrationTests
 {
+    [Fact]
+    public async Task A22DocumentViewPublicationIsRejectedBeforeBuildingTheProcessExecutionGraph()
+    {
+        var composition = await BpmnModelerTestComposition.DemoFactory.CreateAsync();
+        await using var renderer = CreateRenderer();
+        Assert.True((await renderer.InitializeAsync("a22-publication",
+            new Canvas2DSurfaceSize(1200d, 800d, 1d))).Succeeded);
+        var attached = await EditingSession.AttachAsync(composition.Document, renderer, composition.Configuration);
+        await using var session = Assert.IsType<EditingSession>(attached.Session);
+        var enabled = await session.ExecuteAsync(new SetModelProfileAvailabilityCommand(
+            composition.Document.DocumentId, composition.Document.Revision,
+            [new ModelProfileAvailabilityChange(BpmnModelProfiles.OrganizationalId, true)]));
+        Assert.True(enabled.Succeeded, Diagnostics(enabled.Diagnostics));
+        await session.WaitForIdleAsync();
+        var ownerId = new SemanticElementId("a22:publication:collaboration");
+        var current = session.CaptureState();
+        var creation = await session.ExecuteAsync(new CreateBpmnCollaborationCommand(
+            current.DocumentId, current.DocumentRevision, ownerId));
+        Assert.True(creation.IsCommitted, Diagnostics(creation.Diagnostics));
+        await session.WaitForIdleAsync();
+        var changed = await session.ChangePresentationContextAsync(new DocumentPresentationContext(ownerId));
+        Assert.False(changed.Succeeded);
+        Assert.Contains(changed.Diagnostics, diagnostic => diagnostic.Code == "BPMN_COLLABORATION_VIEW_INVALID");
+        await session.WaitForIdleAsync();
+        var before = session.CaptureState();
+        Assert.True(session.TryCaptureDocumentSnapshot(out var snapshot));
+        var captured = await session.CapturePresentationAsync(before.ModelProfileViewState,
+            ModelProfileElementViewStateSnapshot.Empty);
+        var documentView = Assert.IsType<EditingSessionPresentationCapture>(captured.Capture) with
+        { PresentationContext = new DocumentPresentationContext(ownerId) };
+        Assert.Equal(new DocumentPresentationContext(ownerId), documentView.PresentationContext);
+
+        // The publication boundary rejects a document view before interpreting any connector as execution flow.
+        var result = new PublishedProcessPackageBuilder(new BpmnPublishedTokenRoleClassifier()).Build(documentView);
+
+        Assert.False(result.Succeeded);
+        Assert.Null(result.Package);
+        Assert.Equal(PublishedProcessPackageBuilder.DocumentPresentationUnsupported, Assert.Single(result.Diagnostics).Code);
+        Assert.True(session.TryCaptureDocumentSnapshot(out var after));
+        Assert.Same(snapshot, after);
+        Assert.Equal(before.HistoryStatus, session.CaptureState().HistoryStatus);
+    }
+
     [Fact]
     public async Task CurrentNestedScopePublishesMinimalReachableStartActivityEndPackage()
     {

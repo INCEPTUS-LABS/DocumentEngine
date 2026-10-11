@@ -12,6 +12,7 @@ using Inceptus.DocumentEngine.Contracts.Deletion;
 using Inceptus.DocumentEngine.Contracts.Documents;
 using Inceptus.DocumentEngine.Contracts.Geometry;
 using Inceptus.DocumentEngine.Contracts.Primitives;
+using Inceptus.DocumentEngine.Contracts.Presentation;
 using Inceptus.DocumentEngine.Contracts.Properties;
 using Inceptus.DocumentEngine.Contracts.Routing;
 using Inceptus.DocumentEngine.Contracts.Visuals;
@@ -42,15 +43,18 @@ internal sealed record DocumentCanvasContextMenuState(
     DocumentRevision DocumentRevision,
     EditingSessionGeneration SessionGeneration,
     Canvas2DScene SourceScene,
-    DocumentScopeId ScopeId,
+    DocumentScopeId? ScopeId,
     DocumentCanvasScopeNavigationContextAction? ScopeNavigationAction,
     ImmutableArray<CanvasBackgroundActionDefinition> BackgroundActions,
     ImmutableArray<SemanticSceneViewActionDefinition> SemanticViewActions,
     ImmutableArray<SemanticSceneCommandActionDefinition> SemanticCommandActions,
-    DocumentScopeId InteractionScopeId,
+    DocumentScopeId? InteractionScopeId,
     Canvas2DSpatialRegion? TargetPresentation,
-    DocumentCanvasConnectorLabelContextAction? ConnectorLabelAction = null)
+    DocumentCanvasConnectorLabelContextAction? ConnectorLabelAction = null,
+    PresentationViewContext? PresentationContext = null)
 {
+    internal PresentationViewContext ViewContext => PresentationContext ??
+        new ProcessScopePresentationContext(ScopeId ?? throw new InvalidOperationException("A Process menu requires its scope."));
     // Presentation applicability belongs to this open instance. Execution still
     // validates current authoritative state through the existing host path.
     internal bool PropertiesAvailable { get; init; }
@@ -77,7 +81,8 @@ internal sealed record DocumentCanvasContextMenuState(
         DocumentScopeId? scopeId = null,
         DocumentScopeId? interactionScopeId = null,
         Canvas2DSpatialRegion? targetPresentation = null,
-        DocumentCanvasConnectorLabelContextAction? connectorLabelAction = null)
+        DocumentCanvasConnectorLabelContextAction? connectorLabelAction = null,
+        PresentationViewContext? presentationContext = null)
     {
         ArgumentNullException.ThrowIfNull(targetVisualStateId);
         ArgumentNullException.ThrowIfNull(targetSceneObjectId);
@@ -109,14 +114,16 @@ internal sealed record DocumentCanvasContextMenuState(
             documentRevision,
             sessionGeneration,
             sourceScene,
-            scopeId ?? new DocumentScopeId(sourceScene.DocumentId.Value),
+            presentationContext is DocumentPresentationContext ? null : scopeId ?? new DocumentScopeId(sourceScene.DocumentId.Value),
             scopeNavigationAction,
             [],
             [],
             [],
-            interactionScopeId ?? scopeId ?? new DocumentScopeId(sourceScene.DocumentId.Value),
+            presentationContext is DocumentPresentationContext ? interactionScopeId :
+                interactionScopeId ?? scopeId ?? new DocumentScopeId(sourceScene.DocumentId.Value),
             targetPresentation,
-            connectorLabelAction);
+            connectorLabelAction,
+            presentationContext);
     }
 
     internal static DocumentCanvasContextMenuState CreateBackgroundClamped(
@@ -292,17 +299,29 @@ internal sealed record DocumentCanvasPropertySnapshot(
     Canvas2DSpatialRegion? SpatialRegion = null,
     EditingSessionGeneration? SessionGeneration = null,
     Canvas2DScene? SourceScene = null,
-    ConnectorRoutingType? RoutingType = null)
+    ConnectorRoutingType? RoutingType = null,
+    PresentationViewContext? PresentationContext = null)
 {
+    internal ImmutableArray<KeyValuePair<SemanticElementId, string>> ParticipantOptions { get; init; } = [];
+
     // Ordinary element UI eligibility is presentation policy; schemas and their
     // internal values remain available to commands, serialization and diagnostics.
-    internal bool IsPropertiesAvailable => !DataFields.IsEmpty && !BpmnSemanticTypes.IsEvent(TypeId);
+    internal bool IsPropertiesAvailable => CanEditType ||
+        (!DataFields.IsEmpty && CanEditData);
 
-    internal bool HasLongFormData => DataFields.Any(static item =>
+    internal ImmutableArray<SemanticTypeId> SwitchableTypes => IsConnector
+        ? []
+        : BpmnElementTypeSwitching.GetSwitchableTypes(TypeId);
+
+    internal bool CanEditType => SwitchableTypes.Length > 1;
+
+    internal bool CanEditData => !BpmnSemanticTypes.IsEvent(TypeId);
+
+    internal bool HasLongFormData => CanEditData && DataFields.Any(static item =>
         item.Definition.EditorKind == ElementPropertyEditorKind.MultilineText);
 
     internal bool CanEditBounds => VisualStateId is not null &&
-        !IsConnector && !IsBoundaryAttached;
+        PlacementMode != VisualPlacementMode.Derived && !IsConnector && !IsBoundaryAttached && CanEditData;
 
     internal bool CanEditRoutingType => IsConnector && VisualStateId is not null && RoutingType is not null;
 
@@ -388,8 +407,10 @@ internal sealed record DocumentCanvasPropertySnapshot(
             spatialRegion,
             sessionGeneration,
             sourceScene,
-            document.VisualModel.RoutingScopes?.SelectMany(static scope => scope.Connectors)
-                .FirstOrDefault(record => record.VisualStateId == visualState.Id)?.RoutingType);
+            (document.VisualModel.RoutingScopes?.SelectMany(static scope => scope.Connectors) ?? [])
+                .Concat(document.VisualModel.DocumentRoutingStates.SelectMany(static view => view.Connectors))
+                .FirstOrDefault(record => record.VisualStateId == visualState.Id)?.RoutingType)
+        { ParticipantOptions = ModelerPropertyEditing.CaptureParticipants(document) };
         return true;
     }
 
@@ -431,7 +452,8 @@ internal sealed record DocumentCanvasPropertySnapshot(
             IsConnector: false,
             SourceId: null,
             TargetId: null,
-            LabelPlacement: null);
+            LabelPlacement: null)
+        { ParticipantOptions = ModelerPropertyEditing.CaptureParticipants(document) };
         return true;
     }
 
@@ -602,7 +624,7 @@ internal sealed class DocumentCanvasPropertiesDraft
     {
         ArgumentNullException.ThrowIfNull(authoritative);
         Authoritative = authoritative;
-        DataFields = authoritative.DataFields
+        DataFields = (authoritative.CanEditData ? authoritative.DataFields : [])
             .Select(static field => new DocumentCanvasDataPropertyDraft(field))
             .ToImmutableArray();
         X = Format(authoritative.Bounds.X);
@@ -610,6 +632,7 @@ internal sealed class DocumentCanvasPropertiesDraft
         Width = Format(authoritative.Bounds.Width);
         Height = Format(authoritative.Bounds.Height);
         RoutingTypeValue = authoritative.RoutingType?.ToString().ToLowerInvariant() ?? string.Empty;
+        TypeIdValue = authoritative.TypeId.Value;
     }
 
     internal DocumentCanvasPropertySnapshot Authoritative { get; }
@@ -625,6 +648,18 @@ internal sealed class DocumentCanvasPropertiesDraft
     internal string Height { get; set; }
 
     internal string RoutingTypeValue { get; set; }
+
+    internal string TypeIdValue { get; set; }
+
+    internal bool IsTypeDirty => Authoritative.CanEditType &&
+        !StringComparer.Ordinal.Equals(TypeIdValue, Authoritative.TypeId.Value);
+
+    internal bool TryParseType(out SemanticTypeId? typeId)
+    {
+        typeId = Authoritative.SwitchableTypes.FirstOrDefault(candidate =>
+            StringComparer.Ordinal.Equals(candidate.Value, TypeIdValue));
+        return typeId is not null;
+    }
 
     internal bool IsRoutingTypeDirty => Authoritative.CanEditRoutingType &&
         (!TryParseRoutingType(out var type) || type != Authoritative.RoutingType);
@@ -653,13 +688,14 @@ internal sealed class DocumentCanvasPropertiesDraft
         (!TryParseBounds(out var bounds, out _) || bounds != Authoritative.Bounds);
 
     internal bool IsCombinedConnectorNameAndRoutingChange =>
-        IsRoutingTypeDirty && !IsBoundsDirty && TryGetDirtyDataField(out var dataField) &&
+        IsRoutingTypeDirty && !IsBoundsDirty && !IsTypeDirty && TryGetDirtyDataField(out var dataField) &&
         ModelerPropertyEditing.CanEditMissingValue(Authoritative.TypeId, dataField!.Definition);
 
     internal bool HasConflictingChanges => !IsCombinedConnectorNameAndRoutingChange &&
-        SemanticDirtyFieldCount + (IsBoundsDirty ? 1 : 0) + (IsRoutingTypeDirty ? 1 : 0) > 1;
+        SemanticDirtyFieldCount + (IsBoundsDirty ? 1 : 0) + (IsRoutingTypeDirty ? 1 : 0) +
+            (IsTypeDirty ? 1 : 0) > 1;
 
-    internal bool IsDirty => IsSemanticDirty || IsBoundsDirty || IsRoutingTypeDirty;
+    internal bool IsDirty => IsSemanticDirty || IsBoundsDirty || IsRoutingTypeDirty || IsTypeDirty;
 
     internal bool IsValid => TryValidate(out _, out _);
 
@@ -672,6 +708,8 @@ internal sealed class DocumentCanvasPropertiesDraft
         var messages = boundsMessages.ToBuilder();
         if (Authoritative.CanEditRoutingType && !TryParseRoutingType(out _))
             messages.Add(text is null ? "Select a supported routing type." : text["Validation_RoutingType"]);
+        if (Authoritative.CanEditType && !TryParseType(out _))
+            messages.Add(text is null ? "Select a compatible element type." : text["Validation_ElementType"]);
         foreach (var field in DataFields.Where(static field => field.IsDirty))
         {
             if (field.Definition.MutationKind == SemanticPropertyMutationKind.Name &&
@@ -706,7 +744,7 @@ internal sealed class DocumentCanvasPropertiesDraft
         {
             messages.Add(
                 text is null
-                    ? "Apply one Data field, routing type, or visual bounds before editing another property group."
+                    ? "Apply one Data field, element type, routing type, or visual bounds before editing another property group."
                     : text["Validation_Conflicting"]);
         }
 

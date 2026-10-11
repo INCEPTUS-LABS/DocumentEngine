@@ -14,6 +14,29 @@ namespace Inceptus.DocumentEngine.IntegrationTests.TestSupport;
 
 internal static class BpmnModelerTestComposition
 {
+    // Cross-Pool routing regressions explicitly model Lanes of one Participant.
+    internal static async Task AssignSharedParticipantAsync(
+        Func<Inceptus.DocumentEngine.Contracts.Commands.ICommand, Task> execute,
+        Func<DocumentSnapshot> capture,
+        params Inceptus.DocumentEngine.Contracts.Primitives.SemanticElementId[] pools)
+    {
+        var collaboration = new Inceptus.DocumentEngine.Contracts.Primitives.SemanticElementId("test:lane-collaboration");
+        var participant = new Inceptus.DocumentEngine.Contracts.Primitives.SemanticElementId("test:lane-participant");
+        var snapshot = capture();
+        if (!snapshot.SemanticModel.ModelProfiles.IsAvailable(Inceptus.DocumentEngine.Bpmn.Profiles.BpmnModelProfiles.OrganizationalId))
+            await execute(new Inceptus.DocumentEngine.Contracts.Commands.SetModelProfileAvailabilityCommand(snapshot.DocumentId, snapshot.Revision,
+                [new(Inceptus.DocumentEngine.Bpmn.Profiles.BpmnModelProfiles.OrganizationalId, true)]));
+        snapshot = capture();
+        await execute(new Inceptus.DocumentEngine.Bpmn.Commands.CreateBpmnCollaborationCommand(snapshot.DocumentId, snapshot.Revision, collaboration, "Test collaboration"));
+        snapshot = capture();
+        await execute(new Inceptus.DocumentEngine.Bpmn.Commands.CreateBpmnParticipantCommand(snapshot.DocumentId, snapshot.Revision, participant, collaboration, name: "Shared participant"));
+        foreach (var pool in pools)
+        {
+            snapshot = capture();
+            await execute(new Inceptus.DocumentEngine.Bpmn.Commands.SetBpmnPoolParticipantCommand(snapshot.DocumentId, snapshot.Revision, pool, participant));
+        }
+    }
+
     internal static IDocumentCanvasCompositionFactory DemoFactory { get; } =
         new FreshDemoTestCompositionFactory();
 
@@ -39,7 +62,8 @@ internal static class BpmnModelerTestComposition
         Assert.True(prepared.Succeeded, string.Join("; ", prepared.Diagnostics.Select(static diagnostic => diagnostic.Message)));
         var reconstructed = DocumentReconstructor.Reconstruct(new DocumentSnapshot(snapshot.SemanticModel,
             new VisualModelSnapshot(snapshot.DocumentId, snapshot.Revision, snapshot.VisualModel.VisualStates,
-                snapshot.VisualModel.ProfileElementPresentations, prepared.RoutingScopes), snapshot.Metadata, snapshot.Publication),
+                snapshot.VisualModel.ProfileElementPresentations, prepared.RoutingScopes,
+                prepared.DocumentRoutingStates), snapshot.Metadata, snapshot.Publication),
             configuration.ConnectorAnchorPolicyProvider);
         Assert.True(reconstructed.Succeeded);
         return reconstructed.Document!;

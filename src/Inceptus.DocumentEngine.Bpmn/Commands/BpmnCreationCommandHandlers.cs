@@ -506,7 +506,7 @@ internal static class BpmnDocumentReplacement
                 document.Revision,
                 visualModel.VisualStates,
                 visualModel.ProfileElementPresentations,
-                visualModel.RoutingScopes),
+                visualModel.RoutingScopes, visualModel.DocumentRoutingStates),
             document.Metadata,
             document.Publication);
 
@@ -532,7 +532,7 @@ internal static class BpmnDocumentReplacement
                 document.Revision,
                 visuals,
                 document.VisualModel.ProfileElementPresentations,
-                document.VisualModel.RoutingScopes),
+                document.VisualModel.RoutingScopes, document.VisualModel.DocumentRoutingStates),
             document.Metadata,
             document.Publication);
 }

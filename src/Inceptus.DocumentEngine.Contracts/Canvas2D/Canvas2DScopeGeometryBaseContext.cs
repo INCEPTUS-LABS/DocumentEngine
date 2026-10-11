@@ -15,6 +15,18 @@ public sealed class Canvas2DScopeGeometryBaseContext
         Canvas2DSceneConfiguration configuration,
         Canvas2DSceneContributorDescriptor contributor,
         TextMeasurementRequest textConfiguration)
+        : this(inputs, projectedGraph, localLayout, configuration, contributor, textConfiguration, null)
+    {
+    }
+
+    public Canvas2DScopeGeometryBaseContext(
+        ScopeGeometryInputs inputs,
+        ProjectedGraph projectedGraph,
+        LayoutResult localLayout,
+        Canvas2DSceneConfiguration configuration,
+        Canvas2DSceneContributorDescriptor contributor,
+        TextMeasurementRequest textConfiguration,
+        ScopeGeometryInputs? previousInputs)
     {
         ArgumentNullException.ThrowIfNull(inputs);
         ArgumentNullException.ThrowIfNull(projectedGraph);
@@ -28,9 +40,12 @@ public sealed class Canvas2DScopeGeometryBaseContext
         Configuration = configuration;
         Contributor = contributor;
         TextConfiguration = textConfiguration;
+        PreviousInputs = previousInputs;
     }
 
     public ScopeGeometryInputs Inputs { get; }
+    /// <summary>Prior authoritative inputs, when preparing a committed edit.</summary>
+    public ScopeGeometryInputs? PreviousInputs { get; }
     public ProjectedGraph ProjectedGraph { get; }
     public LayoutResult LocalLayout { get; }
     public Canvas2DSceneConfiguration Configuration { get; }

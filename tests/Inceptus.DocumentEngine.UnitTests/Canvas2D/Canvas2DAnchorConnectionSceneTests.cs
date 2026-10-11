@@ -147,6 +147,24 @@ public sealed class Canvas2DAnchorConnectionSceneTests
     }
 
     [Fact]
+    internal void ExplicitConnectionToolAcquiresBodiesAndHidesAnchorHandles()
+    {
+        var source = CreateSource();
+        var sourceVisual = Visual(source, "test:semantic:a");
+        var targetVisual = Visual(source, "test:semantic:b");
+        var selected = new EditorStateSnapshot(selection: [sourceVisual.Id, targetVisual.Id]);
+        var state = ConnectionToolState.WithSelection(selected, new AnchorConnectionCreationId("explicit"), [sourceVisual.Id]);
+        var handles = AnchorHandles(Scene(source, state));
+        Assert.Empty(handles);
+        var occupied = new VisualStateSnapshot(new VisualStateId("occupied-source"), new SemanticElementId("occupied-flow"),
+            default, default, VisualPlacementMode.Manual, sourceAnchorId: SourceAnchorId);
+        source = source.WithVisualModel(new VisualModelSnapshot(source.VisualModel.DocumentId, source.VisualModel.Revision,
+            source.VisualModel.VisualStates.Append(occupied)));
+        Assert.Empty(AnchorHandles(Scene(source, state)));
+        Assert.NotEmpty(AnchorHandles(Scene(source, selected)));
+    }
+
+    [Fact]
     internal void ActiveGestureDoesNotExposeAnOccupiedTargetAnchorAsACandidate()
     {
         var source = CreateSource();

@@ -80,6 +80,12 @@ internal sealed class BpmnOrganizationalGenericUpdateGuard : ICommandValidator
             UpdateSemanticElementPropertyCommand update => update.TargetSemanticElementId,
             _ => null,
         };
+        if (command is UpdateSemanticElementPropertyCommand property &&
+            property.PropertyKey == Inceptus.DocumentEngine.Organizational.Semantics.OrganizationalSemanticProperties.ParticipantId &&
+            document.SemanticModel.TryGetElement(property.TargetSemanticElementId, out var pool) && pool is not null &&
+            Inceptus.DocumentEngine.Organizational.Semantics.OrganizationalSemantics.IsPool(pool))
+            return [BpmnDiagnostics.Error(BpmnEffectiveParticipant.AssignmentInvalid,
+                "Pool Participant assignment requires the typed Pool assignment command.", property.TargetSemanticElementId.Value)];
         if (targetId is null ||
             !document.SemanticModel.TryGetElement(targetId, out var target) ||
             target is null ||
@@ -157,7 +163,7 @@ internal static class BpmnOrganizationalCommandSupport
             return false;
         }
 
-        return command switch
+        var succeeded = command switch
         {
             CreateBpmnCollaborationCommand creation =>
                 TryCreateCollaboration(creation, document, out semanticModel, out diagnostics),
@@ -176,6 +182,25 @@ internal static class BpmnOrganizationalCommandSupport
                 out semanticModel,
                 out diagnostics),
         };
+        if (succeeded && semanticModel is not null && ChangesParticipantOwnership(command, document))
+        {
+            diagnostics = BpmnMessageFlowSemantics.ValidateExisting(new DocumentSnapshot(semanticModel,
+                document.VisualModel, document.Metadata, document.Publication));
+            if (!diagnostics.IsEmpty) { semanticModel = null; return false; }
+        }
+        return succeeded;
+    }
+
+    private static bool ChangesParticipantOwnership(ICommand command, DocumentSnapshot document)
+    {
+        if (command is CreateBpmnParticipantCommand or DeleteBpmnParticipantCommand or DeleteBpmnCollaborationCommand)
+            return true;
+        if (command is not UpdateBpmnParticipantCommand update) return false;
+        if (!document.SemanticModel.TryGetElement(update.ParticipantId, out var participant) || participant is null)
+            return true;
+        return !BpmnCollaborationSemantics.TryGetCollaborationId(participant, out var collaborationId) ||
+            !BpmnCollaborationSemantics.TryGetProcessScopeId(participant, out var processScopeId) ||
+            collaborationId != update.CollaborationId || processScopeId != update.ProcessScopeId;
     }
 
     internal static ImmutableArray<Diagnostic> InvalidShape(ICommand command) =>
@@ -366,6 +391,10 @@ internal static class BpmnOrganizationalCommandSupport
         out SemanticModelSnapshot? semanticModel,
         out ImmutableArray<Diagnostic> diagnostics)
     {
+        if (document.SemanticModel.Elements.Any(pool =>
+            Inceptus.DocumentEngine.Organizational.Semantics.OrganizationalSemantics.GetParticipantId(pool) == deletion.ParticipantId))
+            return Fail([Error("BPMN_PARTICIPANT_REFERENCED_BY_POOL",
+                "Unassign the Participant from its Pools before deleting it.", deletion.ParticipantId.Value)], out semanticModel, out diagnostics);
         if (!TryGetOrganizationalElement(
                 document,
                 deletion.ParticipantId,

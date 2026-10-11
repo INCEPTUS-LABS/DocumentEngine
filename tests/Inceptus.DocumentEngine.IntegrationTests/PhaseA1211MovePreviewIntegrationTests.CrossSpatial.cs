@@ -132,7 +132,8 @@ public sealed partial class PhaseA1211MovePreviewIntegrationTests
     public async Task CrossSpatialFinalUpAssignsThroughExistingPlannerAndUndoRedoAreExact(int sourceIndex, int targetIndex)
     {
         await using var test = await PhaseA122PanSceneReuseIntegrationTests.Fixture.CreateAsync();
-        var visual = await PrepareCrossSpatialNodeAsync(test, "manual", sourceIndex, "short");
+        var visual = await PrepareCrossSpatialNodeAsync(test, "manual", sourceIndex, "short",
+            withIncidentFlows: sourceIndex != 3 && targetIndex != 3);
         var before = test.State;
         var original = test.Snapshot;
         var scene = before.CurrentScene!;
@@ -173,12 +174,14 @@ public sealed partial class PhaseA1211MovePreviewIntegrationTests
     }
 
     private static async Task<VisualStateId> PrepareCrossSpatialNodeAsync(
-        PhaseA122PanSceneReuseIntegrationTests.Fixture test, string shape, int sourceIndex, string label)
+        PhaseA122PanSceneReuseIntegrationTests.Fixture test, string shape, int sourceIndex, string label, bool withIncidentFlows = true)
     {
         await test.EnablePoolsAsync();
         var poolC = new SemanticElementId("test:a1211:cross:pool-c");
         await test.ExecuteAsync(new CreateOrganizationalPoolCommand(test.Snapshot.DocumentId, test.Snapshot.Revision,
             poolC, test.State.ActiveScopeId, OrganizationalPoolCreationMode.Empty, "Codex"));
+        await test.ExecuteAsync(new SetBpmnPoolParticipantCommand(test.Snapshot.DocumentId, test.Snapshot.Revision,
+            poolC, new SemanticElementId("test:lane-participant")));
         await PhaseN101OrganizationalPoolIntegrationTests.PrepareRegionCapacitiesAsync(test.Session, 1000d);
         var node = shape switch
         {
@@ -193,6 +196,23 @@ public sealed partial class PhaseA1211MovePreviewIntegrationTests
             await test.ExecuteAsync(new CreateBpmnStartEventCommand(test.Snapshot.DocumentId, test.Snapshot.Revision,
                 node, new VisualStateId("test:a1211:cross:unnamed-event:visual"), new PointD(180, 120), new SizeD(40, 40),
                 VisualPlacementMode.Pinned, targetScopeId: test.State.ActiveScopeId));
+        }
+        else if (sourceIndex == 3 && shape is "gateway" or "event" or "subprocess")
+        {
+            // Unassigned movement coverage uses an independent node; a Process control-flow
+            // endpoint cannot be detached from its effective Participant in A2.2.
+            node = new SemanticElementId("test:a1211:cross:independent");
+            var id = new VisualStateId("test:a1211:cross:independent:visual");
+            await test.ExecuteAsync(shape switch
+            {
+                "gateway" => new CreateBpmnExclusiveGatewayCommand(test.Snapshot.DocumentId, test.Snapshot.Revision,
+                    node, id, new PointD(180, 120), new SizeD(50, 50), "G", "Gateway", VisualPlacementMode.Pinned, targetScopeId: test.State.ActiveScopeId),
+                "event" => new CreateBpmnStartEventCommand(test.Snapshot.DocumentId, test.Snapshot.Revision,
+                    node, id, new PointD(180, 120), new SizeD(40, 40), VisualPlacementMode.Pinned, targetScopeId: test.State.ActiveScopeId),
+                _ => new CreateBpmnSubProcessCommand(test.Snapshot.DocumentId, test.Snapshot.Revision,
+                    node, id, test.State.ActiveScopeId, new DocumentScopeId("test:a1211:cross:child"),
+                    new PointD(180, 120), new SizeD(160, 100), "SUB", "SubProcess", VisualPlacementMode.Pinned),
+            });
         }
         if (shape is "manual" or "service")
         {
@@ -221,7 +241,7 @@ public sealed partial class PhaseA1211MovePreviewIntegrationTests
             await test.ExecuteAsync(new UpdateNodeLabelVisualOverrideCommand(test.Snapshot.DocumentId, test.Snapshot.Revision,
                 visual, new NodeLabelVisualOverride(0, 30, 140, 45)));
         }
-        if (shape is "manual" or "service")
+        if (withIncidentFlows && sourceIndex != 3 && shape is "manual" or "service")
         {
             await AddCrossFlowAsync(test, BpmnDemoPipeline.TaskId, node, "incoming");
             await AddCrossFlowAsync(test, node, BpmnDemoPipeline.ApprovedTaskId, "outgoing");

@@ -37,19 +37,11 @@ public sealed partial class DocumentCanvasHostTests
     [Theory]
     [InlineData("BPMN.StartEvent")]
     [InlineData("BPMN.EndEvent")]
-    [InlineData("BPMN.MessageCatchEvent")]
-    [InlineData("BPMN.MessageThrowEvent")]
-    [InlineData("BPMN.MessageBoundaryEvent")]
-    [InlineData("BPMN.TimerCatchEvent")]
-    [InlineData("BPMN.TimerBoundaryEvent")]
-    [InlineData("BPMN.SignalCatchEvent")]
-    [InlineData("BPMN.SignalThrowEvent")]
-    [InlineData("BPMN.SignalBoundaryEvent")]
     [InlineData("zero-data")]
     public async Task PropertiesUxIneligibleTargetsHaveNoMenuActionOrOpeningPath(string type)
     {
         var zeroData = type == "zero-data";
-        var snapshot = CreatePropertiesUxSnapshot(zeroData ? "BPMN.Task" : type);
+        var snapshot = CreatePropertiesUxSnapshot(zeroData ? "BPMN.SubProcess" : type);
         await using var host = CreatePropertiesUxHost(snapshot);
         await host.InitializeAsync("properties-ux-canvas", "properties-ux-container");
         if (zeroData)
@@ -88,13 +80,8 @@ public sealed partial class DocumentCanvasHostTests
         if (zeroData)
         {
             Assert.Empty(internalSnapshot.DataFields);
-            Assert.Equal(BpmnSemanticTypes.Task, internalSnapshot.TypeId);
+            Assert.Equal(BpmnSemanticTypes.SubProcess, internalSnapshot.TypeId);
         }
-        else if (type is not ("BPMN.StartEvent" or "BPMN.EndEvent"))
-        {
-            Assert.NotEmpty(internalSnapshot.DataFields);
-        }
-
         // Existing forms also follow selection; this entry path must obey eligibility.
         var ownerVisual = new VisualStateId("p15:owner-visual");
         typeof(DocumentCanvasHost).GetField("_propertiesSchemaCatalog", PropertiesUxFlags)!
@@ -123,6 +110,7 @@ public sealed partial class DocumentCanvasHostTests
     [InlineData("BPMN.ParallelGateway", false)]
     [InlineData("BPMN.InclusiveGateway", false)]
     [InlineData("BPMN.EventBasedGateway", false)]
+    [InlineData("BPMN.SubProcess", false)]
     [InlineData("BPMN.Task", true)]
     public async Task PropertiesUxEligibleFormsRenderDataParametersAndContentBasedSizing(string type, bool compact)
     {
@@ -154,7 +142,10 @@ public sealed partial class DocumentCanvasHostTests
         Assert.Contains("data-property-group=\"data\"", form, StringComparison.Ordinal);
         Assert.Contains("data-property-group=\"parameters\"", form, StringComparison.Ordinal);
         Assert.Matches("<legend[^>]*>Parameters</legend>", form);
-        Assert.Matches("data-property-group=\"parameters\"[\\s\\S]*value=\"" + type + "\" readonly", form);
+        if (BpmnElementTypeSwitching.GetSwitchableTypes(new SemanticTypeId(type)).IsEmpty)
+            Assert.Matches("data-property-group=\"parameters\"[\\s\\S]*value=\"" + type + "\" readonly", form);
+        else
+            Assert.Matches("data-property-group=\"parameters\"[\\s\\S]*<select[^>]*-properties-type\"[^>]*value=\"" + type + "\"", form);
         foreach (var removed in new[] { "identity", "visual" })
         {
             Assert.DoesNotContain($"data-property-group=\"{removed}\"", form, StringComparison.Ordinal);
@@ -167,6 +158,68 @@ public sealed partial class DocumentCanvasHostTests
         Assert.Contains(compact ? "properties-form-compact" : "properties-form-wide", form, StringComparison.Ordinal);
         Assert.Equal(!compact, form.Contains("properties-field-long-form", StringComparison.Ordinal));
         Assert.Equal(!compact, form.Contains("properties-long-form-editor", StringComparison.Ordinal));
+
+        Assert.True(host.TryCaptureCurrentPropertiesForm(out var current));
+        var usesDataGrid = !compact && BpmnTaskSemanticTypes.IsTask(new SemanticTypeId(type));
+        Assert.Equal(usesDataGrid, form.Contains("properties-data-grid", StringComparison.Ordinal));
+        var expectedFields = usesDataGrid
+            ? new[] { "code", "element-number", "name", "description" }
+            : current!.DataFields.Select(field => field.FieldId.Value).ToArray();
+        Assert.Equal(expectedFields, Regex.Matches(form, "data-property-field-id=\"([^\"]+)\"")
+            .Select(match => match.Groups[1].Value));
+        var controls = Regex.Matches(form, "<(?:input|textarea|select|button)\\b[^>]*id=\"[^\"]*-properties-([^\"]+)\"")
+            .Select(match => match.Groups[1].Value).Where(id => id != "close");
+        Assert.Equal(expectedFields.Select(id => $"data-field-{id}").Concat(["type", "cancel", "apply"]), controls);
+        Assert.DoesNotContain("tabindex", form, StringComparison.Ordinal);
+        Assert.Matches("<button[^>]*-properties-cancel\"[^>]*type=\"button\"", form);
+        Assert.Matches("<button[^>]*-properties-apply\"[^>]*type=\"submit\"", form);
+        if (usesDataGrid)
+        {
+            var dataGroup = Regex.Match(form, "<fieldset data-property-group=\"data\"[^>]*>[\\s\\S]*?</fieldset>").Value;
+            var labels = Regex.Matches(dataGroup, "<label[^>]*>[\\s\\S]*?</label>").ToArray();
+            Assert.Equal(4, labels.Length);
+            // The first two labels are consecutive cells in the same grid; the following labels span both columns.
+            Assert.DoesNotContain("properties-data-full-width", labels[0].Value, StringComparison.Ordinal);
+            Assert.DoesNotContain("properties-data-full-width", labels[1].Value, StringComparison.Ordinal);
+            Assert.Contains("properties-data-full-width", labels[2].Value, StringComparison.Ordinal);
+            Assert.Contains("properties-data-full-width", labels[3].Value, StringComparison.Ordinal);
+            foreach (var label in labels)
+                Assert.Single(Regex.Matches(label.Value, "data-property-field-id="));
+        }
+    }
+
+    [Theory]
+    [InlineData("code")]
+    [InlineData("element-number")]
+    [InlineData("name")]
+    [InlineData("description")]
+    public async Task PropertiesUxIncompleteDataFieldSetsKeepSchemaOrderAndOriginalLayout(string missingField)
+    {
+        await using var host = CreatePropertiesUxHost(CreatePropertiesUxSnapshot("BPMN.Task"));
+        await host.InitializeAsync("properties-ux-canvas", "properties-ux-container");
+        var schema = BpmnPluginRegistration.N100.PropertiesSchemas.Single(schema => schema.SemanticTypeId == BpmnSemanticTypes.Task);
+        var fields = schema.Fields.Where(field => field.FieldId.Value != missingField).ToArray();
+        typeof(DocumentCanvasHost).GetField("_propertiesSchemaCatalog", PropertiesUxFlags)!.SetValue(host,
+            new ElementPropertiesSchemaCatalog([new ElementPropertiesSchema(schema.SemanticTypeId, fields)]));
+        await OpenPropertiesUxMenuAsync(host);
+        var snapshot = Assert.IsType<DocumentCanvasPropertySnapshot>(await host.OpenPropertiesAsync(PropertiesUxVisualId));
+        var draft = new DocumentCanvasPropertiesDraft(snapshot);
+        var activator = new LocalizationComponentActivator(host, draft);
+        using var services = new ServiceCollection().AddLogging().AddInceptusBpmnModeler()
+            .AddSingleton<Microsoft.JSInterop.IJSRuntime>(new PublishDownloadRuntime())
+            .AddSingleton<Microsoft.AspNetCore.Components.IComponentActivator>(activator).BuildServiceProvider();
+        await using var renderer = new HtmlRenderer(services, NullLoggerFactory.Instance);
+        var rendered = await renderer.Dispatcher.InvokeAsync(() => renderer.RenderComponentAsync<DocumentCanvas>());
+        var form = Regex.Match(await renderer.Dispatcher.InvokeAsync(rendered.ToHtmlString),
+            "<form[^>]*-properties-form\"[\\s\\S]*?</form>").Value;
+
+        Assert.NotEmpty(form);
+        Assert.DoesNotContain("properties-data-grid", form, StringComparison.Ordinal);
+        Assert.DoesNotContain("properties-data-full-width", form, StringComparison.Ordinal);
+        Assert.Equal(fields.Select(field => field.FieldId.Value),
+            Regex.Matches(form, "data-property-field-id=\"([^\"]+)\"").Select(match => match.Groups[1].Value));
+        Assert.Equal(missingField == "description", form.Contains("properties-form-compact", StringComparison.Ordinal));
+        Assert.Matches("<select[^>]*-properties-type\"[^>]*value=\"BPMN.Task\"", form);
     }
 
     [Theory]

@@ -513,7 +513,7 @@ internal static class NeutralDemoPipeline
                 bounds,
                 anchor.Side,
                 anchor.Order,
-                anchor.SideCount);
+                anchor.SideCount, anchor.NormalizedPosition);
         }
     }
 

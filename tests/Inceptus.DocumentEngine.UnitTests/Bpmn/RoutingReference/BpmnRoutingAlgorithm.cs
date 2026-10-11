@@ -37,7 +37,7 @@ internal sealed class BpmnRoutingAlgorithm : IRoutingAlgorithm
             {
                 return Failure(
                     BpmnAlgorithmDiagnosticCodes.UnsupportedRoutingContent,
-                    $"Projected edge '{edge.Id}' is not a BPMN Sequence Flow.",
+                    $"Projected edge '{edge.Id}' is not a supported BPMN connector.",
                     edge.Id.Value);
             }
         }

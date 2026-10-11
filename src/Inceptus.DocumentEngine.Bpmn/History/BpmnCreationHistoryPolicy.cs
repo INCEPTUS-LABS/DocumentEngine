@@ -422,7 +422,7 @@ internal sealed class BpmnSnapshotRestoreCommandFactory : IHistoryCommandFactory
                 expectedRevision,
                 _visualModel.VisualStates,
                 _visualModel.ProfileElementPresentations,
-                _visualModel.RoutingScopes),
+                _visualModel.RoutingScopes, _visualModel.DocumentRoutingStates),
             _pipelineInvalidation,
             _nodeGeometryImpact);
 }

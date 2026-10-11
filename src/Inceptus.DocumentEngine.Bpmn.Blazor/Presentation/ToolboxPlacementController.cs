@@ -8,6 +8,7 @@ using Inceptus.DocumentEngine.Contracts.Creation;
 using Inceptus.DocumentEngine.Contracts.Diagnostics;
 using Inceptus.DocumentEngine.Contracts.EditorState;
 using Inceptus.DocumentEngine.Contracts.Geometry;
+using Inceptus.DocumentEngine.Contracts.Presentation;
 using Inceptus.DocumentEngine.Contracts.Primitives;
 using Inceptus.DocumentEngine.Contracts.Toolbox;
 
@@ -17,10 +18,10 @@ namespace Inceptus.DocumentEngine.Bpmn.Blazor.Presentation;
 /// Coordinates one transient Toolbox placement with the authoritative Editing Session. Notation
 /// behavior remains downstream in the registered command factory.
 /// </summary>
-internal sealed class ToolboxPlacementController
+internal sealed partial class ToolboxPlacementController
 {
     private const string PlacementUnavailable = "TOOLBOX_PLACEMENT_UNAVAILABLE";
-    private const string PlacementStale = "TOOLBOX_PLACEMENT_STALE";
+    internal const string PlacementStale = "TOOLBOX_PLACEMENT_STALE";
     private const string PlacementFactoryFailed = "TOOLBOX_PLACEMENT_FACTORY_FAILED";
     private const string PlacementCandidateFailed = "TOOLBOX_PLACEMENT_CANDIDATE_FAILED";
     private const string PlacementCommandRejected = "TOOLBOX_PLACEMENT_COMMAND_REJECTED";
@@ -219,7 +220,7 @@ internal sealed class ToolboxPlacementController
                 {
                     spatialPlan = _spatialEditPlanners.Plan(new Canvas2DSpatialEditRequest(
                         request.Document,
-                        observed.ActiveScopeId,
+                        request.TargetScopeId,
                         Canvas2DSpatialEditKind.Creation,
                         plan.Command,
                         plan.CreatedSemanticElementId,
@@ -280,7 +281,7 @@ internal sealed class ToolboxPlacementController
             var rebuilt = session.CaptureState();
             if (!IsAuthoritativeReadyState(rebuilt) ||
                 rebuilt.DocumentId != observed.DocumentId ||
-                rebuilt.ActiveScopeId != observed.ActiveScopeId ||
+                rebuilt.PresentationContext != observed.PresentationContext ||
                 rebuilt.DocumentRevision < commandResult.CommittedRevision ||
                 !ContainsVisualState(rebuilt, plan.CreatedVisualStateId, presentation?.Id))
             {
@@ -384,20 +385,15 @@ internal sealed class ToolboxPlacementController
             return false;
         }
 
-        var destinationAllowed = TryResolvePlacementTarget(
-                observed.CurrentScene!,
-                observed.ActiveScopeId,
-                scenePoint,
-                out var documentPoint,
-                out var targetScopeId,
-                out var presentation);
-        if (!observed.TryGetCurrentProcessInteraction(out var scopeScene) ||
-            scopeScene is null || scopeScene.ActiveScopeId != targetScopeId)
+        if (!TryResolveCurrentPlacementTarget(observed, document, scenePoint,
+                out var documentPoint, out var targetScopeId, out var presentation,
+                out var processPlacement, out var processBoundary, out var destinationAllowed) ||
+            !observed.TryGetCurrentPresentationInteraction(out var scopeScene) || scopeScene is null)
         {
             failure = Failure(
                 PlacementUnavailable,
                 "Toolbox placement requires a visible editable Process presentation at this point.",
-                observed.ActiveScopeId.Value);
+                observed.DocumentId.Value);
             return false;
         }
 
@@ -405,7 +401,7 @@ internal sealed class ToolboxPlacementController
         {
             failure = Failure(PlacementUnavailable,
                 "Toolbox placement requires a visible editable Process presentation at this point.",
-                observed.ActiveScopeId.Value);
+                observed.DocumentId.Value);
             return false;
         }
 
@@ -417,7 +413,9 @@ internal sealed class ToolboxPlacementController
             presentation = null;
         }
 
-        var nodeBodyIds = scopeScene.ProjectedGraph!.Nodes.Select(static node =>
+        var nodeBodyIds = scopeScene.ProjectedGraph!.Nodes
+            .Where(static node => !Canvas2DNodePresentationMetadata.IsBoundaryContainer(node.ProjectedProperties))
+            .Select(static node =>
             Canvas2DSceneObjectIdentity.ForProjected(node.Id, "node")).ToHashSet();
         var bodies = observed.CurrentScene!.Items.Where(item =>
             item.IsVisible && !item.Bounds.IsEmpty &&
@@ -432,11 +430,14 @@ internal sealed class ToolboxPlacementController
                     body.Origin.SemanticElementId is { } semanticId &&
                     body.Origin.VisualStateId is { } visualId &&
                     document.SemanticModel.TryGetElement(semanticId, out var semantic) &&
-                    semantic is not null)
+                    semantic is not null &&
+                    document.SemanticModel.TryGetScope(semanticId, out var targetScope) &&
+                    targetScope?.Id == targetScopeId)
                 {
                     targets.Add(new ToolboxPlacementTarget(semanticId, semantic.TypeId,
                         visualId, body.Origin.ProjectedObjectId!,
-                        presentation?.MapSceneToLocal(body.Bounds) ?? body.Bounds));
+                        presentation?.MapSceneToLocal(body.Bounds) ??
+                        processPlacement?.MapViewToLocal(body.Bounds) ?? body.Bounds));
                 }
             }
         }
@@ -468,7 +469,8 @@ internal sealed class ToolboxPlacementController
                 }
 
                 candidate = preview.AttachmentCandidate;
-                var displayedBounds = presentation?.MapLocalToScene(preview.Bounds) ?? preview.Bounds;
+                var displayedBounds = presentation?.MapLocalToScene(preview.Bounds) ??
+                    processPlacement?.MapLocalToView(preview.Bounds) ?? preview.Bounds;
                 var diagnostics = preview.Diagnostics.ToBuilder();
                 if (!destinationAllowed)
                 {
@@ -484,6 +486,7 @@ internal sealed class ToolboxPlacementController
                     }
                 }
                 else if ((presentation is not null && !presentation.Bounds.Contains(displayedBounds)) ||
+                    (processBoundary is { } boundary && !boundary.Contains(displayedBounds)) ||
                     observed.CurrentScene.Items.Any(item => item.IsVisible &&
                         Canvas2DSemanticSceneInteractionMetadata.BlocksPlacement(item) &&
                         item.Bounds.Intersects(displayedBounds)))
@@ -532,7 +535,8 @@ internal sealed class ToolboxPlacementController
                 candidate = registration.CandidateProvider?.ResolveCandidate(request);
                 feedback = candidate is null ? null : new EditorFeedbackSnapshot(
                     PlacementPreviewId, candidate.FeedbackKind,
-                    presentation?.MapLocalToScene(candidate.PreviewBounds) ?? candidate.PreviewBounds,
+                    presentation?.MapLocalToScene(candidate.PreviewBounds) ??
+                    processPlacement?.MapLocalToView(candidate.PreviewBounds) ?? candidate.PreviewBounds,
                     properties: candidate.Properties,
                     presentationMode: candidate.FeedbackPresentationMode);
             }
@@ -590,7 +594,7 @@ internal sealed class ToolboxPlacementController
         IsAuthoritativeReadyState(current) &&
         current.DocumentId == expected.DocumentId &&
         current.DocumentRevision == expected.DocumentRevision &&
-        current.ActiveScopeId == expected.ActiveScopeId &&
+        current.PresentationContext == expected.PresentationContext &&
         current.Generation == expected.Generation &&
         ReferenceEquals(current.CurrentScene, expected.CurrentScene);
 

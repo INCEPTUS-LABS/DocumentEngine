@@ -1,0 +1,25 @@
+@using Microsoft.AspNetCore.Components.Web
+@inject Microsoft.Extensions.Localization.IStringLocalizer<ModelerStrings> Text
+
+<button type="button" role="switch" class="smart-edit-toggle" disabled="@Disabled"
+        aria-label="@Text["SmartEdit_Label"]" aria-checked="@(Enabled ? "true" : "false")"
+        @onclick="ToggleAsync" @onclick:stopPropagation
+        @onpointerdown:stopPropagation @onpointerup:stopPropagation @onwheel:stopPropagation>
+    <svg class="smart-edit-icon" width="23" height="23" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M9 3 11.5 9.5 18 12 11.5 14.5 9 21 6.5 14.5 0 12 6.5 9.5ZM19 0 20.4 3.6 24 5 20.4 6.4 19 10 17.6 6.4 14 5 17.6 3.6ZM20 15 21.1 17.9 24 19 21.1 20.1 20 23 18.9 20.1 16 19 18.9 17.9Z" />
+    </svg>
+    <span class="smart-edit-label">@Text["SmartEdit_Label"]</span>
+    <span class="smart-edit-state" aria-hidden="true">@Text[Enabled ? "SmartEdit_On" : "SmartEdit_Off"]</span>
+    <span class="smart-edit-thumb" aria-hidden="true"></span>
+</button>
+
+@code {
+    [CascadingParameter(Name = "ModelerUICulture")]
+    private System.Globalization.CultureInfo? RenderCulture { get; set; }
+
+    [Parameter] public bool Enabled { get; set; } = true;
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public EventCallback<bool> EnabledChanged { get; set; }
+
+    internal Task ToggleAsync() => Disabled ? Task.CompletedTask : EnabledChanged.InvokeAsync(!Enabled);
+}

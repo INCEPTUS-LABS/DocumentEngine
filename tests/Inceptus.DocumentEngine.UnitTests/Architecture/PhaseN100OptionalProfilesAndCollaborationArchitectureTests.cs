@@ -1,5 +1,6 @@
 using System.Reflection;
 using Inceptus.DocumentEngine.Bpmn;
+using Inceptus.DocumentEngine.Bpmn.Commands;
 using Inceptus.DocumentEngine.Bpmn.Profiles;
 using Inceptus.DocumentEngine.Bpmn.Semantics;
 using Inceptus.DocumentEngine.Bpmn.Validation;
@@ -111,7 +112,11 @@ public sealed class PhaseN100OptionalProfilesAndCollaborationArchitectureTests
         var prior = BpmnPluginRegistration.N91;
         var current = BpmnPluginRegistration.N100;
 
-        Assert.Equal(prior.ProjectionRules, current.ProjectionRules);
+        Assert.Equal(prior.ProjectionRules.AsEnumerable(), current.ProjectionRules.Where(
+            rule => rule.SemanticTypeId != BpmnSemanticTypes.Participant && rule.SemanticTypeId != BpmnSemanticTypes.MessageFlow));
+        Assert.Single(current.ProjectionRules, rule => rule.SemanticTypeId == BpmnSemanticTypes.Participant);
+        Assert.Single(current.ProjectionRules, rule => rule.SemanticTypeId == BpmnSemanticTypes.MessageFlow);
+        Assert.Equal(BpmnSemanticTypes.Collaboration, Assert.Single(current.PresentationViewProviders).OwnerTypeId);
         Assert.Equal(prior.LayoutAlgorithms, current.LayoutAlgorithms);
         Assert.Equal(prior.RoutingAlgorithms, current.RoutingAlgorithms);
         // A1.2.14 retains the existing node-visual contribution and gives placement feedback
@@ -123,17 +128,48 @@ public sealed class PhaseN100OptionalProfilesAndCollaborationArchitectureTests
         Assert.Single(current.SceneContributors, contribution =>
             contribution.Descriptor.PlacementDependency == Canvas2DScenePlacementDependency.BoundedFeedbackOnly);
         Assert.Equal(2, current.SceneContributors.Length);
-        Assert.Equal(prior.ToolboxContributions, current.ToolboxContributions);
-        Assert.Equal(prior.ToolboxPlacementRegistrations,
+        // A2.1 presents eight family defaults while preserving the existing concrete
+        // semantic types, placement factories, groups, and section authority.
+        var priorToolbox = Assert.Single(prior.ToolboxContributions);
+        var currentToolbox = Assert.Single(current.ToolboxContributions);
+        Assert.Equal(priorToolbox.Groups.AsEnumerable(), currentToolbox.Groups.Take(3));
+        Assert.Equal("bpmn:toolbox:flow", currentToolbox.Groups[3].GroupId.Value);
+        Assert.Equal(4, currentToolbox.Groups.Length);
+        Assert.Equal(2, currentToolbox.ConnectionItems.Length);
+        Assert.Equal(priorToolbox.Sections.AsEnumerable(), currentToolbox.Sections.AsEnumerable());
+        Assert.Equal(8, currentToolbox.Items.Length);
+        Assert.All(currentToolbox.Items, item => Assert.Equal(
+            Assert.Single(priorToolbox.Items, previous => previous.ItemId == item.ItemId).ElementTypeId,
+            item.ElementTypeId));
+        Assert.Equal(prior.ToolboxPlacementRegistrations.Where(registration =>
+                currentToolbox.Items.Any(item => item.ItemId == registration.ToolboxItemId)),
             current.ToolboxPlacementRegistrations);
         Assert.Equal(prior.PropertiesSchemas, current.PropertiesSchemas.Where(
-            schema => schema.SemanticTypeId != BpmnSemanticTypes.SequenceFlow));
+            schema => schema.SemanticTypeId != BpmnSemanticTypes.SequenceFlow && schema.SemanticTypeId != BpmnSemanticTypes.MessageFlow && schema.SemanticTypeId != BpmnSemanticTypes.Participant));
         var flowSchema = Assert.Single(current.PropertiesSchemas,
             schema => schema.SemanticTypeId == BpmnSemanticTypes.SequenceFlow);
         Assert.Equal(BpmnSemanticProperties.Name, Assert.Single(flowSchema.Fields).SemanticPropertyKey);
-        Assert.Equal(prior.ModelValidationRules, current.ModelValidationRules);
-        Assert.Equal(prior.CommandHandlers.Length + 7, current.CommandHandlers.Length);
-        Assert.Equal(prior.HistoryPolicies.Length + 7, current.HistoryPolicies.Length);
+        Assert.Equal(prior.ModelValidationRules, current.ModelValidationRules.Where(rule => rule is not BpmnMessageFlowValidationRule && rule is not BpmnPoolFlowValidationRule));
+        Assert.Single(current.ModelValidationRules, rule => rule is BpmnMessageFlowValidationRule);
+        // A2.4 adds Smart Create, its focused replay, and Auto Points to the A2.3 registrations.
+        Assert.Equal(prior.CommandHandlers.Length + 21, current.CommandHandlers.Length);
+        Assert.Equal(prior.HistoryPolicies.Length + 19, current.HistoryPolicies.Length);
+        Assert.Single(current.CommandHandlers, registration => registration.TypeId == BpmnSmartCreateCommand.KnownTypeId);
+        Assert.Single(current.HistoryPolicies, registration => registration.TypeId == BpmnSmartCreateCommand.KnownTypeId);
+        Assert.Single(current.CommandHandlers, registration => registration.TypeId == BpmnAutoPointsCommand.KnownTypeId);
+        Assert.Single(current.HistoryPolicies, registration => registration.TypeId == BpmnAutoPointsCommand.KnownTypeId);
+        Assert.Single(current.CommandHandlers, registration => registration.TypeId == BpmnAutoArrangeCommand.KnownTypeId);
+        Assert.Single(current.HistoryPolicies, registration => registration.TypeId == BpmnAutoArrangeCommand.KnownTypeId);
+        Assert.Single(current.CommandHandlers, registration =>
+            registration.TypeId == SetBpmnPoolParticipantCommand.KnownTypeId);
+        Assert.Single(current.HistoryPolicies, registration =>
+            registration.TypeId == SetBpmnPoolParticipantCommand.KnownTypeId);
+        Assert.Single(current.CommandHandlers, registration =>
+            registration.TypeId == ChangeBpmnElementTypeCommand.KnownTypeId);
+        Assert.Single(current.CommandValidators, registration =>
+            registration.TypeId == ChangeBpmnElementTypeCommand.KnownTypeId);
+        Assert.Single(current.HistoryPolicies, registration =>
+            registration.TypeId == ChangeBpmnElementTypeCommand.KnownTypeId);
         Assert.Equal(BpmnModelProfiles.Definitions, current.ModelProfileDefinitions);
         Assert.Single(current.BackgroundActions);
         Assert.DoesNotContain(
@@ -170,7 +206,7 @@ public sealed class PhaseN100OptionalProfilesAndCollaborationArchitectureTests
     }
 
     [Fact]
-    public void N100DoesNotIntroduceDeferredPoolLaneStageOrMessageFlowSemantics()
+    public void A22AddsMessageFlowWithoutIntroducingBpmnPoolLaneOrStageSemantics()
     {
         var semanticTypeNames = typeof(BpmnSemanticTypes)
             .GetProperties(BindingFlags.Public | BindingFlags.Static)
@@ -180,7 +216,7 @@ public sealed class PhaseN100OptionalProfilesAndCollaborationArchitectureTests
         Assert.DoesNotContain("Pool", semanticTypeNames);
         Assert.DoesNotContain("Lane", semanticTypeNames);
         Assert.DoesNotContain("Stage", semanticTypeNames);
-        Assert.DoesNotContain("MessageFlow", semanticTypeNames);
+        Assert.Contains("MessageFlow", semanticTypeNames);
     }
 
     private static string ReadAllProductionSource() => string.Join(

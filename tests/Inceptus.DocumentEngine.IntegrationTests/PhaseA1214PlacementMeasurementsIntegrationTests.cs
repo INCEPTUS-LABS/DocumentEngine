@@ -43,11 +43,11 @@ public sealed class PhaseA1214PlacementMeasurementsIntegrationTests(ITestOutputH
             .Sum(item => item.Calls + item.Routes);
         var regions = before.CurrentScene!.SpatialPresentationPlan!.Regions.OrderBy(region => region.Bounds.Top).ToArray();
         Assert.Equal(3, regions.Length);
-        Assert.Equal(nodeCount, before.ProjectedGraph!.NodeCount);
+        Assert.Equal(nodeCount, before.ProjectedGraph!.Nodes.Count(node => node.RegionEnvelope is null));
         var samples = new List<Sample>();
         var armed = Stopwatch.GetTimestamp();
         var armingReuses = test.Pipeline.PlacementReuses;
-        selection.Select(new ToolboxItemId("bpmn:toolbox:manual-task"));
+        selection.Select(new ToolboxItemId("bpmn:toolbox:task"));
         var armingMs = Stopwatch.GetElapsedTime(armed).TotalMilliseconds;
         var armingCompositions = test.Pipeline.PlacementReuses - armingReuses;
 

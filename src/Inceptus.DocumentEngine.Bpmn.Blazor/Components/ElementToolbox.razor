@@ -1,0 +1,68 @@
+@using System.Globalization
+@using Inceptus.DocumentEngine.Bpmn.Blazor.Presentation
+@using Inceptus.DocumentEngine.Contracts.Primitives
+@using Inceptus.DocumentEngine.Contracts.Toolbox
+@using Microsoft.AspNetCore.Components.Web
+@inject Microsoft.Extensions.Localization.IStringLocalizer<ModelerStrings> Text
+
+@if (State is { } state)
+{
+    <div class="element-actions" style="@Position(state.ActionsPosition.X, state.ActionsPosition.Y)"
+         role="group" aria-label="@Text["ElementToolbox_Actions"]" data-element-toolbox-source="@state.VisualId.Value"
+         @onpointerdown:stopPropagation @onpointerup:stopPropagation @onclick:stopPropagation @onwheel:stopPropagation
+         @onkeydown="KeyDown" @onkeydown:stopPropagation>
+        <button @ref="_propertiesButton" type="button" title="@Text["ElementToolbox_PropertiesHint"]" aria-label="@Text["ElementToolbox_Properties"]" @onclick="Properties"><span aria-hidden="true">⚙</span></button>
+        <button type="button" title="@Text["ElementToolbox_AutoPoints"]" aria-label="@Text["ElementToolbox_AutoPoints"]" disabled="@(!state.CanAutoPoints)" @onclick="AutoPoints"><svg width="23" height="23" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m6 6 12 12M6 18 18 6"/><circle cx="5" cy="5" r="3"/><circle cx="19" cy="5" r="3"/><circle cx="5" cy="19" r="3"/><circle cx="19" cy="19" r="3"/></svg></button>
+        <button type="button" class="destructive" title="@Text["ElementToolbox_Delete"]" aria-label="@Text["ElementToolbox_Delete"]" disabled="@(!state.CanDelete)" @onclick="Delete"><svg width="23" height="23" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 9v9m4-9v9"/></svg></button>
+    </div>
+    @if (!state.Candidates.IsEmpty)
+    {
+        <div class="element-creation" style="@(Position(state.CreationPosition.X, state.CreationPosition.Y) + FormattableString.Invariant($"width:{state.CreationWidth}px;"))"
+             role="group" aria-label="@Text["ElementToolbox_Create"]"
+             @onpointerdown:stopPropagation @onpointerup:stopPropagation @onclick:stopPropagation @onwheel:stopPropagation
+             @onkeydown="KeyDown" @onkeydown:stopPropagation>
+            @foreach (var group in state.Candidates.GroupBy(item => item.GroupId))
+            {
+                <div class="element-creation-row" role="group" aria-label="@Text[ModelerLabels.ToolboxKey(group.Key.Value)!]">
+                    <span class="element-group-name">@Text[ModelerLabels.ToolboxKey(group.Key.Value)!]</span>
+                    <div class="element-candidates">
+                        @foreach (var item in group)
+                        {
+                            <button type="button" title="@ModelerLabels.ToolboxLabel(Text, item)" aria-label="@ModelerLabels.ToolboxLabel(Text, item)"
+                                    data-smart-create-item="@item.ItemId.Value" data-semantic-type="@item.ElementTypeId.Value"
+                                    @ref="_candidateButtons[item.ItemId]" @onclick="() => CreateAndFocusAsync(item.ItemId)" @key="item.ItemId">
+                                <ElementToolboxIcon IconKey="@item.Icon.IconKey" />
+                            </button>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public ElementToolboxState? State { get; set; }
+    [Parameter] public EventCallback Properties { get; set; }
+    [Parameter] public EventCallback AutoPoints { get; set; }
+    [Parameter] public EventCallback Delete { get; set; }
+    [Parameter] public EventCallback<ToolboxItemId> Create { get; set; }
+    [Parameter] public EventCallback Dismiss { get; set; }
+    private ElementReference _propertiesButton;
+    private readonly Dictionary<ToolboxItemId, ElementReference> _candidateButtons = [];
+    private ToolboxItemId? _restoreFocus;
+    private async Task CreateAndFocusAsync(ToolboxItemId itemId)
+    {
+        await Create.InvokeAsync(itemId);
+        _restoreFocus = itemId;
+    }
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (State is not { } state || _restoreFocus is not { } itemId) return;
+        _restoreFocus = null;
+        await (state.Candidates.Any(item => item.ItemId == itemId) && _candidateButtons.TryGetValue(itemId, out var button)
+            ? button : _propertiesButton).FocusAsync(preventScroll: true);
+    }
+    private static string Position(double x, double y) => FormattableString.Invariant($"left:{x}px;top:{y}px;");
+    private Task KeyDown(KeyboardEventArgs args) => args.Key == "Escape" ? Dismiss.InvokeAsync() : Task.CompletedTask;
+}

@@ -372,10 +372,14 @@ public sealed class PhaseA122PanSceneReuseIntegrationTests
             return await PlaceActivityAsync("service-task", scenePoint);
         }
 
-        internal async Task<VisualStateSnapshot> PlaceActivityAsync(string toolboxName, PointD scenePoint)
+        internal async Task<VisualStateSnapshot> PlaceActivityAsync(
+            string toolboxName, PointD scenePoint, bool switchToRequestedType = true)
         {
             var selection = new ToolboxSelectionState();
-            selection.Select(new ToolboxItemId($"bpmn:toolbox:{toolboxName}"));
+            // A2.1 places the family default; concrete markers are chosen through the domain command.
+            var itemId = new ToolboxItemId($"bpmn:toolbox:{toolboxName}");
+            selection.Select(composition.ToolboxPlacementCatalog.TryGetRegistration(itemId, out _)
+                ? itemId : new ToolboxItemId("bpmn:toolbox:task"));
             var placement = new ToolboxPlacementController(composition.ToolboxPlacementCatalog,
                 selection, composition.DocumentCreationIdentityProvider, composition.SpatialEditPlanners);
             var css = State.CurrentScene!.ViewportTransform.TransformPoint(scenePoint);
@@ -383,7 +387,24 @@ public sealed class PhaseA122PanSceneReuseIntegrationTests
             var result = await placement.TryPlaceAtCssPointAsync(session, css);
             Assert.True(result.IsCommitted, string.Join("; ", result.Diagnostics.Select(item => item.Message)));
             await session.WaitForIdleAsync();
-            return Snapshot.VisualModel.VisualStates.Single(item => item.Id == result.CreatedVisualStateId);
+            var visual = Snapshot.VisualModel.VisualStates.Single(item => item.Id == result.CreatedVisualStateId);
+            if (switchToRequestedType)
+            {
+                await SwitchActivityTypeAsync(visual, toolboxName);
+            }
+            return visual;
+        }
+
+        internal async Task SwitchActivityTypeAsync(VisualStateSnapshot visual, string toolboxName)
+        {
+            var requestedType = new ToolboxCatalog(BpmnPluginRegistration.N91.ToolboxContributions)
+                .Items.Single(item => item.ItemId.Value == $"bpmn:toolbox:{toolboxName}").ElementTypeId;
+            var current = Snapshot.SemanticModel.Elements.Single(item => item.Id == visual.SemanticElementId);
+            if (current.TypeId != requestedType)
+            {
+                await ExecuteAsync(new ChangeBpmnElementTypeCommand(Snapshot.DocumentId, Snapshot.Revision,
+                    current.Id, requestedType));
+            }
         }
 
         internal async Task AssertPanReusedAsync()
@@ -420,6 +441,7 @@ public sealed class PhaseA122PanSceneReuseIntegrationTests
                 PoolA, State.ActiveScopeId, OrganizationalPoolCreationMode.AdoptEligibleUnassigned, "Operations"));
             await ExecuteAsync(new CreateOrganizationalPoolCommand(Snapshot.DocumentId, Snapshot.Revision,
                 PoolB, State.ActiveScopeId, OrganizationalPoolCreationMode.Empty, "Fulfillment"));
+            await BpmnModelerTestComposition.AssignSharedParticipantAsync(ExecuteAsync, () => Snapshot, PoolA, PoolB);
             var regions = Snapshot.VisualModel.RoutingScopes!.Value.Single(scope => scope.ScopeId == State.ActiveScopeId).Geometry.Regions;
             var capacity = regions.Single(region => region.ContainerSemanticElementId == PoolA).ExpandedHeight;
             foreach (var region in regions.Where(region => region.ContainerSemanticElementId != PoolA && region.ExpandedHeight < capacity))
@@ -427,10 +449,10 @@ public sealed class PhaseA122PanSceneReuseIntegrationTests
                     Snapshot.Revision, State.ActiveScopeId, region.Id, capacity));
             var flow = Snapshot.SemanticModel.Relationships.Single(item => item.Id == BpmnDemoPipeline.ThirdSequenceFlowId);
             await ExecuteAsync(new AssignOrganizationalElementCommand(Snapshot.DocumentId, Snapshot.Revision, flow.TargetId, PoolB));
-            var unassigned = Snapshot.SemanticModel.Elements.First(item => item.Id != flow.SourceId &&
-                item.Id != flow.TargetId && BpmnSemanticTypes.IsFlowNode(item.TypeId) &&
-                item.AttachedToElementId is null && Snapshot.SemanticModel.GetScope(item.Id).Id == State.ActiveScopeId);
-            await ExecuteAsync(new UnassignOrganizationalElementCommand(Snapshot.DocumentId, Snapshot.Revision, unassigned.Id));
+            await ExecuteAsync(new CreateBpmnTaskCommand(Snapshot.DocumentId, Snapshot.Revision,
+                new SemanticElementId("test:unassigned"), new VisualStateId("test:unassigned:visual"),
+                new PointD(1300d, 50d), new SizeD(120d, 80d), "UNASSIGNED", "Unassigned", 999,
+                VisualPlacementMode.Pinned, targetScopeId: State.ActiveScopeId));
         }
 
         internal static async Task<Fixture> CreateAsync(DocumentCanvasComposition? suppliedComposition = null)

@@ -29,7 +29,7 @@ public sealed partial class Canvas2DSpatialPoolInteractionTests
         var stateBefore = fixture.State;
         var regionBefore = Destination(fixture, Fixture.PoolA);
         var beforeTrace = ObservePlacementStability("before", fixture);
-        var projectedNodes = stateBefore.ProjectedGraph!.Nodes.ToDictionary(node => node.Source.VisualStateId!);
+        var projectedNodes = stateBefore.ProjectedGraph!.Nodes.Where(node => node.RegionEnvelope is null).ToDictionary(node => node.Source.VisualStateId!);
         var displayedBefore = projectedNodes.Keys.ToDictionary(id => id, id => fixture.Node(id).Bounds);
         var effectiveBefore = stateBefore.LayoutResult!.Nodes.ToDictionary(node => node.ProjectedObjectId, node => node.Bounds);
         var point = new PointD(1100d, 300d);
@@ -72,14 +72,14 @@ public sealed partial class Canvas2DSpatialPoolInteractionTests
             await SetOrganizationalGraphicsAsync(fixture, false);
         }
 
-        var insertions = new[] { "task", "task", "task", "timer-catch-event", "exclusive-gateway", "task" };
+        var insertions = new[] { "task", "task", "task", "message-catch-event", "exclusive-gateway", "task" };
         foreach (var tool in insertions)
         {
             var before = fixture.Document;
             var stateBefore = fixture.State;
             var region = Destination(fixture, Fixture.PoolA);
             var point = FreeTaskCenter(fixture, region);
-            var oldNodes = stateBefore.ProjectedGraph!.Nodes.ToDictionary(node => node.Source.VisualStateId!);
+            var oldNodes = stateBefore.ProjectedGraph!.Nodes.Where(node => node.RegionEnvelope is null).ToDictionary(node => node.Source.VisualStateId!);
             var oldDisplayed = oldNodes.Keys.ToDictionary(id => id, id => fixture.Node(id).Bounds);
             var oldGeometry = stateBefore.LayoutResult!.Nodes.ToDictionary(node => node.ProjectedObjectId);
 
@@ -88,7 +88,7 @@ public sealed partial class Canvas2DSpatialPoolInteractionTests
             Assert.True(result.IsCommitted, Diagnostics(result.Diagnostics));
             var createdId = Assert.IsType<VisualStateId>(result.CreatedVisualStateId);
             var current = fixture.Document;
-            var afterDisplayed = fixture.State.ProjectedGraph!.Nodes.ToDictionary(node => node.Source.VisualStateId!,
+            var afterDisplayed = fixture.State.ProjectedGraph!.Nodes.Where(node => node.RegionEnvelope is null).ToDictionary(node => node.Source.VisualStateId!,
                 node => fixture.Node(node.Source.VisualStateId!).Bounds);
             AssertUnrelatedVisualsUnchanged(before, current);
             Assert.Equal(region.Id, Destination(fixture, Fixture.PoolA).Id);
@@ -137,7 +137,7 @@ public sealed partial class Canvas2DSpatialPoolInteractionTests
     private static PointD FreeTaskCenter(Fixture fixture, Canvas2DSpatialRegion region)
     {
         var local = region.MapSceneToLocal(region.Bounds);
-        var bodies = fixture.State.ProjectedGraph!.Nodes.Select(node => fixture.Node(node.Source.VisualStateId!).Bounds).ToArray();
+        var bodies = fixture.State.ProjectedGraph!.Nodes.Where(node => node.RegionEnvelope is null).Select(node => fixture.Node(node.Source.VisualStateId!).Bounds).ToArray();
         for (var y = 40d; y + 40d <= local.Bottom; y += 20d)
         {
             for (var x = 60d; x + 60d <= local.Right; x += 20d)
@@ -177,7 +177,7 @@ public sealed partial class Canvas2DSpatialPoolInteractionTests
         var frame = state.CurrentScene!.Items.Single(item => item.Origin.SemanticElementId == Fixture.PoolA &&
             item.Origin.StableSourceKey?.EndsWith(":pool-background", StringComparison.Ordinal) == true);
         var layout = state.LayoutResult!.Nodes.ToDictionary(node => node.ProjectedObjectId, node => node.Bounds);
-        var nodeTrace = state.ProjectedGraph!.Nodes.OrderBy(node => node.Source.VisualStateId!.Value, StringComparer.Ordinal)
+        var nodeTrace = state.ProjectedGraph!.Nodes.Where(node => node.RegionEnvelope is null).OrderBy(node => node.Source.VisualStateId!.Value, StringComparer.Ordinal)
             .Select(node =>
             {
                 var visual = fixture.Visual(node.Source.VisualStateId!);

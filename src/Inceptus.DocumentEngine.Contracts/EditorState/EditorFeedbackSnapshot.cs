@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using Inceptus.DocumentEngine.Contracts.ConnectionCreation;
 using Inceptus.DocumentEngine.Contracts.Geometry;
 using Inceptus.DocumentEngine.Contracts.Properties;
 using Inceptus.DocumentEngine.Contracts.Toolbox;
@@ -10,6 +11,15 @@ namespace Inceptus.DocumentEngine.Contracts.EditorState;
 /// </summary>
 public sealed class EditorFeedbackSnapshot : IEquatable<EditorFeedbackSnapshot>
 {
+    public EditorFeedbackSnapshot(ElementConnectionPreview connection)
+        : this(ElementConnectionPreview.FeedbackId, ElementConnectionPreview.FeedbackId,
+            presentationMode: EditorFeedbackPresentationMode.ContributorOnly)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        ElementConnection = connection;
+    }
+
+    public ElementConnectionPreview? ElementConnection { get; }
     public EditorFeedbackSnapshot(string id, Canvas2DSpatialResizeFeedback spatialResize)
         : this(id, Canvas2DSpatialResizeFeedback.FeedbackKind,
             presentationMode: EditorFeedbackPresentationMode.ContributorOnly)
@@ -84,6 +94,7 @@ public sealed class EditorFeedbackSnapshot : IEquatable<EditorFeedbackSnapshot>
         Properties.Equals(other.Properties) &&
         Equals(PlacementPreview, other.PlacementPreview) &&
         Equals(SpatialResize, other.SpatialResize) &&
+        Equals(ElementConnection, other.ElementConnection) &&
         PresentationMode == other.PresentationMode;
 
     public override bool Equals(object? obj) => Equals(obj as EditorFeedbackSnapshot);
@@ -103,6 +114,7 @@ public sealed class EditorFeedbackSnapshot : IEquatable<EditorFeedbackSnapshot>
         hash.Add(PresentationMode);
         hash.Add(PlacementPreview);
         hash.Add(SpatialResize);
+        hash.Add(ElementConnection);
         return hash.ToHashCode();
     }
 }

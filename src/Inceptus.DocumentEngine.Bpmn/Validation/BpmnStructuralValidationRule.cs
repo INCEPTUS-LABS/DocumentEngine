@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using Inceptus.DocumentEngine.Bpmn.Semantics;
+using Inceptus.DocumentEngine.Contracts.Presentation;
 using Inceptus.DocumentEngine.Contracts.Primitives;
 using Inceptus.DocumentEngine.Contracts.Semantics;
 using Inceptus.DocumentEngine.Contracts.Validation;
@@ -19,6 +20,15 @@ public sealed class BpmnStructuralValidationRule : IModelValidationRule
     public ImmutableArray<ModelValidationIssue> Validate(ModelValidationContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
+        if (context.PresentationContext is DocumentPresentationContext)
+        {
+            return context.PresentationPlan!.ScopePlacements
+                .OrderBy(static placement => placement.ScopeId.Value, StringComparer.Ordinal)
+                .SelectMany(placement => Validate(new ModelValidationContext(context.Document, placement.ScopeId)))
+                .DistinctBy(static issue => issue.Id)
+                .ToImmutableArray();
+        }
+
         var document = context.Document;
         var activeScopeId = context.ActiveScopeId;
         var allNodes = document.SemanticModel.Elements

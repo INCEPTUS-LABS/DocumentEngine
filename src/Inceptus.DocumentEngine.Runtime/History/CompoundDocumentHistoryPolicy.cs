@@ -19,9 +19,9 @@ internal sealed class CompoundDocumentHistoryPolicy : ICommandHistoryPolicy
     {
         var beforeScopes = before.VisualModel.RoutingScopes ?? [];
         var afterScopes = committed.VisualModel.RoutingScopes ?? [];
-        var afterConnectors = afterScopes.SelectMany(static scope => scope.Connectors)
+        var afterConnectors = committed.VisualModel.EnumerateConnectorRoutingRecords()
             .ToDictionary(static record => record.VisualStateId);
-        var routingDeltas = beforeScopes.SelectMany(static scope => scope.Connectors)
+        var routingDeltas = before.VisualModel.EnumerateConnectorRoutingRecords()
             .Where(record => afterConnectors.TryGetValue(record.VisualStateId, out var after) &&
                 after.RoutingType != record.RoutingType)
             .Select(record => new ConnectorRoutingTypeHistoryDelta(record.VisualStateId, record.RoutingType,

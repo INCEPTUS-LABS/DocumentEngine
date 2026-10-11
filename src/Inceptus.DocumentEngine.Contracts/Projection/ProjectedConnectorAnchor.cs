@@ -16,8 +16,14 @@ public sealed class ProjectedConnectorAnchor : IEquatable<ProjectedConnectorAnch
         ConnectorAnchorRoleCapability roleCapability,
         int order,
         int sideCount,
-        ResolvedConnectorAnchorKind kind)
+        ResolvedConnectorAnchorKind kind) : this(id, side, roleCapability, order, sideCount, kind, null) { }
+
+    public ProjectedConnectorAnchor(ConnectorAnchorId id, ConnectorAnchorSide side, ConnectorAnchorRoleCapability roleCapability,
+        int order, int sideCount, ResolvedConnectorAnchorKind kind, double? normalizedPosition)
     {
+        if (normalizedPosition is { } position && (!double.IsFinite(position) || position <= 0 || position >= 1))
+            throw new ArgumentOutOfRangeException(nameof(normalizedPosition));
+        NormalizedPosition = normalizedPosition;
         ArgumentNullException.ThrowIfNull(id);
         if (!Enum.IsDefined(side))
         {
@@ -103,6 +109,8 @@ public sealed class ProjectedConnectorAnchor : IEquatable<ProjectedConnectorAnch
 
     public int SideCount { get; }
 
+    public double? NormalizedPosition { get; }
+
     public ResolvedConnectorAnchorKind Kind { get; }
 
     public static ProjectedConnectorAnchor FromResolved(
@@ -116,7 +124,7 @@ public sealed class ProjectedConnectorAnchor : IEquatable<ProjectedConnectorAnch
             anchor.RoleCapability,
             anchor.Order,
             sideCount,
-            anchor.Kind);
+            anchor.Kind, anchor.NormalizedPosition);
     }
 
     public bool Allows(ConnectorAnchorRole role) => RoleCapability.Allows(role);
@@ -129,7 +137,7 @@ public sealed class ProjectedConnectorAnchor : IEquatable<ProjectedConnectorAnch
         RoleCapability == other.RoleCapability &&
         Order == other.Order &&
         SideCount == other.SideCount &&
-        Kind == other.Kind;
+        Kind == other.Kind && NormalizedPosition == other.NormalizedPosition;
 
     public override bool Equals(object? obj) => Equals(obj as ProjectedConnectorAnchor);
 
@@ -139,7 +147,7 @@ public sealed class ProjectedConnectorAnchor : IEquatable<ProjectedConnectorAnch
         RoleCapability,
         Order,
         SideCount,
-        Kind);
+        Kind, NormalizedPosition);
 }
 
 /// <summary>
@@ -148,6 +156,7 @@ public sealed class ProjectedConnectorAnchor : IEquatable<ProjectedConnectorAnch
 /// </summary>
 public static class ProjectedConnectorAnchorMetadata
 {
+    public const string Position = "inceptus.projection:connector-anchor-position";
     public const string AnchorId = "inceptus.projection:connector-anchor-id";
     public const string Side = "inceptus.projection:connector-anchor-side";
     public const string RoleCapability =
@@ -167,6 +176,8 @@ public static class ProjectedConnectorAnchorMetadata
             new(Order, PropertyValue.FromInteger(anchor.Order)),
             new(SideCount, PropertyValue.FromInteger(anchor.SideCount)),
             new(Kind, PropertyValue.FromInteger((int)anchor.Kind)),
+            .. anchor.NormalizedPosition is { } position
+                ? new KeyValuePair<string, PropertyValue>[] { new(Position, PropertyValue.FromNumber(position)) } : [],
         ]);
     }
 
@@ -215,13 +226,15 @@ public static class ProjectedConnectorAnchorMetadata
 
         try
         {
+            if (properties.TryGetValue(Position, out var authored) && authored.Kind != PropertyValueKind.Number) return false;
             anchor = new ProjectedConnectorAnchor(
                 new ConnectorAnchorId(anchorId),
                 side,
                 roleCapability,
                 (int)order,
                 (int)sideCount,
-                kind);
+                kind, properties.TryGetValue(Position, out var position) &&
+                    position.Kind == PropertyValueKind.Number ? position.NumberValue : null);
             return true;
         }
         catch (ArgumentException)

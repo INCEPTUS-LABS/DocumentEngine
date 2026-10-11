@@ -10,8 +10,8 @@ public sealed partial class DocumentCanvasHostTests
 {
     [Theory]
     [InlineData("BPMN.Task")]
-    [InlineData("BPMN.UserTask")]
-    [InlineData("BPMN.ServiceTask")]
+    [InlineData("BPMN.SubProcess")]
+    [InlineData("BPMN.ExclusiveGateway")]
     public async Task ToolboxRegionRejectionUsesStableDiagnosticSlotAndRetainsStableSceneContent(string type)
     {
         await using var test = await PanComponentFixture.CreateAsync();

@@ -1,4 +1,5 @@
 using Inceptus.DocumentEngine.Bpmn.Semantics;
+using Inceptus.DocumentEngine.Bpmn.ConnectionCreation;
 using Inceptus.DocumentEngine.Contracts.Primitives;
 using Inceptus.DocumentEngine.Contracts.Toolbox;
 
@@ -731,6 +732,40 @@ internal static class BpmnToolboxContribution
 
     internal static ToolboxContribution N91Definition { get; } =
         CreateN91Definition();
+
+    internal static ToolboxContribution A21Definition { get; } = new(
+        N91Definition.Groups,
+        [
+            FamilyItem(StartEventItemId, "Start Event", 0),
+            FamilyItem(MessageCatchEventItemId, "Catch Event", 1),
+            FamilyItem(MessageThrowEventItemId, "Throw Event", 2),
+            FamilyItem(MessageBoundaryEventItemId, "Boundary Event", 3),
+            FamilyItem(EndEventItemId, "End Event", 4),
+            FamilyItem(TaskItemId, "Task", 0),
+            FamilyItem(SubProcessItemId, "SubProcess", 1),
+            FamilyItem(ExclusiveGatewayItemId, "Gateway", 0),
+        ],
+        N91Definition.Sections);
+
+    internal static ToolboxGroupId FlowGroupId { get; } = new("bpmn:toolbox:flow");
+    internal static ToolboxItemId SequenceFlowItemId { get; } = new("bpmn:toolbox:sequence-flow");
+    internal static ToolboxItemId MessageFlowItemId { get; } = new("bpmn:toolbox:message-flow");
+    internal static ToolboxContribution A22Definition { get; } = new(
+        A21Definition.Groups.Add(new ToolboxGroupDefinition(FlowGroupId, "Flow", 3, SectionId,
+            new ToolboxIconDescriptor("bpmn:flow", "→"))), A21Definition.Items, A21Definition.Sections,
+        [
+            new(SequenceFlowItemId, BpmnSequenceFlowConnectionCreationContribution.SequenceFlowCreationId,
+                FlowGroupId, "Sequence Flow", 0, new ToolboxIconDescriptor("bpmn:sequence-flow", "→")),
+            new(MessageFlowItemId, BpmnMessageFlowConnectionCreationContribution.MessageFlowCreationId,
+                FlowGroupId, "Message Flow", 1, new ToolboxIconDescriptor("bpmn:message-flow", "○⇢")),
+        ]);
+
+    private static ToolboxItemDefinition FamilyItem(ToolboxItemId itemId, string displayName, int order)
+    {
+        var concrete = N91Definition.Items.Single(item => item.ItemId == itemId);
+        return new ToolboxItemDefinition(concrete.ItemId, concrete.ElementTypeId,
+            concrete.GroupId, displayName, order, concrete.Icon);
+    }
 
     private static ToolboxContribution CreateN90Definition()
     {

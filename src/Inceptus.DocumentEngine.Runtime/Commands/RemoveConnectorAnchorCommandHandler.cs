@@ -97,7 +97,7 @@ internal sealed class RemoveConnectorAnchorCommandHandler : ICommandHandler
             .Where(anchor => anchor.Id != remove.AnchorId)
             .Select(anchor =>
                 anchor.Side == removed.Side && anchor.Order > removed.Order
-                    ? new ConnectorAnchor(anchor.Id, anchor.Side, anchor.Role, anchor.Order - 1)
+                    ? new ConnectorAnchor(anchor.Id, anchor.Side, anchor.Role, anchor.Order - 1, anchor.NormalizedPosition)
                     : anchor);
         var replacement = new VisualStateSnapshot(
             existing.Id,
@@ -117,7 +117,7 @@ internal sealed class RemoveConnectorAnchorCommandHandler : ICommandHandler
             document.VisualModel.VisualStates.Select(visualState =>
                 visualState.Id == replacement.Id ? replacement : visualState),
             document.VisualModel.ProfileElementPresentations,
-            document.VisualModel.RoutingScopes);
+            document.VisualModel.RoutingScopes, document.VisualModel.DocumentRoutingStates);
         return ValueTask.FromResult(CommandHandlerResult.Success(new DocumentSnapshot(
             document.SemanticModel,
             proposedVisualModel,

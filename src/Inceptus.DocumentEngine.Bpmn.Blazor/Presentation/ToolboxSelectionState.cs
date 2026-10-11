@@ -1,14 +1,22 @@
 using Inceptus.DocumentEngine.Contracts.Primitives;
+using Inceptus.DocumentEngine.Contracts.ConnectionCreation;
 
 namespace Inceptus.DocumentEngine.Bpmn.Blazor.Presentation;
 
 /// <summary>
-/// Component-local Toolbox selection. This state never enters the Editing Session or Document.
+/// Component-local Toolbox selection. Connection capability selection is synchronized
+/// with the Editing Session's transient tool state; neither enters the Document.
 /// </summary>
 internal sealed class ToolboxSelectionState
 {
     private readonly object _sync = new();
     private ToolboxItemId? _selectedItemId;
+    private AnchorConnectionCreationId? _selectedConnectionCreationId;
+
+    internal AnchorConnectionCreationId? SelectedConnectionCreationId
+    {
+        get { lock (_sync) { return _selectedConnectionCreationId; } }
+    }
 
     internal ToolboxItemId? SelectedItemId
     {
@@ -21,17 +29,20 @@ internal sealed class ToolboxSelectionState
         }
     }
 
-    internal bool Select(ToolboxItemId itemId)
+    internal bool Select(ToolboxItemId itemId) => Select(itemId, null);
+
+    internal bool Select(ToolboxItemId itemId, AnchorConnectionCreationId? creationId)
     {
         ArgumentNullException.ThrowIfNull(itemId);
         lock (_sync)
         {
-            if (_selectedItemId == itemId)
+            if (_selectedItemId == itemId && _selectedConnectionCreationId == creationId)
             {
                 return false;
             }
 
             _selectedItemId = itemId;
+            _selectedConnectionCreationId = creationId;
             return true;
         }
     }
@@ -46,6 +57,7 @@ internal sealed class ToolboxSelectionState
             }
 
             _selectedItemId = null;
+            _selectedConnectionCreationId = null;
             return true;
         }
     }
@@ -61,6 +73,7 @@ internal sealed class ToolboxSelectionState
             }
 
             _selectedItemId = null;
+            _selectedConnectionCreationId = null;
             return true;
         }
     }

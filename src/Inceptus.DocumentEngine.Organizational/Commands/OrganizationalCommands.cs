@@ -186,6 +186,27 @@ public sealed class MoveOrganizationalPoolCommand : OrganizationalCommand
     public OrganizationalPoolMoveDirection Direction { get; }
 }
 
+/// <summary>Reorders one Lane-mode Pool only within its explicitly assigned Participant.</summary>
+public sealed class MoveOrganizationalLaneCommand : OrganizationalCommand
+{
+    public static CommandTypeId KnownTypeId { get; } = new("inceptus:organizational/command/move-lane");
+
+    public MoveOrganizationalLaneCommand(DocumentId targetDocumentId, DocumentRevision expectedRevision,
+        SemanticElementId poolId, OrganizationalPoolMoveDirection direction) : base(targetDocumentId, expectedRevision)
+    {
+        ArgumentNullException.ThrowIfNull(poolId);
+        if (!Enum.IsDefined(direction)) throw new ArgumentOutOfRangeException(nameof(direction));
+        PoolId = poolId;
+        Direction = direction;
+    }
+
+    public override CommandTypeId TypeId => KnownTypeId;
+    public override CommandCategory Category => CommandCategory.Visual;
+    public override AuthoritativeDocumentComponent AffectedComponents => AuthoritativeDocumentComponent.VisualModel;
+    public SemanticElementId PoolId { get; }
+    public OrganizationalPoolMoveDirection Direction { get; }
+}
+
 public sealed class DeleteOrganizationalPoolCommand : OrganizationalCommand
 {
     public static CommandTypeId KnownTypeId { get; } =

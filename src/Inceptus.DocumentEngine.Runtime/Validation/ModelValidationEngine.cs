@@ -48,7 +48,7 @@ public sealed class ModelValidationEngine
 
         return new ValidationSnapshot(
             context.Document.DocumentId,
-            context.ActiveScopeId,
+            context.PresentationContext,
             context.Document.Revision,
             issues,
             sourceGeneration);

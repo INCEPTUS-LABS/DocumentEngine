@@ -145,7 +145,7 @@ public sealed class OrganizationalStructuralValidationRule : IModelValidationRul
         SemanticElementId semanticElementId) =>
         context.Document.SemanticModel.TryGetScope(semanticElementId, out var scope) &&
         scope is not null &&
-        scope.Id == context.ActiveScopeId;
+        context.IncludesScope(scope.Id);
 
     private static bool HasTextProperty(
         SemanticElementSnapshot element,

@@ -213,6 +213,7 @@ internal sealed class BpmnNodeProjectionRule : IProjectionRule
     private readonly NodeLabelPlacement? _nameLabelPlacement;
     private readonly NodeLabelInteractionPolicy _nameLabelInteractionPolicy;
     private readonly NodeGeometryInteractionPolicy _geometryInteractionPolicy;
+    private readonly bool _boundaryContainer;
 
     internal BpmnNodeProjectionRule(
         ProjectionRuleId ruleId,
@@ -222,7 +223,8 @@ internal sealed class BpmnNodeProjectionRule : IProjectionRule
         NodeLabelInteractionPolicy nameLabelInteractionPolicy =
             NodeLabelInteractionPolicy.Fixed,
         NodeGeometryInteractionPolicy geometryInteractionPolicy =
-            NodeGeometryInteractionPolicy.FreeMoveAndResize)
+            NodeGeometryInteractionPolicy.FreeMoveAndResize,
+        bool boundaryContainer = false)
     {
         if (requiresNameLabel && !projectsNameLabel)
         {
@@ -237,6 +239,7 @@ internal sealed class BpmnNodeProjectionRule : IProjectionRule
         _nameLabelPlacement = nameLabelPlacement;
         _nameLabelInteractionPolicy = nameLabelInteractionPolicy;
         _geometryInteractionPolicy = geometryInteractionPolicy;
+        _boundaryContainer = boundaryContainer;
     }
 
     public ProjectionRuleResult Project(
@@ -280,6 +283,7 @@ internal sealed class BpmnNodeProjectionRule : IProjectionRule
                 .. BpmnActivitySemanticTypes.IsActivity(element.Element.TypeId)
                     ? new[] { Canvas2DTransientInteractionMetadata.BoundedSelectionEnabled }
                     : [],
+                .. _boundaryContainer ? new[] { Canvas2DNodePresentationMetadata.BoundaryContainer } : [],
             ],
             geometryInteractionPolicy: _geometryInteractionPolicy);
         return ProjectionRuleResult.Success(new ProjectionRuleContribution(

@@ -28,6 +28,26 @@ public sealed class PhaseL5ContextPropertiesArchitectureTests
     }
 
     [Fact]
+    public void PropertiesTaskDataGridUsesTwoToOneColumnsFullWidthRowsAndResponsiveStacking()
+    {
+        var styles = ReadProductionFile("Inceptus.DocumentEngine.Bpmn.Blazor",
+            "Components", "DocumentCanvas.razor.css");
+        var grid = Between(styles, ".properties-form .properties-data-grid {", "}");
+        Assert.Contains("grid-template-columns: minmax(0, 2fr) minmax(0, 1fr)", grid, StringComparison.Ordinal);
+        var labels = Between(styles, ".properties-form .properties-data-grid > label {", "}");
+        Assert.Contains("width: 100%", labels, StringComparison.Ordinal);
+        var fullWidth = Between(styles, ".properties-data-full-width {", "}");
+        Assert.Contains("grid-column: 1 / -1", fullWidth, StringComparison.Ordinal);
+        var narrow = Between(styles, "@container inceptus-properties (max-width: 40rem) {", "}");
+        Assert.Contains(".properties-form .properties-data-grid", narrow, StringComparison.Ordinal);
+        Assert.Contains("grid-template-columns: minmax(0, 1fr)", narrow, StringComparison.Ordinal);
+        Assert.DoesNotContain("order:", grid + labels + fullWidth + narrow, StringComparison.Ordinal);
+        var form = Between(styles, ".properties-form {", "}");
+        Assert.Contains("container: inceptus-properties / inline-size", form, StringComparison.Ordinal);
+        Assert.Contains("overflow: auto", form, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void PropertiesUiIsAViewportFixedDataParametersFormOverlay()
     {
         var component = ReadProductionFile(
@@ -62,9 +82,9 @@ public sealed class PhaseL5ContextPropertiesArchitectureTests
         Assert.Contains("<legend>@Text[\"Properties_Data\"]</legend>", component, StringComparison.Ordinal);
         var dataGroup = Between(
             component,
-            "<fieldset data-property-group=\"data\">",
+            "<fieldset data-property-group=\"data\"",
             "</fieldset>");
-        Assert.Contains("@foreach (var field in draft.DataFields)", dataGroup,
+        Assert.Contains("@foreach (var field in PropertiesDataFieldsForLayout(draft.DataFields, compactDataLayout))", dataGroup,
             StringComparison.Ordinal);
         Assert.Contains("@PropertyFieldLabel(field.Definition)", dataGroup, StringComparison.Ordinal);
         Assert.Contains("@switch (field.Definition.EditorKind)", dataGroup,
@@ -79,7 +99,7 @@ public sealed class PhaseL5ContextPropertiesArchitectureTests
             StringComparison.Ordinal);
         Assert.Contains("id=\"@PropertiesFieldControlId(field.FieldId)\"", dataGroup,
             StringComparison.Ordinal);
-        Assert.Equal(4, CountOccurrences(
+        Assert.Equal(5, CountOccurrences(
             dataGroup,
             "data-property-field-id=\"@field.FieldId.Value\""));
         Assert.Equal(3, CountOccurrences(
@@ -96,18 +116,15 @@ public sealed class PhaseL5ContextPropertiesArchitectureTests
         Assert.DoesNotContain("demo:", dataGroup, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Bpmn", dataGroup, StringComparison.OrdinalIgnoreCase);
 
-        foreach (var identityControlId in new[]
-                 {
-                     "properties-type",
-                 })
-        {
-            var identityControl = Between(
-                component,
-                $"id=\"@DomId(\"{identityControlId}\")\"",
-                "/>");
-            Assert.Contains("readonly", identityControl, StringComparison.Ordinal);
-            Assert.DoesNotContain("@oninput", identityControl, StringComparison.Ordinal);
-        }
+        var parametersGroup = Between(component, "<fieldset data-property-group=\"parameters\">", "</fieldset>");
+        Assert.Contains("draft.Authoritative.CanEditType", parametersGroup, StringComparison.Ordinal);
+        Assert.Contains("<select id=\"@DomId(\"properties-type\")\"", parametersGroup, StringComparison.Ordinal);
+        Assert.Contains("@onchange=\"UpdateTypeDraftValue\"", parametersGroup, StringComparison.Ordinal);
+        Assert.Contains("draft.Authoritative.SwitchableTypes", parametersGroup, StringComparison.Ordinal);
+        Assert.Contains("<input id=\"@DomId(\"properties-type\")\"", parametersGroup, StringComparison.Ordinal);
+        Assert.Contains("readonly", parametersGroup, StringComparison.Ordinal);
+        Assert.DoesNotContain("Subtype", parametersGroup, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("@oninput", parametersGroup, StringComparison.Ordinal);
 
         Assert.DoesNotContain("properties-panel", component, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("grid-template-columns: 1fr", styles,
@@ -225,7 +242,7 @@ public sealed class PhaseL5ContextPropertiesArchitectureTests
             "</form>");
         var dataGroup = Between(
             form,
-            "<fieldset data-property-group=\"data\">",
+            "<fieldset data-property-group=\"data\"",
             "</fieldset>");
 
         Assert.Contains("DocumentCanvasPropertiesDraft", properties, StringComparison.Ordinal);
@@ -249,7 +266,10 @@ public sealed class PhaseL5ContextPropertiesArchitectureTests
 
         Assert.Contains("!dataChanged && !boundsChanged", apply,
             StringComparison.Ordinal);
-        Assert.Contains("(dataChanged ? 1 : 0) + (boundsChanged ? 1 : 0) + (routingChanged ? 1 : 0) > 1", apply, StringComparison.Ordinal);
+        Assert.Contains("(dataChanged ? 1 : 0) + (boundsChanged ? 1 : 0) + (routingChanged ? 1 : 0) +", apply,
+            StringComparison.Ordinal);
+        Assert.Contains("(typeChanged ? 1 : 0) > 1", apply, StringComparison.Ordinal);
+        Assert.Contains("!routingChanged && !typeChanged", apply, StringComparison.Ordinal);
         Assert.Contains("DocumentCanvasPropertiesApplyStatus.NoChange", apply,
             StringComparison.Ordinal);
         Assert.Contains("changedDataField.TryCreateTargetValue", apply,
@@ -292,7 +312,7 @@ public sealed class PhaseL5ContextPropertiesArchitectureTests
             "@if (contextMenu.ConnectorRouteAction?.Kind is");
         Assert.DoesNotContain("disabled", resetAction, StringComparison.Ordinal);
         Assert.DoesNotContain("@onblur", dataGroup, StringComparison.Ordinal);
-        Assert.Equal(2, CountOccurrences(dataGroup, "@onchange="));
+        Assert.Equal(3, CountOccurrences(dataGroup, "@onchange="));
         Assert.DoesNotContain("@onkeydown", dataGroup, StringComparison.Ordinal);
         Assert.DoesNotContain("MoveVisualStateCommand" + Environment.NewLine +
             "            await", apply, StringComparison.Ordinal);
@@ -313,7 +333,7 @@ public sealed class PhaseL5ContextPropertiesArchitectureTests
             .Where(type => !type.IsInterface && typeof(ICommand).IsAssignableFrom(type))
             .ToArray();
 
-        Assert.Contains("@foreach (var field in draft.DataFields)", component,
+        Assert.Contains("@foreach (var field in PropertiesDataFieldsForLayout(draft.DataFields, compactDataLayout))", component,
             StringComparison.Ordinal);
         Assert.Contains("id=\"@PropertiesFieldControlId(field.FieldId)\"", component,
             StringComparison.Ordinal);

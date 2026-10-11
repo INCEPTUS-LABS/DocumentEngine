@@ -20,7 +20,7 @@ public sealed partial class Canvas2DSceneBuilder
         List<Canvas2DSceneItem> items,
         Canvas2DSpatialPresentationPlan plan,
         ICanvas2DConnectorPresentationRouter connectorRouter,
-        List<Diagnostic> diagnostics)
+        List<Diagnostic> diagnostics, ScenePresentationInput? presentation)
     {
         var projectedObjects = EnumerateProjectedObjects(graph)
             .Where(static projected => projected is not null)
@@ -53,6 +53,25 @@ public sealed partial class Canvas2DSceneBuilder
         for (var index = 0; index < items.Count; index++)
         {
             var item = items[index];
+            if (item.Origin.ProjectedObjectId is { } projected && nodesById.TryGetValue(projected, out var envelopeNode) &&
+                envelopeNode.RegionEnvelope is { } envelope)
+            {
+                var canonical = items.First(candidate => candidate.Id == Canvas2DSceneObjectIdentity.ForProjected(projected, "node"));
+                var mapping = canonical.DerivedRegionMapping ?? new Canvas2DDerivedRegionMapping(canonical.Bounds, plan.CoordinateMap);
+                var displayed = mapping.MapBounds(mapping.LogicalBounds);
+                var visible = item.IsVisible && envelope.RegionIds.All(id => plan.TryGetRegion(id, out var region) &&
+                    (presentation is null || presentation.ModelProfileViewState.IsEffectivelyVisible(region.ModelProfileId,
+                        presentation.Document.SemanticModel.ModelProfiles)));
+                var isBody = Canvas2DNodeBodyMetadata.IsNodeBody(item);
+                var delta = new VectorD(0d, (displayed.Top + displayed.Bottom - mapping.LogicalBounds.Top - mapping.LogicalBounds.Bottom) / 2d);
+                items[index] = new Canvas2DSceneItem(item.ProcessPlacement, item.Id, item.Layer, item.ZIndex,
+                    isBody ? Canvas2DSceneGeometry.Rectangle(new RectD(0d, 0d, displayed.Width, displayed.Height)) : item.Geometry,
+                    item.Origin, isBody ? Matrix2D.CreateTranslation(displayed.X, displayed.Y) : item.Transform.Then(Matrix2D.CreateTranslation(delta)),
+                    item.Clip is null ? null : displayed, item.Style, visible, visible ? item.HitTestPolicy : Canvas2DHitTestPolicy.None,
+                    item.PersistentAppearance, item.Metadata, isBody ? displayed : item.Bounds.Translate(delta),
+                    item.SpatialRegion, item.ConnectorPresentationMapping, mapping);
+                continue;
+            }
             if (IsFrameworkConnectorFamilyItem(item, edgesById) ||
                 !TryResolveSpatialPlacement(
                     item,
@@ -525,32 +544,9 @@ public sealed partial class Canvas2DSceneBuilder
                         presented.IsNoRouteFallback),
                     connectorPresentationMapping: route.Mapping));
 
-            var targetArrow = Canvas2DConnectorArrowGeometry.Create(
-                route.DisplayedLogicalPath);
-            if (targetArrow is not null)
-            {
-                items.Add(new Canvas2DSceneItem(
-                    Canvas2DSceneObjectIdentity.ForProjected(
-                        edge.Id,
-                        "connector-target-arrow"),
-                    Canvas2DSceneLayer.Connector,
-                    ConnectorBaseTargetArrowZIndex,
-                    targetArrow,
-                    connector.Origin,
-                    style: new Canvas2DSceneStyle("#000000", "#000000"),
-                    isVisible: presented.IsVisible,
-                    hitTestPolicy: new Canvas2DHitTestPolicy(
-                        Canvas2DHitTestMode.FillOrStroke,
-                        1d),
-                    persistentAppearance: connector.PersistentAppearance,
-                    metadata:
-                    [
-                        new KeyValuePair<string, PropertyValue>(
-                            Canvas2DConnectorArrowMetadata.TargetArrow,
-                            Canvas2DConnectorArrowMetadata.TargetArrowValue),
-                    ],
-                    connectorPresentationMapping: route.Mapping));
-            }
+            items.AddRange(CreateConnectorDecorations(edge, connector.Origin, connector.PersistentAppearance,
+                route.DisplayedLogicalPath, ConnectorVisualMetadata.Resolve(edge.ProjectedProperties),
+                presented.IsVisible, route.Mapping));
 
             RepositionConnectorLabels(
                 edge,
@@ -666,6 +662,7 @@ public sealed partial class Canvas2DSceneBuilder
         (item.Id == Canvas2DSceneObjectIdentity.ForProjected(
              projectedId,
              "connector-target-arrow") ||
+         item.Id == Canvas2DSceneObjectIdentity.ForProjected(projectedId, "connector-source-decoration") ||
          item.Origin.StableSourceKey?.StartsWith(
              "connector-line-jump",
              StringComparison.Ordinal) == true);

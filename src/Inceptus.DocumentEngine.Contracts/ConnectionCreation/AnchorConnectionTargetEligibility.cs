@@ -1,4 +1,5 @@
 using Inceptus.DocumentEngine.Contracts.Documents;
+using Inceptus.DocumentEngine.Contracts.Presentation;
 using Inceptus.DocumentEngine.Contracts.Primitives;
 
 namespace Inceptus.DocumentEngine.Contracts.ConnectionCreation;
@@ -17,6 +18,16 @@ public sealed class AnchorConnectionTargetEligibilityRequest
         ConnectorAnchorId sourceAnchorId,
         SemanticElementId targetSemanticElementId,
         VisualStateId targetVisualStateId)
+        : this(null, null, document, expectedRevision, sourceSemanticElementId, sourceVisualStateId, sourceAnchorId,
+            targetSemanticElementId, targetVisualStateId)
+    {
+    }
+
+    public AnchorConnectionTargetEligibilityRequest(
+        PresentationViewContext? presentationContext, PresentationViewPlan? presentationPlan,
+        DocumentSnapshot document, DocumentRevision expectedRevision,
+        SemanticElementId sourceSemanticElementId, VisualStateId sourceVisualStateId, ConnectorAnchorId sourceAnchorId,
+        SemanticElementId targetSemanticElementId, VisualStateId targetVisualStateId)
     {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(sourceSemanticElementId);
@@ -38,6 +49,9 @@ public sealed class AnchorConnectionTargetEligibilityRequest
         SourceAnchorId = sourceAnchorId;
         TargetSemanticElementId = targetSemanticElementId;
         TargetVisualStateId = targetVisualStateId;
+        ConnectionPresentationRequest.Validate(document, presentationContext, presentationPlan);
+        PresentationContext = presentationContext;
+        PresentationPlan = presentationPlan;
     }
 
     public DocumentSnapshot Document { get; }
@@ -47,6 +61,8 @@ public sealed class AnchorConnectionTargetEligibilityRequest
     public ConnectorAnchorId SourceAnchorId { get; }
     public SemanticElementId TargetSemanticElementId { get; }
     public VisualStateId TargetVisualStateId { get; }
+    public PresentationViewContext? PresentationContext { get; }
+    public PresentationViewPlan? PresentationPlan { get; }
 }
 
 /// <summary>

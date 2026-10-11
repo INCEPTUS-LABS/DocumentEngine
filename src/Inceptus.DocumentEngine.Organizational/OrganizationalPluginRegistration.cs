@@ -58,6 +58,10 @@ public sealed class OrganizationalPluginRegistration
                 MoveOrganizationalPoolCommand.KnownTypeId,
                 new OrganizationalCommandHandler<MoveOrganizationalPoolCommand>(
                     eligibilityPolicy)),
+            Handler<MoveOrganizationalLaneCommand>(MoveOrganizationalLaneCommand.KnownTypeId,
+                new OrganizationalCommandHandler<MoveOrganizationalLaneCommand>(eligibilityPolicy)),
+            Handler<RestoreOrganizationalPoolOrderCommand>(RestoreOrganizationalPoolOrderCommand.KnownTypeId,
+                new RestoreOrganizationalPoolOrderCommandHandler()),
             Handler<DeleteOrganizationalPoolCommand>(
                 DeleteOrganizationalPoolCommand.KnownTypeId,
                 new OrganizationalCommandHandler<DeleteOrganizationalPoolCommand>(
@@ -85,6 +89,8 @@ public sealed class OrganizationalPluginRegistration
                 MoveOrganizationalPoolCommand.KnownTypeId,
                 "inceptus:organizational/validator/move-pool",
                 eligibilityPolicy),
+            Validator<MoveOrganizationalLaneCommand>(MoveOrganizationalLaneCommand.KnownTypeId,
+                "inceptus:organizational/validator/move-lane", eligibilityPolicy),
             Validator<DeleteOrganizationalPoolCommand>(
                 DeleteOrganizationalPoolCommand.KnownTypeId,
                 "inceptus:organizational/validator/delete-pool",
@@ -115,9 +121,8 @@ public sealed class OrganizationalPluginRegistration
             History<UnassignOrganizationalElementCommand>(
                 UnassignOrganizationalElementCommand.KnownTypeId,
                 eligibilityPolicy),
-            History<MoveOrganizationalPoolCommand>(
-                MoveOrganizationalPoolCommand.KnownTypeId,
-                eligibilityPolicy),
+            new CommandHistoryPolicyRegistration(MoveOrganizationalPoolCommand.KnownTypeId, new OrganizationalPoolOrderHistoryPolicy()),
+            new CommandHistoryPolicyRegistration(MoveOrganizationalLaneCommand.KnownTypeId, new OrganizationalPoolOrderHistoryPolicy()),
             History<DeleteOrganizationalPoolCommand>(
                 DeleteOrganizationalPoolCommand.KnownTypeId,
                 eligibilityPolicy),

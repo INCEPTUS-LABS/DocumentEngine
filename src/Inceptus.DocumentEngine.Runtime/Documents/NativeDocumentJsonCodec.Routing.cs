@@ -14,6 +14,7 @@ namespace Inceptus.DocumentEngine.Runtime.Documents;
 internal static partial class NativeDocumentJsonCodec
 {
     private const string LogicalSpace = "scopeLogical";
+    private const string DocumentLogicalSpace = "documentLogical";
 
     private static void WriteRoutingScopes(Utf8JsonWriter writer, ImmutableArray<ScopeRoutingSnapshot> scopes)
     {
@@ -27,33 +28,50 @@ internal static partial class NativeDocumentJsonCodec
             // This sequence is authored priority; never sort it by identity.
             foreach (var connector in scope.Connectors)
             {
-                writer.WriteStartObject();
-                WriteDataString(writer, "visualStateId", connector.VisualStateId.Value);
-                writer.WriteString("routingType", connector.RoutingType switch
-                {
-                    ConnectorRoutingType.Automatic => "automatic",
-                    ConnectorRoutingType.Straight => "straight",
-                    ConnectorRoutingType.Manual => "manual",
-                    _ => throw new InvalidOperationException("Unsupported connector routing type."),
-                });
-                writer.WriteString("outcome", connector.Outcome == ConnectorRoutingOutcome.Path ? "path" : "noRoute");
-                writer.WriteString("space", LogicalSpace);
-                WritePoints(writer, "path", connector.Path);
-                if (connector.ManualDefinition is { } definition)
-                    WritePoints(writer, "manualDefinition", definition);
-                else
-                    writer.WriteNull("manualDefinition");
-                WriteAutomaticProof(writer, connector.AutomaticProof);
-                if (connector.NoRouteReason is null)
-                    writer.WriteNull("noRouteReason");
-                else
-                    writer.WriteString("noRouteReason", "noFeasiblePath");
-                writer.WriteEndObject();
+                WriteConnectorRecord(writer, connector, LogicalSpace);
             }
             writer.WriteEndArray();
             writer.WriteEndObject();
         }
         writer.WriteEndArray();
+    }
+
+    private static void WriteDocumentRoutingStates(Utf8JsonWriter writer, ImmutableArray<DocumentRoutingSnapshot> states)
+    {
+        if (states.IsEmpty) return;
+        writer.WriteStartArray("documentRoutingStates");
+        foreach (var state in states)
+        {
+            writer.WriteStartObject();
+            WriteDataString(writer, "ownerId", state.OwnerId.Value);
+            writer.WriteStartArray("connectors");
+            foreach (var connector in state.Connectors) WriteConnectorRecord(writer, connector, DocumentLogicalSpace);
+            writer.WriteEndArray();
+            writer.WriteEndObject();
+        }
+        writer.WriteEndArray();
+    }
+
+    private static void WriteConnectorRecord(Utf8JsonWriter writer, ConnectorRoutingRecord connector, string space)
+    {
+        writer.WriteStartObject();
+        WriteDataString(writer, "visualStateId", connector.VisualStateId.Value);
+        writer.WriteString("routingType", connector.RoutingType switch
+        {
+            ConnectorRoutingType.Automatic => "automatic",
+            ConnectorRoutingType.Straight => "straight",
+            ConnectorRoutingType.Manual => "manual",
+            _ => throw new InvalidOperationException("Unsupported connector routing type."),
+        });
+        writer.WriteString("outcome", connector.Outcome == ConnectorRoutingOutcome.Path ? "path" : "noRoute");
+        writer.WriteString("space", space);
+        WritePoints(writer, "path", connector.Path);
+        if (connector.ManualDefinition is { } definition) WritePoints(writer, "manualDefinition", definition);
+        else writer.WriteNull("manualDefinition");
+        WriteAutomaticProof(writer, connector.AutomaticProof);
+        if (connector.NoRouteReason is null) writer.WriteNull("noRouteReason");
+        else writer.WriteString("noRouteReason", "noFeasiblePath");
+        writer.WriteEndObject();
     }
 
     private static void WriteScopeGeometry(Utf8JsonWriter writer, ScopeGeometrySnapshot geometry)
@@ -294,6 +312,14 @@ internal static partial class NativeDocumentJsonCodec
             ReadArray(Required(value, "connectors"), $"{path}.connectors", ReadConnectorRecord));
     }
 
+    private static DocumentRoutingSnapshot ReadDocumentRoutingState(JsonElement value, string path)
+    {
+        ValidateObject(value, path, "ownerId", "connectors");
+        return new DocumentRoutingSnapshot(new SemanticElementId(Data(value, "ownerId", path)),
+            ReadArray(Required(value, "connectors"), $"{path}.connectors",
+                static (record, recordPath) => ReadConnectorRecord(record, recordPath, DocumentLogicalSpace)));
+    }
+
     private static ScopeGeometrySnapshot ReadScopeGeometry(JsonElement value, string path)
     {
         ValidateObject(value, path, "space", "policyId", "policyVersion", "layoutAlgorithmId", "configuration",
@@ -358,9 +384,13 @@ internal static partial class NativeDocumentJsonCodec
     }
 
     private static ConnectorRoutingRecord ReadConnectorRecord(JsonElement value, string path)
+        => ReadConnectorRecord(value, path, LogicalSpace);
+
+    private static ConnectorRoutingRecord ReadConnectorRecord(JsonElement value, string path, string space)
     {
         ValidateObject(value, path, "visualStateId", "routingType", "outcome", "space", "path", "manualDefinition", "automaticProof", "noRouteReason");
-        RequireLogicalSpace(value, path);
+        if (!StringComparer.Ordinal.Equals(ReadString(Required(value, "space"), $"{path}.space"), space))
+            throw Structure($"{path}.space", "The connector coordinate space does not match its routing owner.");
         var type = ReadString(Required(value, "routingType"), $"{path}.routingType") switch
         {
             "automatic" => ConnectorRoutingType.Automatic,

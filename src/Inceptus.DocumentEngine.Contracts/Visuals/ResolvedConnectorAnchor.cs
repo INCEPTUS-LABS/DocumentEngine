@@ -20,7 +20,15 @@ public sealed class ResolvedConnectorAnchor : IEquatable<ResolvedConnectorAnchor
         int order,
         ResolvedConnectorAnchorKind kind,
         PredefinedConnectorAnchorDefinitionId? definitionId = null)
+        : this(id, ownerVisualStateId, side, roleCapability, order, kind, definitionId, null) { }
+
+    public ResolvedConnectorAnchor(ConnectorAnchorId id, VisualStateId ownerVisualStateId, ConnectorAnchorSide side,
+        ConnectorAnchorRoleCapability roleCapability, int order, ResolvedConnectorAnchorKind kind,
+        PredefinedConnectorAnchorDefinitionId? definitionId, double? normalizedPosition)
     {
+        if (normalizedPosition is { } position && (!double.IsFinite(position) || position <= 0 || position >= 1))
+            throw new ArgumentOutOfRangeException(nameof(normalizedPosition));
+        NormalizedPosition = normalizedPosition;
         ArgumentNullException.ThrowIfNull(id);
         ArgumentNullException.ThrowIfNull(ownerVisualStateId);
         if (!Enum.IsDefined(side))
@@ -104,6 +112,8 @@ public sealed class ResolvedConnectorAnchor : IEquatable<ResolvedConnectorAnchor
 
     public PredefinedConnectorAnchorDefinitionId? DefinitionId { get; }
 
+    public double? NormalizedPosition { get; }
+
     public bool IsDynamic => Kind == ResolvedConnectorAnchorKind.Dynamic;
 
     public bool Allows(ConnectorAnchorRole role) => RoleCapability.Allows(role);
@@ -117,7 +127,7 @@ public sealed class ResolvedConnectorAnchor : IEquatable<ResolvedConnectorAnchor
         RoleCapability == other.RoleCapability &&
         Order == other.Order &&
         Kind == other.Kind &&
-        DefinitionId == other.DefinitionId;
+        DefinitionId == other.DefinitionId && NormalizedPosition == other.NormalizedPosition;
 
     public override bool Equals(object? obj) => Equals(obj as ResolvedConnectorAnchor);
 
@@ -128,7 +138,7 @@ public sealed class ResolvedConnectorAnchor : IEquatable<ResolvedConnectorAnchor
         RoleCapability,
         Order,
         Kind,
-        DefinitionId);
+        DefinitionId, NormalizedPosition);
 }
 
 public static class ConnectorAnchorReferenceIdentity
@@ -285,7 +295,7 @@ public static class ElementConnectorAnchorResolver
                                 ? ConnectorAnchorRoleCapability.Source
                                 : ConnectorAnchorRoleCapability.Target,
                             anchor.Order,
-                            ResolvedConnectorAnchorKind.Dynamic));
+                            ResolvedConnectorAnchorKind.Dynamic, null, anchor.NormalizedPosition));
                     }
 
                     break;

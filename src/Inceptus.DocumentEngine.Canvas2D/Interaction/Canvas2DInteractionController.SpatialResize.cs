@@ -30,7 +30,7 @@ public sealed partial class Canvas2DInteractionController
         var item = hit is null ? null : state.CurrentScene.Items.FirstOrDefault(item => item.Id == hit.SceneObjectId);
         var candidates = plan.ResizeTargets.Where(target =>
         {
-            if (item is not null && (item.Origin.VisualStateId is not null ||
+            if (item is not null && item.DerivedRegionMapping is null && (item.Origin.VisualStateId is not null ||
                     item.Layer != Canvas2DSceneLayer.Background ||
                     item.Origin.SemanticElementId != plan.Regions.Single(region => region.Id == target.AcquiredRegionId).ContainerSemanticElementId))
                 return false;

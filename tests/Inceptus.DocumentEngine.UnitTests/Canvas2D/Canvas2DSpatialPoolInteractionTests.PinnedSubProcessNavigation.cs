@@ -49,7 +49,7 @@ public sealed partial class Canvas2DSpatialPoolInteractionTests
             state.DocumentId, state.DocumentRevision, taskVisualId,
             new PointD(180d, 160d), VisualPlacementMode.Pinned));
 
-        Assert.Equal(oldGraph.Nodes.AsEnumerable(), fixture.State.ProjectedGraph!.Nodes.AsEnumerable());
+        Assert.Equal(oldGraph.Nodes.AsEnumerable(), fixture.State.ProjectedGraph!.Nodes.Where(node => node.RegionEnvelope is null).AsEnumerable());
         var currentGeometry = Assert.Single(fixture.State.LayoutResult!.Nodes);
         Assert.Equal(deletedGeometry.Bounds, currentGeometry.Bounds);
         Assert.NotSame(deletedGeometry, currentGeometry);
@@ -148,7 +148,7 @@ public sealed partial class Canvas2DSpatialPoolInteractionTests
         var before = fixture.Document;
         var rootScope = fixture.State.ActiveScopeId;
         var parentGeometry = fixture.State.LayoutResult!.Nodes.ToDictionary(node => node.ProjectedObjectId);
-        var parentDisplayed = fixture.State.ProjectedGraph!.Nodes.ToDictionary(
+        var parentDisplayed = fixture.State.ProjectedGraph!.Nodes.Where(node => node.RegionEnvelope is null).ToDictionary(
             node => node.Source.VisualStateId!, node => fixture.Node(node.Source.VisualStateId!).Bounds);
         var elementId = new SemanticElementId("test:pinned-subprocess-recovery:element");
         var visualId = new VisualStateId("test:pinned-subprocess-recovery:visual");

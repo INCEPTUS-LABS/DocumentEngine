@@ -1,5 +1,8 @@
 using Inceptus.DocumentEngine.Bpmn.Semantics;
 using Inceptus.DocumentEngine.Contracts.Publishing;
+using Inceptus.DocumentEngine.Contracts.Diagnostics;
+using Inceptus.DocumentEngine.Contracts.Semantics;
+using System.Collections.Immutable;
 
 namespace Inceptus.DocumentEngine.Bpmn.Publishing;
 
@@ -9,6 +12,16 @@ namespace Inceptus.DocumentEngine.Bpmn.Publishing;
 /// </summary>
 public sealed class BpmnPublishedTokenRoleClassifier : IPublishedTokenRoleClassifier
 {
+    public const string CollaborationUnsupported = "PUBLISH_COLLABORATION_UNSUPPORTED";
+    public ImmutableArray<Diagnostic> ValidateRelationship(SemanticRelationshipSnapshot relationship)
+    {
+        ArgumentNullException.ThrowIfNull(relationship);
+        return relationship.TypeId == BpmnSemanticTypes.MessageFlow
+            ? [new(CollaborationUnsupported, DiagnosticSeverity.Error,
+                "Process publication does not support Message Flow communication between Participants.", relationship.Id.Value)]
+            : [];
+    }
+
     public PublishedTokenRoleClassification Classify(
         PublishedTokenRoleClassificationRequest request)
     {

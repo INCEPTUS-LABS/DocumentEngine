@@ -44,10 +44,24 @@ public static class ConnectorAnchorInsertion
                 $"The insertion index must be between zero and {sideCount} inclusive.");
         }
 
-        var anchors = visualState.ConnectorAnchors.Select(anchor =>
+        var sideAnchors = visualState.ConnectorAnchors.Where(anchor => anchor.Side == side).ToArray();
+        double? position = null;
+        var originals = visualState.ConnectorAnchors.AsEnumerable();
+        if (sideAnchors.Any(anchor => anchor.NormalizedPosition.HasValue))
+        {
+            var positions = sideAnchors.Select(anchor => anchor.NormalizedPosition ??
+                ConnectorAnchorGeometryResolver.ResolveNormalizedPosition(anchor.Order, sideCount)).Order().ToArray();
+            var start = insertionIndex == 0 ? 0d : positions[insertionIndex - 1];
+            var end = insertionIndex == sideCount ? 1d : positions[insertionIndex];
+            position = (start + end) / 2;
+            originals = originals.Select(anchor => anchor.Side == side && anchor.NormalizedPosition is null
+                ? new ConnectorAnchor(anchor.Id, anchor.Side, anchor.Role, anchor.Order,
+                    ConnectorAnchorGeometryResolver.ResolveNormalizedPosition(anchor.Order, sideCount)) : anchor);
+        }
+        var anchors = originals.Select(anchor =>
             anchor.Side == side && anchor.Order >= insertionIndex
-                ? new ConnectorAnchor(anchor.Id, anchor.Side, anchor.Role, anchor.Order + 1)
-                : anchor).Append(new ConnectorAnchor(anchorId, side, role, insertionIndex));
+                ? new ConnectorAnchor(anchor.Id, anchor.Side, anchor.Role, anchor.Order + 1, anchor.NormalizedPosition)
+                : anchor).Append(new ConnectorAnchor(anchorId, side, role, insertionIndex, position));
         return new VisualStateSnapshot(
             visualState.Id,
             visualState.SemanticElementId,

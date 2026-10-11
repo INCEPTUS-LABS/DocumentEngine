@@ -42,7 +42,7 @@ public sealed partial class Canvas2DSceneBuilder
         IReadOnlyDictionary<ProjectedObjectId, Canvas2DMeasuredNodeLabel>? measuredLabels,
         IReadOnlyDictionary<ProjectedObjectId, Canvas2DMeasuredConnectorLabel>? measuredConnectorLabels)
     {
-        if (presentation is null || !ReferenceEquals(visualModel, presentation.Document.VisualModel) ||
+        if (presentation?.PresentationContext is not Inceptus.DocumentEngine.Contracts.Presentation.ProcessScopePresentationContext || !ReferenceEquals(visualModel, presentation.Document.VisualModel) ||
             diagnostics.Count != 0 || overlays.Length > Canvas2DBoundedPresentation.MaximumItems)
         {
             return null;

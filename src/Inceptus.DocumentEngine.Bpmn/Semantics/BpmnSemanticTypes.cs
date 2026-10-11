@@ -64,6 +64,8 @@ public static class BpmnSemanticTypes
 
     public static SemanticTypeId SequenceFlow { get; } = new("BPMN.SequenceFlow");
 
+    public static SemanticTypeId MessageFlow { get; } = new("BPMN.MessageFlow");
+
     public static bool IsFlowNode(SemanticTypeId typeId) =>
         IsEvent(typeId) ||
         BpmnActivitySemanticTypes.IsActivity(typeId) ||
@@ -85,10 +87,7 @@ public static class BpmnSemanticTypes
     }
 
     internal static bool IsGateway(SemanticTypeId typeId) =>
-        typeId == ExclusiveGateway ||
-        typeId == ParallelGateway ||
-        typeId == InclusiveGateway ||
-        typeId == EventBasedGateway;
+        BpmnGatewaySemanticTypes.IsGateway(typeId);
 
     public static bool IsCatchEvent(SemanticTypeId typeId) =>
         BpmnIntermediateEventSemanticTypes.IsCatchEvent(typeId) ||

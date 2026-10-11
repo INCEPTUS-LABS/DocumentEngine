@@ -89,7 +89,7 @@ public sealed partial class EditingSession
                     !artifacts.IsCompatibleWith(
                         state.CurrentScene.DocumentId,
                         state.CurrentScene.SourceRevision,
-                        state.ActiveScopeId))
+                        state.PresentationContext))
                 {
                     return OperationResult(
                         EditingSessionOperationStatus.Rejected,

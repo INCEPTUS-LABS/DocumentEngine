@@ -3,6 +3,7 @@ using Inceptus.DocumentEngine.Canvas2D.Scene;
 using Inceptus.DocumentEngine.Contracts.Documents;
 using Inceptus.DocumentEngine.Contracts.EditorState;
 using Inceptus.DocumentEngine.Contracts.Primitives;
+using Inceptus.DocumentEngine.Contracts.Presentation;
 using Inceptus.DocumentEngine.Contracts.Profiles;
 using Inceptus.DocumentEngine.Contracts.Semantics;
 using Inceptus.DocumentEngine.Runtime.History;
@@ -185,6 +186,14 @@ public sealed partial class EditingSession
         DocumentScopeId scopeId,
         CancellationToken cancellationToken)
     {
+        if (CaptureState().PresentationContext is DocumentPresentationContext)
+        {
+            if (CaptureState().Status != EditingSessionStatus.Ready) return false;
+            var restored = await ChangePresentationContextUnderCommandGateAsync(
+                new ProcessScopePresentationContext(scopeId), cancellationToken).ConfigureAwait(false);
+            return restored.Succeeded;
+        }
+
         var (runTask, immediateResult, _) = BeginScopeNavigationUnderCommandGate(
             scopeId,
             recordHistory: false,

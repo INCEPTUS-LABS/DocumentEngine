@@ -1,3 +1,4 @@
+using Inceptus.DocumentEngine.Contracts.Visuals;
 using Inceptus.DocumentEngine.Blazor.Demo;
 using Inceptus.DocumentEngine.Bpmn.Blazor.Presentation;
 using Inceptus.DocumentEngine.Canvas2D.EditingSession;
@@ -184,6 +185,14 @@ public sealed class PhaseN103NativeDocumentPresentationIntegrationTests
                 rootScopeId,
                 OrganizationalPoolCreationMode.Empty,
                 "Fulfilment"));
+        await BpmnModelerTestComposition.AssignSharedParticipantAsync(async command => await ExecuteCommittedAsync(session, command),
+            document.CaptureSnapshot, PoolAId, PoolBId);
+        var independentId = new SemanticElementId("native:presentation:independent");
+        await ExecuteCommittedAsync(session, new Inceptus.DocumentEngine.Bpmn.Commands.CreateBpmnTaskCommand(document.DocumentId, document.Revision,
+            independentId, new VisualStateId("native:presentation:independent:visual"),
+            new PointD(100d, 100d), new SizeD(120d, 80d), "INDEPENDENT", "Independent", 998,
+            VisualPlacementMode.Pinned, targetScopeId: rootScopeId));
+        await ExecuteCommittedAsync(session, new AssignOrganizationalElementCommand(document.DocumentId, document.Revision, independentId, PoolAId));
         var assigned = document.SemanticModel.ProfileAssignments
             .Where(static assignment =>
                 assignment.ProfileId == OrganizationalModelProfile.Id)
@@ -210,9 +219,9 @@ public sealed class PhaseN103NativeDocumentPresentationIntegrationTests
             new UnassignOrganizationalElementCommand(
                 document.DocumentId,
                 document.Revision,
-                assigned[1]));
+                independentId));
 
-        return (document, assigned[1]);
+        return (document, independentId);
     }
 
     private static async ValueTask ExecuteCommittedAsync(

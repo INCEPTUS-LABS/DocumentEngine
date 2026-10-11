@@ -33,6 +33,9 @@ public sealed partial class OrganizationalPoolSceneContributor
         ArgumentNullException.ThrowIfNull(context);
         var inputs = context.BaseContext.Inputs;
         var pools = OrderedPools(inputs);
+        var previousInputs = context.BaseContext.PreviousInputs;
+        var previousPools = previousInputs is null ? pools : OrderedPools(previousInputs);
+        var hasGroups = pools.Concat(previousPools).Any(pool => OrganizationalSemantics.GetParticipantId(pool) is not null);
         var poolIds = pools.Select(static pool => pool.Id).ToHashSet();
         var unassignedId = UnassignedRegionId(inputs.ScopeId);
         var existing = context.ExistingRegions
@@ -43,7 +46,7 @@ public sealed partial class OrganizationalPoolSceneContributor
             return GeometryFailure("organizational.geometry.unknown-region", "The requested height has no live Pool or Unassigned region.");
 
         var assignmentByVisual = context.BaseContext.ProjectedGraph.Nodes
-            .Where(static node => node.Source.VisualStateId is not null)
+            .Where(static node => node.Source.VisualStateId is not null && node.RegionEnvelope is null)
             .ToDictionary(static node => node.Source.VisualStateId!,
                 node => ResolvePreparationPoolId(inputs, node, poolIds));
         var nodeBounds = context.Nodes.ToDictionary(static node => node.VisualStateId);
@@ -69,8 +72,10 @@ public sealed partial class OrganizationalPoolSceneContributor
         var active = new List<Canvas2DSpatialRegion>();
         var placements = new List<Canvas2DSpatialVisualPlacement>();
         var cursorY = StackTop;
-        foreach (var poolId in pools.Select(static pool => pool.Id).Append(null))
+        for (var poolIndex = 0; poolIndex <= pools.Length; poolIndex++)
         {
+            var pool = poolIndex < pools.Length ? pools[poolIndex] : null;
+            var poolId = pool?.Id;
             var id = poolId is null ? unassignedId : PoolRegionId(poolId);
             var content = poolId is null ? unassignedContent : contentByPool[poolId];
             var members = assignmentByVisual.Where(entry => entry.Value == poolId)
@@ -104,7 +109,13 @@ public sealed partial class OrganizationalPoolSceneContributor
                 regions.Add(new SpatialRegionGeometrySnapshot(id, OrganizationalModelProfile.Id, poolId, height, null, null));
                 continue;
             }
-            var bounds = new RectD(StackLeft + HeaderWidth, cursorY, commonWidth - HeaderWidth, height);
+            var top = existing.TryGetValue(id, out var existingRegion) && existingRegion.ContentBounds is { } priorBounds
+                ? priorBounds.Top : cursorY;
+            // Preserve existing Process-only stacking for explicit ordering/capacity edits.
+            // Group edits retain unrelated region frames and normalize only their members.
+            if (!hasGroups && (context.RequestedRegionHeights.Count > 0 ||
+                    pools.Length != previousPools.Length)) top = cursorY;
+            var bounds = new RectD(StackLeft + HeaderWidth, top, commonWidth - HeaderWidth, height);
             if (!double.IsFinite(bounds.Bottom) || !double.IsFinite(bounds.Right) ||
                 bounds.Bottom <= bounds.Top || bounds.Right <= bounds.Left ||
                 bounds.Bottom > OrganizationalDimensionCapacity.CoordinateBudget ||
@@ -116,8 +127,53 @@ public sealed partial class OrganizationalPoolSceneContributor
             regions.Add(region);
             active.Add(new Canvas2DSpatialRegion(id, OrganizationalModelProfile.Id, poolId, translation, bounds));
             placements.AddRange(members.Select(visual => new Canvas2DSpatialVisualPlacement(visual, id)));
-            cursorY = bounds.Bottom + PoolGap;
+            // New geometry must not reserve a Lane gap that grouping would leave behind
+            // between this Participant and the next block. Authored region tops stay authoritative.
+            var participantId = pool is null ? null : OrganizationalSemantics.GetParticipantId(pool);
+            var nextPool = poolIndex + 1 < pools.Length ? pools[poolIndex + 1] : null;
+            var sameParticipant = participantId is not null && nextPool is not null &&
+                participantId == OrganizationalSemantics.GetParticipantId(nextPool);
+            cursorY = Math.Max(cursorY, bounds.Bottom + (sameParticipant ? 0d : PoolGap));
         }
+        HashSet<SemanticElementId>? affectedParticipants = null;
+        if (previousInputs is not null && existing.Count > 0)
+        {
+            affectedParticipants = [];
+            var oldPools = previousPools.ToDictionary(pool => pool.Id);
+            var newPools = pools.ToDictionary(pool => pool.Id);
+            foreach (var id in oldPools.Keys.Union(newPools.Keys))
+            {
+                oldPools.TryGetValue(id, out var oldPool);
+                newPools.TryGetValue(id, out var newPool);
+                var oldOwner = oldPool is null ? null : OrganizationalSemantics.GetParticipantId(oldPool);
+                var newOwner = newPool is null ? null : OrganizationalSemantics.GetParticipantId(newPool);
+                var regionId = PoolRegionId(id);
+                var next = regions.FirstOrDefault(region => region.Id == regionId);
+                var geometryChanged = !existing.TryGetValue(regionId, out var prior) || next != prior;
+                if (oldOwner != newOwner || geometryChanged)
+                {
+                    if (oldOwner is not null) affectedParticipants.Add(oldOwner);
+                    if (newOwner is not null) affectedParticipants.Add(newOwner);
+                }
+            }
+        }
+        regions = OrganizationalParticipantGrouping.Normalize(pools, regions, affectedParticipants).ToList();
+        if (isActive && hasGroups)
+        {
+            // The existing Unassigned workspace is the trailing movement boundary.
+            // Its derived translation follows the Pool partition; node-local geometry stays authoritative.
+            var index = regions.FindIndex(region => region.Id == unassignedId);
+            var unassigned = regions[index];
+            var bounds = unassigned.ContentBounds!.Value;
+            var top = regions.Where(region => region.ContainerSemanticElementId is not null)
+                .Max(region => region.ContentBounds!.Value.Bottom) + PoolGap;
+            regions[index] = new(unassigned.Id, unassigned.ProfileId, null, unassigned.ExpandedHeight,
+                Matrix2D.CreateTranslation(bounds.Left + ContentPadding, top + ContentPadding),
+                new RectD(bounds.Left, top, bounds.Width, bounds.Height));
+        }
+        active = regions.Where(region => region.IsActive).Select(region => new Canvas2DSpatialRegion(
+            region.Id, region.ProfileId, region.ContainerSemanticElementId, region.LocalToScopeTransform!.Value,
+            region.ContentBounds!.Value)).ToList();
         return Canvas2DScopeGeometryPresentationResult.Success(regions, widths, isActive
             ? new Canvas2DSpatialPresentationPlan(active, placements, Matrix2D.Identity,
                 Canvas2DSpatialCoordinateMap.Identity, unassignedId) : null);

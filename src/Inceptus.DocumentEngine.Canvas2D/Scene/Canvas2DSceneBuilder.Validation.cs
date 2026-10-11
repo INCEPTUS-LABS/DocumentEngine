@@ -512,12 +512,18 @@ public sealed partial class Canvas2DSceneBuilder
             return false;
         }
 
+        if (presentation.PresentationContext is Inceptus.DocumentEngine.Contracts.Presentation.DocumentPresentationContext)
+        {
+            return presentation.Plan?.Contains(element.Id) == true;
+        }
+
         if (element.ContainmentKind == SemanticElementContainmentKind.Document)
         {
             return true;
         }
 
         return element.ContainmentKind == SemanticElementContainmentKind.Scope &&
+            presentation.PresentationContext is Inceptus.DocumentEngine.Contracts.Presentation.ProcessScopePresentationContext &&
             presentation.Document.SemanticModel.TryGetScope(element.Id, out var scope) &&
             scope?.Id == presentation.ActiveScopeId;
     }

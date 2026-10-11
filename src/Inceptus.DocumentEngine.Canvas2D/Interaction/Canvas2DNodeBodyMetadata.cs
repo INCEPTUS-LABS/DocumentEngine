@@ -9,6 +9,8 @@ namespace Inceptus.DocumentEngine.Canvas2D.Interaction;
 internal static class Canvas2DNodeBodyMetadata
 {
     internal const string NodeBody = "inceptus.canvas2d:node-body";
+    internal static PropertyMap DerivedNodeBodyCapability { get; } = new(
+        [new KeyValuePair<string, PropertyValue>(NodeBody, PropertyValue.FromBoolean(true)), Canvas2DSemanticSceneInteractionMetadata.Enabled]);
 
     internal static PropertyMap MoveResizeAndNodeBodyCapability { get; } = new(
     [

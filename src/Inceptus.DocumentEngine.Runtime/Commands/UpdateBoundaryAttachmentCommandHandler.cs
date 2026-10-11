@@ -131,7 +131,7 @@ internal sealed class UpdateBoundaryAttachmentCommandHandler : ICommandHandler
                     ? synchronized
                     : visualState),
             document.VisualModel.ProfileElementPresentations,
-            document.VisualModel.RoutingScopes);
+            document.VisualModel.RoutingScopes, document.VisualModel.DocumentRoutingStates);
         return ValueTask.FromResult(CommandHandlerResult.Success(
             new DocumentSnapshot(
                 document.SemanticModel,

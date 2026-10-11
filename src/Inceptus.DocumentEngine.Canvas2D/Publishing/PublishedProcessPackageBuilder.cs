@@ -10,6 +10,7 @@ using Inceptus.DocumentEngine.Contracts.Canvas2D;
 using Inceptus.DocumentEngine.Contracts.Diagnostics;
 using Inceptus.DocumentEngine.Contracts.Geometry;
 using Inceptus.DocumentEngine.Contracts.Primitives;
+using Inceptus.DocumentEngine.Contracts.Presentation;
 using Inceptus.DocumentEngine.Contracts.Projection;
 using Inceptus.DocumentEngine.Contracts.Publishing;
 using Inceptus.DocumentEngine.Contracts.Semantics;
@@ -62,6 +63,8 @@ public sealed class PublishedProcessPackageBuilder
     public const int DefaultActivityDelayMs = 2000;
     public const double DefaultTokenSpeedPxPerSecond = 300d;
     public const int DefaultMinimumConnectorDurationMs = 150;
+
+    public const string DocumentPresentationUnsupported = "PUBLISH_DOCUMENT_PRESENTATION_UNSUPPORTED";
 
     private const string PackageBuildFailed = "PUBLISH_PACKAGE_BUILD_FAILED";
     private const string InvalidCapture = "PUBLISH_CAPTURE_INVALID";
@@ -139,7 +142,19 @@ public sealed class PublishedProcessPackageBuilder
         EditingSessionPresentationCapture capture)
     {
         ArgumentNullException.ThrowIfNull(capture);
+        if (capture.PresentationContext is DocumentPresentationContext context)
+        {
+            return PublishedProcessPackageBuildResult.Failure(
+            [
+                new Diagnostic(DocumentPresentationUnsupported, DiagnosticSeverity.Error,
+                    "Publication supports Process views only. Open a Process view before publishing; collaboration communication is not execution flow.",
+                    context.OwnerId.Value),
+            ]);
+        }
         var diagnostics = new List<Diagnostic>();
+        foreach (var edge in capture.ProjectedGraph.Edges)
+            if (capture.Document.SemanticModel.TryGetRelationship(edge.Source.SemanticElementId, out var relationship) && relationship is not null)
+                diagnostics.AddRange(_tokenRoleClassifier.ValidateRelationship(relationship));
         ValidateCapture(capture, diagnostics);
         if (HasErrors(diagnostics))
         {
@@ -241,7 +256,10 @@ public sealed class PublishedProcessPackageBuilder
         List<Diagnostic> diagnostics)
     {
         var items = ImmutableArray.CreateBuilder<PublishedPresentationItem>();
+        var containers = capture.ProjectedGraph.Nodes.Where(static node => node.RegionEnvelope is not null)
+            .Select(static node => node.Id).ToHashSet();
         foreach (var item in capture.Scene.Items
+                     .Where(item => item.Origin.ProjectedObjectId is null || !containers.Contains(item.Origin.ProjectedObjectId))
                      .Where(static item =>
                          item.IsVisible &&
                          item.Origin.ProjectedObjectId is not null &&
@@ -346,7 +364,7 @@ public sealed class PublishedProcessPackageBuilder
         var publishedItemIds = presentationItems.Select(static item => item.Id)
             .ToHashSet(StringComparer.Ordinal);
         var nodes = ImmutableArray.CreateBuilder<PublishedPresentationNode>();
-        foreach (var node in capture.ProjectedGraph.Nodes.OrderBy(
+        foreach (var node in capture.ProjectedGraph.Nodes.Where(static node => node.RegionEnvelope is null).OrderBy(
                      static node => node.Source.SemanticElementId.Value,
                      StringComparer.Ordinal))
         {
@@ -415,6 +433,7 @@ public sealed class PublishedProcessPackageBuilder
         var connectorIds = connectors.Select(static connector => connector.Id)
             .ToHashSet(StringComparer.Ordinal);
         var projectedNodes = capture.ProjectedGraph.Nodes
+            .Where(static node => node.RegionEnvelope is null)
             .OrderBy(static node => node.Source.SemanticElementId.Value, StringComparer.Ordinal)
             .ToArray();
         var startIds = projectedNodes

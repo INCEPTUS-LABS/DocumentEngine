@@ -11,7 +11,7 @@ namespace Inceptus.DocumentEngine.UnitTests.Architecture;
 public sealed class PhaseM1BpmnArchitectureTests
 {
     [Fact]
-    public void GenericProjectsDoNotReferenceBpmnAndBpmnReferencesOnlyContracts()
+    public void GenericProjectsDoNotReferenceBpmnAndBpmnReusesOnlyContractsAndOrganizationalPolicy()
     {
         var projects = new[]
         {
@@ -24,8 +24,9 @@ public sealed class PhaseM1BpmnArchitectureTests
             reference => reference.Contains("Inceptus.DocumentEngine.Bpmn", StringComparison.Ordinal)));
 
         var bpmnReferences = ReadProjectReferences("Inceptus.DocumentEngine.Bpmn");
-        Assert.Single(bpmnReferences);
-        Assert.Contains("Inceptus.DocumentEngine.Contracts", bpmnReferences[0], StringComparison.Ordinal);
+        Assert.Equal(2, bpmnReferences.Length);
+        Assert.Contains(bpmnReferences, reference => reference.Contains("Inceptus.DocumentEngine.Contracts", StringComparison.Ordinal));
+        Assert.Contains(bpmnReferences, reference => reference.Contains("Inceptus.DocumentEngine.Organizational", StringComparison.Ordinal));
     }
 
     [Fact]

@@ -9,6 +9,7 @@ using Inceptus.DocumentEngine.Contracts.EditorState;
 using Inceptus.DocumentEngine.Contracts.Geometry;
 using Inceptus.DocumentEngine.Contracts.Layout;
 using Inceptus.DocumentEngine.Contracts.Primitives;
+using Inceptus.DocumentEngine.Contracts.Presentation;
 using Inceptus.DocumentEngine.Contracts.Projection;
 using Inceptus.DocumentEngine.Contracts.Profiles;
 using Inceptus.DocumentEngine.Contracts.Routing;
@@ -27,6 +28,9 @@ internal sealed partial class EditingSessionPipeline : ISessionPipelineProcessin
         ModelProfileElementViewStateSnapshot modelProfileElementViewState,
         CancellationToken cancellationToken)
     {
+        if (artifacts.PresentationContext is DocumentPresentationContext)
+            return await RebuildSceneAsync(document, artifacts, editorState, modelProfileViewState,
+                modelProfileElementViewState, cancellationToken).ConfigureAwait(false);
         if (previousScene.BoundedPresentation?.ConnectorLabelMove is not null)
         {
             var labelScene = _configuration.SceneBuilder.TryReuseForConnectorLabelMove(previousScene, document,
@@ -118,7 +122,7 @@ internal sealed partial class EditingSessionPipeline : ISessionPipelineProcessin
         EditorStateSnapshot editorState,
         ModelProfileViewStateSnapshot modelProfileViewState,
         ModelProfileElementViewStateSnapshot modelProfileElementViewState) =>
-        _configuration.SceneBuilder.CanDeferPanPresentation(
+        artifacts.PresentationContext is ProcessScopePresentationContext && _configuration.SceneBuilder.CanDeferPanPresentation(
             previousScene, document, artifacts.ScopeId, modelProfileViewState,
             modelProfileElementViewState, artifacts.ProjectedGraph, artifacts.LayoutResult,
             artifacts.RoutingResult, editorState);
@@ -133,6 +137,9 @@ internal sealed partial class EditingSessionPipeline : ISessionPipelineProcessin
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        if (artifacts.PresentationContext is DocumentPresentationContext)
+            return RebuildSceneAsync(document, artifacts, editorState, modelProfileViewState,
+                modelProfileElementViewState, cancellationToken);
         var scene = _configuration.SceneBuilder.TryReuseForPan(
             previousScene, document, artifacts.ScopeId, modelProfileViewState,
             modelProfileElementViewState, artifacts.ProjectedGraph, artifacts.LayoutResult,
@@ -445,7 +452,8 @@ internal sealed partial class EditingSessionPipeline : ISessionPipelineProcessin
             _configuration.RoutingEngine.TryGetStablePolicy(_configuration.RoutingAlgorithmId, out var savedPolicy);
             var savedRouting = ConnectorRoutingStatePreparer.RestoreRouting(projection.Graph, savedLayout, scope,
                 _configuration.RoutingAlgorithmId, savedPolicy);
-            var savedArtifacts = new EditingSessionPipelineArtifacts(activeScopeId, projection.Graph, savedLayout, savedRouting);
+            var savedArtifacts = new EditingSessionPipelineArtifacts(activeScopeId, projection.Graph, savedLayout, savedRouting)
+            { PresentationPlan = _configuration.ProjectionEngine.ResolvePresentation(document, new ProcessScopePresentationContext(activeScopeId)).Plan };
             var savedScene = await BuildSceneAsync(projection.Graph, savedLayout, savedRouting, document.VisualModel,
                 editorState, document, activeScopeId, modelProfileViewState, modelProfileElementViewState, cancellationToken).ConfigureAwait(false);
             var savedDiagnostics = projection.Diagnostics.Concat(savedRouting.Diagnostics).Concat(savedScene.Diagnostics);
@@ -551,7 +559,8 @@ internal sealed partial class EditingSessionPipeline : ISessionPipelineProcessin
             activeScopeId,
             projection.Graph,
             layout,
-            routing.Result);
+            routing.Result)
+        { PresentationPlan = _configuration.ProjectionEngine.ResolvePresentation(document, new ProcessScopePresentationContext(activeScopeId)).Plan };
         cancellationToken.ThrowIfCancellationRequested();
         var scene = await BuildSceneAsync(
             artifacts.ProjectedGraph,
@@ -637,7 +646,7 @@ internal sealed partial class EditingSessionPipeline : ISessionPipelineProcessin
             return true;
         }
 
-        return document.SemanticModel.GetScope(semanticElement.Id).Id == activeScopeId;
+        return document.SemanticModel.TryGetScope(semanticElement.Id, out var scope) && scope?.Id == activeScopeId;
     }
 
     private LayoutResult? TryCarryForwardLayout(
@@ -1079,10 +1088,10 @@ internal sealed partial class EditingSessionPipeline : ISessionPipelineProcessin
             document.VisualModel,
             editorState,
             document,
-            artifacts.ScopeId,
+            artifacts.PresentationContext,
             modelProfileViewState,
             modelProfileElementViewState,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken, artifacts.PresentationPlan).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
         var diagnostics = artifacts.LayoutResult.Diagnostics
             .Concat(artifacts.RoutingResult.Diagnostics)
@@ -1105,7 +1114,16 @@ internal sealed partial class EditingSessionPipeline : ISessionPipelineProcessin
         DocumentScopeId activeScopeId,
         ModelProfileViewStateSnapshot modelProfileViewState,
         ModelProfileElementViewStateSnapshot modelProfileElementViewState,
-        CancellationToken cancellationToken) =>
+        CancellationToken cancellationToken) => BuildSceneAsync(graph, layout, routing, visualModel, editorState,
+            document, new ProcessScopePresentationContext(activeScopeId), modelProfileViewState, modelProfileElementViewState,
+            cancellationToken, _configuration.ProjectionEngine.ResolvePresentation(document, new ProcessScopePresentationContext(activeScopeId)).Plan);
+
+    private ValueTask<Canvas2DSceneBuildResult> BuildSceneAsync(
+        ProjectedGraph graph, LayoutResult layout, RoutingResult routing, VisualModelSnapshot visualModel,
+        EditorStateSnapshot editorState, DocumentSnapshot document, PresentationViewContext activeScopeId,
+        ModelProfileViewStateSnapshot modelProfileViewState,
+        ModelProfileElementViewStateSnapshot modelProfileElementViewState, CancellationToken cancellationToken,
+        PresentationViewPlan? presentationPlan = null) =>
         _renderer is null
             ? ValueTask.FromResult(_configuration.SceneBuilder.Build(
                 document,
@@ -1116,7 +1134,7 @@ internal sealed partial class EditingSessionPipeline : ISessionPipelineProcessin
                 layout,
                 routing,
                 visualModel,
-                editorState))
+                editorState, presentationPlan))
             : _configuration.SceneBuilder.BuildMeasuredAsync(
                 document,
                 activeScopeId,
@@ -1129,7 +1147,7 @@ internal sealed partial class EditingSessionPipeline : ISessionPipelineProcessin
                 editorState,
                 _renderer,
                 _renderer.CreateTextMeasurementRequest,
-                cancellationToken);
+                cancellationToken, presentationPlan);
 
     private ValueTask<Canvas2DSceneBuildResult> BuildCompatibilitySceneAsync(
         ProjectedGraph graph,

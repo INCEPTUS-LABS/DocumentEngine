@@ -77,7 +77,8 @@ internal static partial class DocumentInvariantValidator
 
     public static ImmutableArray<Diagnostic> Validate(
         DocumentSnapshot snapshot,
-        IElementConnectorAnchorPolicyProvider? connectorAnchorPolicyProvider = null)
+        IElementConnectorAnchorPolicyProvider? connectorAnchorPolicyProvider = null,
+        bool requirePreparedRouting = false)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         var policyProvider = connectorAnchorPolicyProvider ??
@@ -244,7 +245,7 @@ internal static partial class DocumentInvariantValidator
         }
 
         ValidateConnectorAnchorOccupancy(snapshot.VisualModel, diagnostics);
-        diagnostics.AddRange(ValidateRoutingState(snapshot, requirePrepared: false, policyProvider));
+        diagnostics.AddRange(ValidateRoutingState(snapshot, requirePreparedRouting, policyProvider));
 
         return [.. diagnostics];
     }
@@ -854,8 +855,10 @@ internal static partial class DocumentInvariantValidator
             !double.IsFinite(visualState.Size.Height) ||
             visualState.Size.Width < 0d ||
             visualState.Size.Height < 0d ||
-            (isElementOwned &&
+            (isElementOwned && visualState.PlacementMode != VisualPlacementMode.Derived &&
                 (visualState.Size.Width <= 0d || visualState.Size.Height <= 0d)) ||
+            (visualState.PlacementMode == VisualPlacementMode.Derived &&
+                (!isElementOwned || visualState.Position != default || visualState.Size != default || visualState.BoundaryAttachment is not null)) ||
             !DocumentGeometryBoundary.Contains(visualState.Position))
         {
             diagnostics.Add(Error(

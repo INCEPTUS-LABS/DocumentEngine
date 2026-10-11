@@ -44,7 +44,7 @@ public sealed partial class EditingSession
                     !artifacts.IsCompatibleWith(
                         snapshot.DocumentId,
                         snapshot.Revision,
-                        _activeScopeId))
+                        _presentationContext))
                 {
                     return OperationResult(
                         EditingSessionOperationStatus.Rejected,

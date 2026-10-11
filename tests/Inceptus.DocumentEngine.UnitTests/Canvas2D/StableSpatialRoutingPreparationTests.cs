@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using Inceptus.DocumentEngine.Bpmn.Commands;
 using Inceptus.DocumentEngine.Canvas2D.EditingSession;
 using Inceptus.DocumentEngine.Canvas2D.Scene;
 using Inceptus.DocumentEngine.Contracts.Canvas2D;
@@ -33,8 +34,8 @@ public sealed partial class StableSpatialRoutingPreparationTests
         await CommitHeight(fixture, poolA.Id, 300d);
         var expanded = fixture.Document.CaptureSnapshot();
         Assert.Equal(300d, Regions(expanded).Single(region => region.Id == poolA.Id).ExpandedHeight);
-        Assert.Equal(380d, Regions(expanded).Single(region => region.ContainerSemanticElementId == PoolB).ContentBounds!.Value.Top);
-        Assert.Equal(644d, Regions(expanded).Single(region => region.Id == unassigned.Id).ContentBounds!.Value.Top);
+        Assert.Equal(340d, Regions(expanded).Single(region => region.ContainerSemanticElementId == PoolB).ContentBounds!.Value.Top);
+        Assert.Equal(604d, Regions(expanded).Single(region => region.Id == unassigned.Id).ContentBounds!.Value.Top);
         var bytes = NativeDocumentSerializer.Export(expanded);
         var rejected = await fixture.Processor.ExecuteAsync(fixture.Document,
             new SetOrganizationalRegionExpandedHeightCommand(expanded.DocumentId, expanded.Revision,
@@ -54,8 +55,8 @@ public sealed partial class StableSpatialRoutingPreparationTests
         Assert.All(Regions(active), region => Assert.True(region.IsActive));
         Assert.Equal(400d, Regions(active).Single(region => region.Id == poolA.Id).ExpandedHeight);
         Assert.Equal(342d, Regions(active).Single(region => region.Id == unassigned.Id).ExpandedHeight);
-        Assert.Equal(480d, Regions(active).Single(region => region.ContainerSemanticElementId == PoolB).ContentBounds!.Value.Top);
-        Assert.Equal(744d, Regions(active).Single(region => region.Id == unassigned.Id).ContentBounds!.Value.Top);
+        Assert.Equal(440d, Regions(active).Single(region => region.ContainerSemanticElementId == PoolB).ContentBounds!.Value.Top);
+        Assert.Equal(704d, Regions(active).Single(region => region.Id == unassigned.Id).ContentBounds!.Value.Top);
     }
 
     [Fact]
@@ -85,14 +86,14 @@ public sealed partial class StableSpatialRoutingPreparationTests
         var unassigned = plan.Regions.Single(region => region.ContainerSemanticElementId is null);
         Assert.Equal(40d, poolA.Bounds.Top);
         Assert.Equal(25.6d, poolA.Bounds.Height, 10);
-        Assert.Equal(105.6d, poolB.Bounds.Top, 10);
-        Assert.Equal(369.6d, unassigned.Bounds.Top, 10);
-        Assert.Equal(743.6d, unassigned.Bounds.Bottom, 10);
+        Assert.Equal(65.6d, poolB.Bounds.Top, 10);
+        Assert.Equal(329.6d, unassigned.Bounds.Top, 10);
+        Assert.Equal(703.6d, unassigned.Bounds.Bottom, 10);
         var visibleNode = graph.Nodes.Single(node => node.Source.VisualStateId == new VisualStateId("v:b-source"));
         var visibleBody = collapsed.Scene.Items.Single(item => item.Id ==
             Canvas2DSceneObjectIdentity.ForProjected(visibleNode.Id, "node"));
         Assert.Equal(130d, visibleBody.Bounds.Left);
-        Assert.Equal(631.6d, visibleBody.Bounds.Top, 10);
+        Assert.Equal(591.6d, visibleBody.Bounds.Top, 10);
         var crossPoolEdge = graph.Edges.Single(edge => edge.Source.VisualStateId == new VisualStateId("v:flow-a"));
         Assert.All(collapsed.Scene.Items.Where(item => item.Origin.ProjectedObjectId == crossPoolEdge.Id),
             item => Assert.False(item.IsVisible));
@@ -142,6 +143,17 @@ public sealed partial class StableSpatialRoutingPreparationTests
             .Single(region => region.ContainerSemanticElementId == PoolA).ExpandedHeight);
         await CommitHeight(fixture, Regions(fixture.Document.CaptureSnapshot())
             .Single(region => region.ContainerSemanticElementId is null).Id, 374d);
+        await BpmnModelerTestComposition.AssignSharedParticipantAsync(async command =>
+        {
+            var result = await fixture.Processor.ExecuteAsync(fixture.Document, command);
+            Assert.True(result.IsCommitted, Describe(result.Diagnostics));
+        }, fixture.Document.CaptureSnapshot, PoolA, PoolB);
+        // Move the complete independent branch during setup, then recreate its exact identities.
+        var deleted = await fixture.Processor.ExecuteAsync(fixture.Document, new DeleteBpmnSequenceFlowCommand(
+            fixture.Document.DocumentId, fixture.Document.Revision, new SemanticElementId("flow-b"), new VisualStateId("v:flow-b"),
+            new SemanticElementId("b-source"), new SemanticElementId("b-target"),
+            new ConnectorAnchorId("b-source:source"), new ConnectorAnchorId("b-target:target")));
+        Assert.True(deleted.IsCommitted, Describe(deleted.Diagnostics));
         foreach (var element in new[] { "b-source", "b-target" })
         {
             var document = fixture.Document;
@@ -152,6 +164,11 @@ public sealed partial class StableSpatialRoutingPreparationTests
         var assigned = await fixture.Processor.ExecuteAsync(fixture.Document, new AssignOrganizationalElementCommand(
             fixture.Document.DocumentId, fixture.Document.Revision, new SemanticElementId("a-target"), PoolB));
         Assert.True(assigned.IsCommitted, Describe(assigned.Diagnostics));
+        var restored = await fixture.Processor.ExecuteAsync(fixture.Document, new CreateBpmnSequenceFlowCommand(
+            fixture.Document.DocumentId, fixture.Document.Revision, new SemanticElementId("flow-b"), new VisualStateId("v:flow-b"),
+            new SemanticElementId("b-source"), new SemanticElementId("b-target"),
+            new ConnectorAnchorId("b-source:source"), new ConnectorAnchorId("b-target:target")));
+        Assert.True(restored.IsCommitted, Describe(restored.Diagnostics));
         await CommitHeight(fixture, Regions(fixture.Document.CaptureSnapshot())
             .Single(region => region.ContainerSemanticElementId == PoolA).Id, 224d);
         return fixture;

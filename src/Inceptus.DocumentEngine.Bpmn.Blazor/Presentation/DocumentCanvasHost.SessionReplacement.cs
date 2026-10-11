@@ -130,7 +130,7 @@ internal sealed partial class DocumentCanvasHost
                     var visual = candidateSnapshot.VisualModel;
                     var reconstructed = DocumentReconstructor.Reconstruct(new DocumentSnapshot(candidateSnapshot.SemanticModel,
                         new VisualModelSnapshot(visual.DocumentId, visual.Revision, visual.VisualStates,
-                            visual.ProfileElementPresentations, prepared.RoutingScopes), candidateSnapshot.Metadata, candidateSnapshot.Publication),
+                            visual.ProfileElementPresentations, prepared.RoutingScopes, prepared.DocumentRoutingStates), candidateSnapshot.Metadata, candidateSnapshot.Publication),
                         sourceConfiguration.ConnectorAnchorPolicyProvider);
                     if (!reconstructed.Succeeded)
                     {
@@ -162,7 +162,7 @@ internal sealed partial class DocumentCanvasHost
                     await attachment.Session.DisposeAsync().ConfigureAwait(false);
                 }
 
-                return FailDocumentReplacement(messages, messages.SessionReadyMessage);
+                return FailDocumentReplacement(messages, messages.SessionReadyMessage) with { Diagnostics = attachment.Diagnostics };
             }
 
             candidateSession = attachment.Session!;
@@ -174,7 +174,7 @@ internal sealed partial class DocumentCanvasHost
             {
                 await candidateSession.DisposeAsync().ConfigureAwait(false);
                 candidateSession = null;
-                return FailDocumentReplacement(messages, messages.SessionReadyMessage);
+                return FailDocumentReplacement(messages, messages.SessionReadyMessage) with { Diagnostics = candidateState.PresentationDiagnostics };
             }
 
             candidateController = new Canvas2DInteractionController(

@@ -1,8 +1,10 @@
 # Inceptus Document Engine
 
 A reusable BPMN modeler with immutable native documents and a standalone process
-presentation export. This README describes release **0.1.8** targeting
-**net10.0**.
+presentation export. This README describes the locally prepared **0.1.9** release
+candidate targeting **net10.0**; public publication is a separate step.
+
+[Open BPMN Editor](https://bpmn-editor.inceptus.online)
 
 ## Choose an integration level
 
@@ -17,12 +19,17 @@ presentation export. This README describes release **0.1.8** targeting
 
 Use the six packages as an **aligned version family**. The top-level modeler package brings the lower packages transitively; ordinary hosts need only that explicit Inceptus reference. Independent mixed family versions are unsupported and unverified. Canvas2D requires its matching Runtime version because it consumes Runtime's internal History contract. Other dependency ranges retain their existing minimum-version policy. A direct dependency override can still produce an incompatible graph and a NuGet warning; the constraint is not a runtime compatibility guarantee.
 
+In 0.1.9, `Inceptus.DocumentEngine.Bpmn` depends on both Contracts and
+Organizational. It uses Organizational's Pool membership, Participant assignment
+and region geometry for BPMN flow rules and editing. These dependencies resolve
+transitively; ordinary modeler hosts still need only the Bpmn.Blazor reference.
+
 ## Embed the modeler
 
 The validated hosting model is a **standalone Blazor WebAssembly application** on .NET 10. Configure a feed containing the reviewed candidate before adding the package:
 
 ```xml
-<PackageReference Include="Inceptus.DocumentEngine.Bpmn.Blazor" Version="0.1.8" />
+<PackageReference Include="Inceptus.DocumentEngine.Bpmn.Blazor" Version="0.1.9" />
 ```
 
 Register the modeler in the application's `Program.cs`. The extension namespace is `Microsoft.Extensions.DependencyInjection`:
@@ -83,6 +90,38 @@ The canonical source Demo is `src/Inceptus.DocumentEngine.Blazor`. It uses proje
 
 The Demo exercises the current activity selection, drag-preview, viewport culling, pan/zoom and renderer-cache paths without opt-in settings. Select activity bodies and captions, move activities, use Undo/Redo, navigate into the subprocess, and pan or zoom the diagram. Selection and viewport changes remain transient; accepted edits use the existing command and History path. The Demo is not packaged; package consumers use the public component described above.
 
+## Editing tools
+
+The main Toolbox provides family-level Events, Activities and Gateways entries,
+plus a FLOW group with Sequence Flow and Message Flow. EVENTS, ACTIVITIES,
+GATEWAYS and FLOW start collapsed; expand a group to choose a tool. Properties
+supports switching compatible concrete Task, intermediate Event, Boundary Event
+and Gateway types while preserving identity and compatible state. Invalid
+switches are rejected without changing the document.
+
+Message Flow connects different effective Participants in the supported Pool
+diagram. A standalone Pool supplies its own communication identity; Pools
+assigned to the same Participant are presented as adjoining Lanes. Supported
+endpoints include eligible Activities, directional Message Events, standalone
+Pools and shared Participant labels. Lane-mode Pools are not direct endpoints.
+Unassigned elements cannot be Message Flow endpoints.
+
+Auto Arrange reorganizes the active Process scope, including its visible
+Pool/Lane diagram, through one undoable edit. It preserves semantic identities,
+membership and routing modes; hidden child scopes remain unchanged. Sequence
+Flow drives placement. Crossing reduction and connector-point improvement use
+bounded heuristics rather than a global optimal-layout guarantee.
+
+Smart Edit starts **ON**. Selecting one eligible flow node shows contextual
+Properties / Auto Points / Delete actions and compatible Events / Activities /
+Gateways creation choices. Smart Create adds the chosen element and its Sequence
+Flow atomically in one History operation, inherits the source's supported
+Pool/Lane context, and selects the new element for continued creation. Auto Points
+conservatively improves eligible incident connection points. Turning Smart Edit
+**OFF** hides both contextual toolboxes while ordinary editing remains available;
+turning it ON restores tools eligible for the current selection. Smart Edit and
+Toolbox expansion are transient editor UI state, not saved document preferences.
+
 ## UI localization
 
 The modeler UI supports English (`en` / `en-GB`), Polish (`pl` / `pl-PL`), French (`fr` / `fr-FR`), German (`de` / `de-DE`) and Spanish (`es` / `es-ES`). English is the neutral resource and final fallback. Standard .NET resource resolution also supports parent fallback: `fr-CA`, `de-AT` and `es-MX` use French, German and Spanish; `en-US` and unsupported cultures such as `it-IT` use English.
@@ -139,9 +178,20 @@ Capture and Export do not change persistent state, History, selection or viewpor
 
 Native import/export uses **Inceptus.Document JSON, formatVersion 2**. Version 2 persists routing and spatial geometry for compatible Save/Open reproduction; native v1 documents are intentionally not accepted. Public byte APIs do not open a file picker or initiate a download; the consumer chooses storage/delivery. The toolbar retains its own file and confirmation UI. Export, Import and Load are not persistence or autosave services.
 
+The 0.1.9 native v2 reader also accepts optional connector-anchor
+`normalizedPosition` and visual-model `documentRoutingStates` fields. They are
+written only when used; absent fields retain the previous defaults. Older v2
+readers reject these new fields, so the unchanged format number does not imply
+backward-reader compatibility for documents using them. No v1 migration or BPMN
+XML conversion is included.
+
 ## Publish a standalone presentation
 
 `PublishAsync` captures the current active Process scope into a self-contained ZIP. It does not change Publication metadata, DocumentId, revision, persistent content or History, and does not initiate a download. Inspect the result before delivering its bytes. The toolbar's separate Publication dialog can save changed valid metadata through one persistent command **before** generating the artifact; a later Publish rejection does not undo that save.
+
+Document-level Collaboration presentations and Process views containing Message
+Flow are rejected with diagnostics: communication links are not executable
+Sequence Flow in this viewer.
 
 The artifact remains **Inceptus.PublishedProcess, formatVersion 1**, with these entries:
 

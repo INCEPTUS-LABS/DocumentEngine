@@ -1,5 +1,73 @@
 # Release notes
 
+## 0.1.9
+
+- Prepares the aligned package family locally after the accepted A2 changes.
+  Public publication remains a separate step.
+- Adds validated switching between compatible concrete Task, catching/throwing
+  intermediate Event, Boundary Event and Gateway types through Properties.
+  Existing identities, compatible properties, geometry, attachments and
+  connectors are preserved, with exact Undo/Redo. The main Toolbox uses
+  family-level entries and Properties uses the refined compact form layout.
+- Adds the FLOW Toolbox group with Sequence Flow and Message Flow. Message Flow
+  connects different effective Participants in one unambiguous normal Pool
+  diagram. Eligible Activities can send except Receive Task and receive except
+  Send Task; Message Throw Events send, Message Catch and attached Message
+  Boundary Events receive. Standalone Pools and shared Participant labels are
+  supported endpoints; Lane-mode Pools, Gateways and Unassigned elements are not.
+  Creation, reconnection, Properties, labels, routing and History use the normal
+  validated editing path.
+- Adds explicit Pool-to-Participant assignment and adjoining Lane presentation
+  for Pools sharing a Participant, including shared headers, deterministic
+  ordering, unassignment and Lane resizing. Standalone Pools retain their own
+  effective Participant identity. Sequence Flow cannot cross two different
+  explicitly assigned effective Participants; ordinary scope/direction rules
+  still apply, including the supported Unassigned cases.
+- Adds Auto Arrange for the active Process scope and its visible Pool/Lane
+  diagram. Sequence Flow determines rank; cycles, disconnected components and
+  crossings are handled deterministically with bounded heuristics. One command
+  and focused History operation retain identities, membership, Lane order,
+  Boundary Event ownership, routing modes and hidden SubProcess contents. No
+  missing Gateway is invented and no globally optimal layout is promised.
+- Adds the contextual Element Toolbox with Properties / Auto Points / Delete
+  and context-aware Events / Activities / Gateways choices. Smart Create adds
+  an element and Sequence Flow atomically in one History operation, inherits
+  supported Pool/Lane membership, selects the new element and permits continuous
+  creation. Choices obey existing flow rules; Start and Boundary Events are not
+  ordinary successor targets and End Events have no successors. Auto Points
+  conservatively improves eligible selected-node endpoints while retaining
+  identities, remote endpoint positions and authored Manual routes.
+- Adds the Option 4 Smart Edit switch, default ON. OFF hides both contextual
+  toolboxes while normal editing remains available; ON restores eligible tools
+  for the current selection. EVENTS / ACTIVITIES / GATEWAYS / FLOW initially
+  render collapsed and remain user-expandable. Smart Edit and Toolbox expansion
+  remain transient UI state outside persistence, revision and History.
+- Extends advanced notation-neutral contracts for element connections,
+  presentation contexts, connector visuals, document-owned routing and path
+  quality. BPMN policy remains in the plugin; immutable Document replacement,
+  EditingSession, Command Processor and chronological History remain the
+  authorities. Existing constructor signatures covered by the A2.2 compatibility
+  regressions are retained; this is not a general cross-version API guarantee.
+  The ordinary modeler lifecycle/file facade signatures are unchanged.
+- Retains native Inceptus.Document formatVersion 2 while adding optional anchor
+  `normalizedPosition` and visual-model `documentRoutingStates` fields (with
+  `documentLogical` routes). Missing fields retain prior defaults; older strict
+  v2 readers reject documents containing these fields. No native v1 migration,
+  BPMN-standard conversion or A3 import/export/publishing refactoring is included.
+- Retains PublishedProcess formatVersion 1. Publishing explicitly rejects
+  document-level Collaboration presentations and Message Flow in Process views
+  instead of treating communication as execution flow.
+- Adds `Inceptus.DocumentEngine.Organizational` as a dependency of
+  `Inceptus.DocumentEngine.Bpmn`. The 0.1.9 BPMN package declares both Contracts
+  and Organizational as package-family dependencies, using Organizational's
+  Pool membership, Participant assignment and region geometry for flow rules,
+  Auto Arrange and Smart Create. Both resolve transitively; ordinary modeler
+  hosts do not need an additional direct PackageReference.
+- Retains net10.0, the existing external dependency versions, aligned family
+  dependencies and the exact Canvas2D-to-Runtime constraint. Includes the
+  committed Inceptus package icon, with the existing documentation, MIT license,
+  third-party notices and portable-symbol packaging requirements.
+
 ## 0.1.8
 
 - Makes explicit Manual connector route-point edits participate correctly in the

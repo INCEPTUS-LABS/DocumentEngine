@@ -11,7 +11,7 @@ public sealed class DocumentCanvasSpatialHeightPropertiesTests
     [Fact]
     public void PoolPropertiesRemainSemanticOnly()
     {
-        Assert.Equal(["name", "description"],
+        Assert.Equal(["name", "participant", "description"],
             OrganizationalPoolPropertiesSchema.Definition.Fields.Select(field => field.FieldId.Value));
     }
 

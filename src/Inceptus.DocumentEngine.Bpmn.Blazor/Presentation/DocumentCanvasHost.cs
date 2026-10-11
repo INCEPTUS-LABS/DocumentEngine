@@ -17,6 +17,7 @@ using Inceptus.DocumentEngine.Contracts.Documents;
 using Inceptus.DocumentEngine.Contracts.Geometry;
 using Inceptus.DocumentEngine.Contracts.History;
 using Inceptus.DocumentEngine.Contracts.Primitives;
+using Inceptus.DocumentEngine.Contracts.Presentation;
 using Inceptus.DocumentEngine.Contracts.Properties;
 using Inceptus.DocumentEngine.Contracts.Profiles;
 using Inceptus.DocumentEngine.Contracts.ScopeNavigation;
@@ -114,7 +115,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
     private ImmutableArray<Diagnostic> _hostDiagnostics = [];
     private ImmutableArray<Diagnostic> _interactionDiagnostics = [];
     private (EditingSession Session, DocumentId DocumentId, DocumentRevision Revision,
-        DocumentScopeId ScopeId)? _contextCommandDiagnosticOwner;
+        PresentationViewContext Context)? _contextCommandDiagnosticOwner;
     private bool _initializationAttempted;
     private bool _initialized;
     private bool _disposed;
@@ -262,7 +263,9 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                 confirmed.ProjectedGraph!,
                 confirmed.RoutingResult!);
             var validation = engine.Validate(
-                new ModelValidationContext(document, confirmed.ActiveScopeId),
+                confirmed.PresentationPlan is { } plan
+                    ? new ModelValidationContext(document, plan)
+                    : new ModelValidationContext(document, confirmed.ActiveScopeId),
                 routingIssues,
                 confirmed.Generation.Value);
 
@@ -270,7 +273,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
             if (!IsValidationContextAvailable(current) ||
                 current.DocumentId != validation.DocumentId ||
                 current.DocumentRevision != validation.SourceRevision ||
-                current.ActiveScopeId != validation.ScopeId)
+                current.PresentationContext != validation.PresentationContext)
             {
                 return null;
             }
@@ -364,12 +367,14 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
             if (!IsValidationContextAvailable(state) ||
                 state.DocumentId != validation.DocumentId ||
                 state.DocumentRevision != validation.SourceRevision ||
-                state.ActiveScopeId != validation.ScopeId ||
+                state.PresentationContext != validation.PresentationContext ||
                 !session.TryCaptureDocumentSnapshot(out var document) ||
                 document is null ||
                 document.DocumentId != validation.DocumentId ||
                 document.Revision != validation.SourceRevision ||
-                !document.VisualModel.TryGetVisualState(visualStateId, out _) ||
+                !document.VisualModel.TryGetVisualState(visualStateId, out var visualState) ||
+                visualState is null ||
+                state.PresentationPlan is { } plan && !plan.Contains(visualState.SemanticElementId) ||
                 !TryResolveValidationSelectionCssPoint(
                     state,
                     visualStateId,
@@ -513,11 +518,11 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
             var state = session.CaptureState();
             if (state.Status != EditingSessionStatus.Ready ||
                 state.EditorState.ActiveGesture is not null ||
-                state.ActiveScopeId != context.ScopeId ||
+                state.PresentationContext != context.ViewContext ||
                 state.DocumentId != context.SourceScene.DocumentId ||
                 state.DocumentRevision != context.DocumentRevision ||
-                state.ActiveScopeId != context.ScopeId ||
                 state.Generation.Value < context.SessionGeneration.Value ||
+                context.InteractionScopeId is null ||
                 !state.EditorState.Selection.Contains(action.VisualStateId) ||
                 GetSpatialRegionId(state, action.VisualStateId) !=
                     context.TargetPresentation?.Id ||
@@ -527,7 +532,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                 !TryResolveScopeNavigationAction(
                     catalog,
                     document,
-                    context.InteractionScopeId,
+                    context.InteractionScopeId!,
                     action.VisualStateId,
                     out var currentAction) ||
                 currentAction is null ||
@@ -597,7 +602,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                 state.EditorState.ActiveGesture is not null ||
                 state.DocumentId != context.SourceScene.DocumentId ||
                 state.DocumentRevision != context.DocumentRevision ||
-                state.ActiveScopeId != context.ScopeId ||
+                state.PresentationContext != context.ViewContext ||
                 state.Generation.Value < context.SessionGeneration.Value ||
                 state.CurrentScene is null ||
                 state.CurrentScene.DocumentId != state.DocumentId ||
@@ -734,7 +739,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                 state.EditorState.ActiveGesture is not null ||
                 state.DocumentId != context.SourceScene.DocumentId ||
                 state.DocumentRevision != context.DocumentRevision ||
-                state.ActiveScopeId != context.ScopeId ||
+                state.PresentationContext != context.ViewContext ||
                 state.Generation.Value < context.SessionGeneration.Value ||
                 state.CurrentScene is null ||
                 state.CurrentScene.DocumentId != state.DocumentId ||
@@ -852,7 +857,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                 state.EditorState.ActiveGesture is null &&
                 state.DocumentId == context.SourceScene.DocumentId &&
                 state.DocumentRevision == context.DocumentRevision &&
-                state.ActiveScopeId == context.ScopeId &&
+                state.PresentationContext == context.ViewContext &&
                 state.Generation.Value >= context.SessionGeneration.Value &&
                 state.EditorState.Selection.Contains(action.TargetVisualStateId))
             {
@@ -864,7 +869,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                 state.EditorState.ActiveGesture is not null ||
                 state.DocumentId != context.SourceScene.DocumentId ||
                 state.DocumentRevision != context.DocumentRevision ||
-                state.ActiveScopeId != context.ScopeId ||
+                state.PresentationContext != context.ViewContext ||
                 state.Generation.Value < context.SessionGeneration.Value ||
                 state.CurrentScene is null ||
                 state.CurrentScene.DocumentId != state.DocumentId ||
@@ -1023,7 +1028,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                 state.EditorState.ActiveGesture is not null ||
                 state.DocumentId != context.SourceScene.DocumentId ||
                 state.DocumentRevision != context.DocumentRevision ||
-                state.ActiveScopeId != context.ScopeId ||
+                state.PresentationContext != context.ViewContext ||
                 state.Generation.Value < context.SessionGeneration.Value ||
                 state.CurrentScene is null ||
                 !state.CurrentScene.Viewport.Equals(context.SourceScene.Viewport) ||
@@ -1125,7 +1130,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                 state.EditorState.ActiveGesture is not null ||
                 state.DocumentId != context.SourceScene.DocumentId ||
                 state.DocumentRevision != context.DocumentRevision ||
-                state.ActiveScopeId != context.ScopeId ||
+                state.PresentationContext != context.ViewContext ||
                 state.Generation.Value < context.SessionGeneration.Value ||
                 state.CurrentScene is null ||
                 state.CurrentScene.DocumentId != state.DocumentId ||
@@ -1456,7 +1461,8 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                     "Properties could not be applied because the selected object is unavailable.");
             }
 
-            if (draft.IsStale || current.Revision != draft.Authoritative.Revision)
+            if (draft.IsStale || current.Revision != draft.Authoritative.Revision ||
+                current.PresentationContext != draft.Authoritative.PresentationContext)
             {
                 return CreateApplyFailure(
                     DocumentCanvasPropertiesApplyStatus.Stale,
@@ -1467,17 +1473,19 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
             var dataChanged = draft.TryGetDirtyDataField(out var changedDataField);
             var boundsChanged = current.CanEditBounds && targetBounds != current.Bounds;
             var routingChanged = current.CanEditRoutingType && draft.IsRoutingTypeDirty;
-            if ((dataChanged ? 1 : 0) + (boundsChanged ? 1 : 0) + (routingChanged ? 1 : 0) > 1 &&
+            var typeChanged = current.CanEditType && draft.IsTypeDirty;
+            if ((dataChanged ? 1 : 0) + (boundsChanged ? 1 : 0) + (routingChanged ? 1 : 0) +
+                    (typeChanged ? 1 : 0) > 1 &&
                 !draft.IsCombinedConnectorNameAndRoutingChange)
             {
                 return new DocumentCanvasPropertiesApplyResult(
                     DocumentCanvasPropertiesApplyStatus.ValidationFailed,
                     current,
                     [],
-                    "Apply one Data field, routing type, or visual bounds before editing another property group.");
+                    "Apply one Data field, element type, routing type, or visual bounds before editing another property group.");
             }
 
-            if (!dataChanged && !boundsChanged && !routingChanged)
+            if (!dataChanged && !boundsChanged && !routingChanged && !typeChanged)
             {
                 lock (_sync)
                 {
@@ -1493,7 +1501,15 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
 
             ICommand command;
             HistoryOperationResult result;
-            if (routingChanged && !dataChanged)
+            if (typeChanged)
+            {
+                if (!draft.TryParseType(out var targetType) || targetType is null ||
+                    !current.SwitchableTypes.Contains(targetType))
+                    return CreateApplyFailure(DocumentCanvasPropertiesApplyStatus.ValidationFailed,
+                        PropertiesApplyUnavailable, "Select a compatible element type.");
+                command = ModelerPropertyEditing.CreateTypeCommand(current, targetType);
+            }
+            else if (routingChanged && !dataChanged)
             {
                 if (!draft.TryParseRoutingType(out var routingType) || current.VisualStateId is null)
                     return CreateApplyFailure(DocumentCanvasPropertiesApplyStatus.ValidationFailed,
@@ -1503,7 +1519,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
             }
             else if (dataChanged)
             {
-                if (changedDataField is null ||
+                if (!current.CanEditData || changedDataField is null ||
                     !current.TryGetDataField(changedDataField.FieldId, out var currentField) ||
                     currentField is null ||
                     !currentField.CanEdit ||
@@ -1597,8 +1613,8 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
 
             await session.WaitForIdleAsync(linked.Token).ConfigureAwait(false);
             // The exact Scene item was checked before the command. A committed Name
-            // edit can replace its rendered label lines, so refresh using the same
-            // authoritative element and spatial presentation rather than the old line.
+            // or Type edit can replace projected items, so resolve the current schema
+            // and presentation again using the same authoritative element identity.
             if (!TryCaptureSelectedProperties(
                     session,
                     current.VisualStateId,
@@ -1778,7 +1794,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                 state.DocumentId != context.SourceScene.DocumentId ||
                 state.DocumentRevision != context.DocumentRevision ||
                 state.Generation != context.SessionGeneration ||
-                state.ActiveScopeId != context.ScopeId ||
+                state.PresentationContext != context.ViewContext ||
                 !ReferenceEquals(state.CurrentScene, context.SourceScene) ||
                 !session.TryCaptureDocumentSnapshot(out var document) ||
                 document is null ||
@@ -1915,7 +1931,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                 state.EditorState.ActiveGesture is not null ||
                 state.DocumentId != context.SourceScene.DocumentId ||
                 state.DocumentRevision != context.DocumentRevision ||
-                state.ActiveScopeId != context.ScopeId ||
+                state.PresentationContext != context.ViewContext ||
                 state.CurrentScene is null ||
                 state.EditorState.SemanticSceneSelection != targetSemanticElementId ||
                 !state.EditorState.Selection.IsEmpty ||
@@ -2050,7 +2066,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                 state.EditorState.ActiveGesture is not null ||
                 state.DocumentId != context.SourceScene.DocumentId ||
                 state.DocumentRevision != context.DocumentRevision ||
-                state.ActiveScopeId != context.ScopeId ||
+                state.PresentationContext != context.ViewContext ||
                 state.CurrentScene is null ||
                 state.EditorState.SemanticSceneSelection != targetSemanticElementId ||
                 !state.EditorState.Selection.IsEmpty ||
@@ -2182,7 +2198,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                 state.EditorState.ActiveGesture is not null ||
                 state.DocumentRevision != context.DocumentRevision ||
                 state.Generation != context.SessionGeneration ||
-                state.ActiveScopeId != context.ScopeId ||
+                state.PresentationContext != context.ViewContext ||
                 !ReferenceEquals(state.CurrentScene, context.SourceScene))
             {
                 lock (_sync)
@@ -2231,7 +2247,9 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
             }
 
             var state = session.CaptureState();
-            if (state.IsClosed || state.ActiveScopeId != _modelViewPropertiesScopeId)
+            if (state.IsClosed ||
+                state.PresentationContext is not ProcessScopePresentationContext processContext ||
+                processContext.ScopeId != _modelViewPropertiesScopeId)
             {
                 return false;
             }
@@ -2260,7 +2278,8 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
             }
 
             if (!_modelViewPropertiesFormOpen ||
-                _session?.CaptureState().ActiveScopeId != _modelViewPropertiesScopeId)
+                _session?.CaptureState().PresentationContext is not ProcessScopePresentationContext processContext ||
+                processContext.ScopeId != _modelViewPropertiesScopeId)
             {
                 return false;
             }
@@ -2329,7 +2348,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                 current.EditorState.ActiveGesture is not null ||
                 current.DocumentId != draft.Authoritative.DocumentId ||
                 current.DocumentRevision != draft.Authoritative.Revision ||
-                current.ActiveScopeId != draft.Authoritative.ScopeId)
+                current.PresentationContext != new ProcessScopePresentationContext(draft.Authoritative.ScopeId))
             {
                 return CreateModelViewApplyFailure(
                     DocumentCanvasModelViewPropertiesApplyStatus.Stale,
@@ -2375,7 +2394,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                 await session.WaitForIdleAsync(linked.Token).ConfigureAwait(false);
                 current = session.CaptureState();
                 if (current.Status != EditingSessionStatus.Ready ||
-                    current.ActiveScopeId != draft.Authoritative.ScopeId)
+                    current.PresentationContext != new ProcessScopePresentationContext(draft.Authoritative.ScopeId))
                 {
                     return CreateModelViewApplyFailure(
                         DocumentCanvasModelViewPropertiesApplyStatus.Failed,
@@ -2466,7 +2485,12 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                 _propertiesTargetSemanticElementId,
                 _nativeDocumentCanvasElementId,
                 publication,
-                _documentSessionVersion);
+                _documentSessionVersion,
+                CapturePresentationViewChoices(sessionState?.PresentationContext),
+                !_disposed && _initialized && !_propertiesFormOpen && !_modelViewPropertiesFormOpen &&
+                    _session is not null && sessionState is not null && TryArrangeScopes(_session, sessionState, out _, out _),
+                CaptureElementToolbox(sessionState),
+                _smartEditEnabled);
         }
     }
 
@@ -2718,6 +2742,9 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
         {
             ToolboxPlacementController? controller;
             EditingSession? session;
+            var selectedItem = _toolboxSelection.SelectedItemId;
+            var wasConnectionSelection = _toolboxSelection.SelectedConnectionCreationId is not null;
+            var selectedConnection = cancel ? null : _toolboxSelection.SelectedConnectionCreationId;
             lock (_sync)
             {
                 if (_disposed)
@@ -2728,6 +2755,27 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                 controller = _toolboxPlacementController;
                 session = _session;
             }
+
+            if (_interactionController is { } interaction && session?.CaptureState().EditorState.ActiveGesture is not null)
+                _ = await interaction.CancelActiveGestureAsync(linked.Token).ConfigureAwait(false);
+            if (session is not null)
+            {
+                if (selectedConnection is not null && !_anchorConnectionCreationCatalog.TryGetRegistration(selectedConnection, out _))
+                {
+                    selectedConnection = null;
+                    selectedItem = null;
+                }
+                var selected = await session.SelectConnectionToolAsync(selectedConnection,
+                    _anchorConnectionCreationCatalog, linked.Token).ConfigureAwait(false);
+                if (!selected.Succeeded)
+                {
+                    selectedItem = null;
+                    selectedConnection = null;
+                    _toolboxSelection.Clear();
+                }
+                notify = true;
+            }
+            if (!cancel && selectedItem is not null) _toolboxSelection.Select(selectedItem, selectedConnection);
 
             if (controller is not null && session is not null)
             {
@@ -2744,10 +2792,11 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
 
             if (cancel)
             {
-                notify |= controller?.Cancel() ?? _toolboxSelection.Clear();
+                notify |= wasConnectionSelection ? _toolboxSelection.Clear() :
+                    controller?.Cancel() ?? _toolboxSelection.Clear();
             }
 
-            var cursor = controller?.IsPlacementActive == true ? "crosshair" : "default";
+            var cursor = controller?.IsPlacementActive == true || selectedConnection is not null ? "crosshair" : "default";
             notify |= await SetPointerCursorUnderGateAsync(cursor, linked.Token)
                 .ConfigureAwait(false);
         }
@@ -2820,7 +2869,9 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                 }
             }
 
-            notify |= placementController?.Cancel() ?? _toolboxSelection.Clear();
+            notify |= _toolboxSelection.Clear();
+            if (_session is { } connectionSession)
+                notify |= await ClearConnectionToolUnderGateAsync(connectionSession, linked.Token).ConfigureAwait(false);
             if (placementController is not null && _session is { } session)
             {
                 notify |= await ToolboxPlacementController.ClearPreviewAsync(
@@ -2852,7 +2903,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(publishChanged);
 
         var observed = session.CaptureState();
-        if (observed.ActiveScopeId == scopeId)
+        if (observed.PresentationContext == new ProcessScopePresentationContext(scopeId))
         {
             return await session.NavigateToScopeAsync(scopeId, cancellationToken)
                 .ConfigureAwait(false);
@@ -2952,9 +3003,19 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
 
         changed |= placementController?.Cancel() ?? false;
         changed |= _toolboxSelection.Clear();
+        if (_session is { } connectionSession)
+            changed |= await ClearConnectionToolUnderGateAsync(connectionSession, cancellationToken).ConfigureAwait(false);
         changed |= await SetPointerCursorUnderGateAsync("default", cancellationToken)
             .ConfigureAwait(false);
         return changed;
+    }
+
+    private static async ValueTask<bool> ClearConnectionToolUnderGateAsync(EditingSession session, CancellationToken cancellationToken)
+    {
+        var editor = session.CaptureState().EditorState;
+        if (ConnectionToolState.GetSelection(editor) is null) return false;
+        _ = await session.SelectConnectionToolAsync(null, AnchorConnectionCreationCatalog.Empty, cancellationToken).ConfigureAwait(false);
+        return true;
     }
 
     private async Task OnSurfaceChangedAsync(Canvas2DSurfaceSize surfaceSize)
@@ -2998,7 +3059,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                                 contextMenu.DocumentRevision,
                                 contextMenu.SessionGeneration,
                                 contextMenu.SourceScene,
-                                contextMenu.ScopeId,
+                                contextMenu.ScopeId!,
                                 contextMenu.BackgroundActions)
                             : contextMenu.TargetVisualStateId is { } targetVisualStateId
                             ? DocumentCanvasContextMenuState.CreateClamped(
@@ -3017,7 +3078,8 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                                 contextMenu.ScopeId,
                                 contextMenu.InteractionScopeId,
                                 contextMenu.TargetPresentation,
-                                contextMenu.ConnectorLabelAction)
+                                contextMenu.ConnectorLabelAction,
+                                contextMenu.ViewContext)
                             : DocumentCanvasContextMenuState.CreateSemanticClamped(
                                 contextMenu.CssPosition,
                                 surfaceSize,
@@ -3027,7 +3089,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                                 contextMenu.DocumentRevision,
                                 contextMenu.SessionGeneration,
                                 contextMenu.SourceScene,
-                                contextMenu.ScopeId,
+                                contextMenu.ScopeId!,
                                 contextMenu.SemanticViewActions,
                                 contextMenu.SemanticCommandActions,
                                 contextMenu.TargetPresentation);
@@ -3635,6 +3697,8 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                         session,
                         cssPoint,
                         _lifetimeToken).ConfigureAwait(false);
+                    var stalePlacement = placement.Diagnostics.Any(diagnostic =>
+                        diagnostic.Code == ToolboxPlacementController.PlacementStale);
                     if (placement.Handled)
                     {
                         var placementState = session.CaptureState();
@@ -3647,9 +3711,18 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                         }
                     }
 
-                    RememberPlacementEvaluation(session);
+                    if (stalePlacement)
+                    {
+                        lock (_sync)
+                        {
+                            _placementEvaluatedState = null;
+                            _placementPointerCssPoint = null;
+                        }
+                        notify |= await ToolboxPlacementController.ClearPreviewAsync(session, _lifetimeToken).ConfigureAwait(false);
+                    }
+                    else RememberPlacementEvaluation(session);
                     notify |= await SetPointerCursorUnderGateAsync(
-                        PlacementCursor(session, placementController),
+                        stalePlacement ? "default" : PlacementCursor(session, placementController),
                         _lifetimeToken).ConfigureAwait(false);
                     return;
                 }
@@ -3710,8 +3783,9 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                     var targetVisualStateId = result.TargetOrigin?.VisualStateId;
                     var activationState = session.CaptureState();
                     if (targetVisualStateId is not null &&
+                        activationState.PresentationContext is ProcessScopePresentationContext &&
                         activationState.Status == EditingSessionStatus.Ready &&
-                        activationState.ActiveScopeId == result.SessionState.ActiveScopeId &&
+                        activationState.PresentationContext == result.SessionState.PresentationContext &&
                         activationState.DocumentRevision ==
                             result.SessionState.DocumentRevision &&
                         ReferenceEquals(
@@ -4025,7 +4099,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
             }
 
             var state = session.CaptureState();
-            var activeScopeId = state.ActiveScopeId;
+            var presentationContext = state.PresentationContext;
             var historyAvailable = isUndo
                 ? state.HistoryStatus.CanUndo
                 : state.HistoryStatus.CanRedo;
@@ -4044,7 +4118,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
             {
                 await session.WaitForIdleAsync(linked.Token).ConfigureAwait(false);
                 if (result.IsApplied ||
-                    session.CaptureState().ActiveScopeId != activeScopeId)
+                    session.CaptureState().PresentationContext != presentationContext)
                 {
                     _ = await ClearScopeNavigationTransientStateUnderGateAsync(
                         linked.Token).ConfigureAwait(false);
@@ -4346,7 +4420,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
             if (current.Status != EditingSessionStatus.Ready ||
                 current.DocumentId != sourceState.DocumentId ||
                 current.DocumentRevision != sourceState.DocumentRevision ||
-                current.ActiveScopeId != sourceState.ActiveScopeId ||
+                current.PresentationContext != sourceState.PresentationContext ||
                 current.Generation != sourceState.Generation ||
                 !ReferenceEquals(current.CurrentScene, sourceState.CurrentScene) ||
                 result.DocumentId != sourceState.DocumentId ||
@@ -4357,7 +4431,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
 
             var changed = ReplaceInteractionDiagnosticsUnderLock(result.Diagnostics);
             _contextCommandDiagnosticOwner =
-                (session, sourceState.DocumentId, sourceState.DocumentRevision, sourceState.ActiveScopeId);
+                (session, sourceState.DocumentId, sourceState.DocumentRevision, sourceState.PresentationContext);
             return changed;
         }
     }
@@ -4384,6 +4458,10 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
             {
                 return;
             }
+
+            if (_toolboxSelection.SelectedConnectionCreationId is { } selectedConnection &&
+                ConnectionToolState.GetSelection(eventArgs.State.EditorState) != selectedConnection)
+                _toolboxSelection.Clear();
 
             // Every notification still reconciles host state. Only this explicitly proven
             // Pan generation may omit an intermediate surrounding-editor render.
@@ -4430,13 +4508,19 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                     CanvasPointerEventKind.Up or CanvasPointerEventKind.Cancel;
             var documentRevisionChanged = _observedDocumentRevision is not null &&
                 _observedDocumentRevision != eventArgs.State.DocumentRevision;
+            var placementContextChanged = PlacementContextChanged(eventArgs.State);
+            if (placementContextChanged)
+            {
+                _placementEvaluatedState = null;
+                _placementPointerCssPoint = null;
+            }
             forceCursorReset = (documentRevisionChanged &&
                 !activeBrowserBoundaryOwnsFinalCursor) ||
                 eventArgs.State.Status == EditingSessionStatus.RuntimeFaulted ||
                 (!eventArgs.State.IsCurrentScenePresented &&
                  eventArgs.State.PresentationDiagnostics.Any(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error) &&
                  eventArgs.State.EditorState.TemporaryFeedback.Any(static feedback => feedback.SpatialResize is not null)) ||
-                PlacementContextChanged(eventArgs.State);
+                placementContextChanged;
             if (documentRevisionChanged)
             {
                 _ = ReplaceInteractionDiagnosticsUnderLock([]);
@@ -4449,7 +4533,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                 ReferenceEquals(owner.Session, _session) &&
                 owner.DocumentId == eventArgs.State.DocumentId &&
                 owner.Revision == eventArgs.State.DocumentRevision &&
-                owner.ScopeId == eventArgs.State.ActiveScopeId &&
+                owner.Context == eventArgs.State.PresentationContext &&
                 !eventArgs.State.IsClosed;
             if ((_contextCommandDiagnosticOwner is not null ||
                  eventArgs.State.Status == EditingSessionStatus.Rebuilding) &&
@@ -4461,7 +4545,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
             if (_validationSnapshot is { } validation &&
                 (validation.DocumentId != eventArgs.State.DocumentId ||
                  validation.SourceRevision != eventArgs.State.DocumentRevision ||
-                 validation.ScopeId != eventArgs.State.ActiveScopeId))
+                 validation.PresentationContext != eventArgs.State.PresentationContext))
             {
                 _validationSnapshot = null;
                 RemoveHostDiagnosticUnderLock(HostModelValidationFailed);
@@ -4484,7 +4568,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                 (eventArgs.State.IsClosed ||
                  eventArgs.State.Status == EditingSessionStatus.RuntimeFaulted ||
                  documentRevisionChanged ||
-                 contextMenu.ScopeId != eventArgs.State.ActiveScopeId ||
+                 contextMenu.ViewContext != eventArgs.State.PresentationContext ||
                  contextMenu.Kind == DocumentCanvasContextMenuKind.Background &&
                  (contextMenu.SessionGeneration != eventArgs.State.Generation ||
                   !ReferenceEquals(contextMenu.SourceScene, eventArgs.State.CurrentScene)) ||
@@ -4578,7 +4662,8 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
             if (_modelViewPropertiesFormOpen &&
                 (eventArgs.State.IsClosed ||
                  eventArgs.State.Status == EditingSessionStatus.RuntimeFaulted ||
-                 eventArgs.State.ActiveScopeId != _modelViewPropertiesScopeId))
+                 eventArgs.State.PresentationContext is not ProcessScopePresentationContext processView ||
+                 processView.ScopeId != _modelViewPropertiesScopeId))
             {
                 ClearModelViewPropertiesFormUnderLock();
             }
@@ -4728,12 +4813,12 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                             expectedPresentationId,
                             out var targetItem,
                             out var interactionScopeId) ||
-                        targetItem is null || interactionScopeId is null)
+                        targetItem is null)
                     {
                         return false;
                     }
 
-                    return DocumentCanvasPropertySnapshot.TryCreate(
+                    var captured = DocumentCanvasPropertySnapshot.TryCreate(
                         document,
                         targetVisualStateId,
                         propertiesSchemaCatalog,
@@ -4743,6 +4828,9 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                         targetItem.SpatialRegion,
                         confirmed.Generation,
                         confirmed.CurrentScene) && snapshot is { IsPropertiesAvailable: true };
+                    if (snapshot is not null)
+                        snapshot = snapshot with { PresentationContext = confirmed.PresentationContext };
+                    return captured;
                 }
 
                 var presentationItem = confirmed.CurrentScene?.Items.FirstOrDefault(item =>
@@ -4765,7 +4853,9 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
 
                 snapshot = snapshot with
                 {
-                    InteractionScopeId = confirmed.ActiveScopeId,
+                    InteractionScopeId = confirmed.PresentationContext is ProcessScopePresentationContext process
+                        ? process.ScopeId : null,
+                    PresentationContext = confirmed.PresentationContext,
                     TargetSceneObjectId = presentationItem.Id,
                     SpatialRegion = presentationItem.SpatialRegion,
                     SessionGeneration = confirmed.Generation,
@@ -4808,12 +4898,24 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
             }
         }
 
-        if (!state.TryGetCurrentProcessInteraction(out var scopeScene) ||
-            scopeScene is null ||
-            !document.SemanticModel.TryGetScope(visual.SemanticElementId, out var semanticScope) ||
-            semanticScope?.Id != scopeScene.ActiveScopeId)
+        if (state.PresentationContext is ProcessScopePresentationContext process)
+        {
+            if (!state.TryGetCurrentProcessInteraction(out var scopeScene) || scopeScene is null ||
+                !document.SemanticModel.TryGetScope(visual.SemanticElementId, out var semanticScope) ||
+                semanticScope?.Id != process.ScopeId)
+                return false;
+            interactionScopeId = process.ScopeId;
+        }
+        else if (state.PresentationPlan is not { } plan || plan.Context != state.PresentationContext ||
+                 plan.DocumentId != document.DocumentId || plan.SourceRevision != document.Revision ||
+                 !plan.Contains(visual.SemanticElementId))
         {
             return false;
+        }
+        else if (document.SemanticModel.TryGetElement(visual.SemanticElementId, out _) &&
+                 document.SemanticModel.TryGetScope(visual.SemanticElementId, out var originScope))
+        {
+            interactionScopeId = originScope?.Id;
         }
 
         if (expectedSceneObjectId is not null &&
@@ -4843,7 +4945,6 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
             return false;
         }
 
-        interactionScopeId = scopeScene.ActiveScopeId;
         return true;
     }
 
@@ -4953,7 +5054,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
             current.Generation == result.SessionState.Generation &&
             ReferenceEquals(current.EditorState, result.SessionState.EditorState) &&
             ReferenceEquals(current.CurrentScene, result.SessionState.CurrentScene) &&
-            current.ActiveScopeId == result.SessionState.ActiveScopeId &&
+            current.PresentationContext == result.SessionState.PresentationContext &&
             current.CurrentScene is not null))
         {
             return null;
@@ -4964,6 +5065,8 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
             : null;
         if (targetVisualStateId is null && targetSemanticElementId is null)
         {
+            if (current.PresentationContext is not ProcessScopePresentationContext)
+                return null;
             if (cssPoint.X < 0d || cssPoint.X > surfaceSize.Value.CssWidth ||
                 cssPoint.Y < 0d || cssPoint.Y > surfaceSize.Value.CssHeight)
             {
@@ -4999,6 +5102,8 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
 
         if (targetSemanticElementId is not null)
         {
+            if (current.PresentationContext is not ProcessScopePresentationContext)
+                return null;
             if (result.TargetId is not { } semanticTargetSceneObjectId)
             {
                 return null;
@@ -5117,10 +5222,11 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
             document is not null &&
             document.DocumentId == current.DocumentId &&
             document.Revision == current.DocumentRevision &&
+            current.PresentationContext is ProcessScopePresentationContext processContext &&
             TryResolveScopeNavigationAction(
                 scopeNavigationCatalog,
                 document,
-                current.ActiveScopeId,
+                processContext.ScopeId,
                 visualTarget,
                 out var resolvedScopeNavigationAction)
                 ? resolvedScopeNavigationAction
@@ -5153,10 +5259,13 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
             result.NodeLabelContextAction,
             deletionAction,
             scopeNavigationAction,
-            current.ActiveScopeId,
-            current.ActiveScopeId,
+            current.PresentationContext is ProcessScopePresentationContext menuProcess ? menuProcess.ScopeId : null,
+            document is not null && document.VisualModel.TryGetVisualState(visualTarget, out var menuVisual) &&
+                menuVisual is not null && document.SemanticModel.TryGetElement(menuVisual.SemanticElementId, out _) &&
+                document.SemanticModel.TryGetScope(menuVisual.SemanticElementId, out var menuOrigin) ? menuOrigin?.Id : null,
             result.HitResult?.SpatialRegion,
-            connectorLabelAction);
+            connectorLabelAction,
+            current.PresentationContext);
     }
 
     private static bool TryResolveScopeNavigationAction(
@@ -5177,7 +5286,8 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                 visual.SemanticElementId,
                 out var owner) ||
             owner is null ||
-            document.SemanticModel.GetScope(owner.Id).Id != owningScopeId ||
+            !document.SemanticModel.TryGetScope(owner.Id, out var semanticScope) ||
+            semanticScope?.Id != owningScopeId ||
             !catalog.TryGetRegistration(owner.TypeId, out var registration) ||
             registration is null)
         {
@@ -5447,6 +5557,11 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
         state.ProjectedGraph is not null &&
         state.LayoutResult is not null &&
         state.RoutingResult is not null &&
+        (state.PresentationContext is ProcessScopePresentationContext ||
+         state.PresentationPlan is { } plan &&
+         plan.Context == state.PresentationContext &&
+         plan.DocumentId == state.DocumentId &&
+         plan.SourceRevision == state.DocumentRevision) &&
         state.EditorState.ActiveGesture is null;
 
     private static bool IsSameValidationContext(
@@ -5455,7 +5570,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
         IsValidationContextAvailable(confirmed) &&
         observed.DocumentId == confirmed.DocumentId &&
         observed.DocumentRevision == confirmed.DocumentRevision &&
-        observed.ActiveScopeId == confirmed.ActiveScopeId &&
+        observed.PresentationContext == confirmed.PresentationContext &&
         observed.Generation == confirmed.Generation &&
         ReferenceEquals(observed.CurrentScene, confirmed.CurrentScene) &&
         ReferenceEquals(observed.ProjectedGraph, confirmed.ProjectedGraph) &&
@@ -5493,6 +5608,10 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
             ? MidpointOfLongestSegment(
                 item.Geometry.Points
                     .Select(item.Transform.TransformPoint))
+            : item.HitTestPolicy.Mode == Canvas2DHitTestMode.Stroke
+                ? item.Transform.TransformPoint(new PointD(
+                    item.Geometry.Bounds.Left,
+                    item.Geometry.Bounds.Top + (item.Geometry.Bounds.Height / 2d)))
             : new PointD(
                 item.Bounds.Left + (item.Bounds.Width / 2d),
                 item.Bounds.Top + (item.Bounds.Height / 2d));
@@ -5553,6 +5672,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
     {
         var session = _session;
         if (session is null || state is null || state.IsClosed ||
+            state.PresentationContext is not ProcessScopePresentationContext ||
             !session.TryCaptureDocumentSnapshot(out var document) ||
             document is null ||
             document.DocumentId != state.DocumentId ||
@@ -5666,4 +5786,8 @@ internal sealed record DocumentCanvasHostState(
     SemanticElementId? PropertiesTargetSemanticElementId = null,
     string? ActiveCanvasElementId = null,
     DocumentPublicationSnapshot? Publication = null,
-    long DocumentSessionVersion = 0);
+    long DocumentSessionVersion = 0,
+    ImmutableArray<ModelerPresentationViewChoice> PresentationViewChoices = default,
+    bool CanAutoArrange = false,
+    ElementToolboxState? ElementToolbox = null,
+    bool SmartEditEnabled = true);

@@ -87,7 +87,7 @@ internal sealed class MoveLabelCommandHandler : ICommandHandler
             document.VisualModel.VisualStates.Select(visualState =>
                 visualState.Id == replacement.Id ? replacement : visualState),
             document.VisualModel.ProfileElementPresentations,
-            document.VisualModel.RoutingScopes);
+            document.VisualModel.RoutingScopes, document.VisualModel.DocumentRoutingStates);
 
         return ValueTask.FromResult(CommandHandlerResult.Success(
             new DocumentSnapshot(

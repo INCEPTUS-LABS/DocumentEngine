@@ -634,6 +634,8 @@ internal static class BpmnSequenceFlowCreationValidation
             diagnostics.Add(ConfigurationDiagnostic(violation, diagnosticSubjectId));
         }
 
+        diagnostics.AddRange(BpmnEffectiveParticipant.ValidateSequenceEndpoints(document, sourceId, targetId));
+
         return [.. diagnostics];
     }
 

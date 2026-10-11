@@ -6,11 +6,17 @@ using Inceptus.DocumentEngine.Contracts.Primitives;
 using Inceptus.DocumentEngine.Contracts.Profiles;
 using Inceptus.DocumentEngine.Contracts.Visuals;
 using Inceptus.DocumentEngine.Canvas2D.Scene;
+using Inceptus.DocumentEngine.Contracts.Presentation;
 
 namespace Inceptus.DocumentEngine.Canvas2D.EditingSession;
 
 internal interface ISessionPipelineProcessing
 {
+    ValueTask<EditingSessionPipelineResult> RunDocumentPresentationAsync(DocumentSnapshot document,
+        DocumentPresentationContext context, EditorStateSnapshot editorState,
+        ModelProfileViewStateSnapshot profiles, ModelProfileElementViewStateSnapshot elements,
+        CancellationToken cancellationToken) => throw new NotSupportedException("Document presentation is not supported by this pipeline.");
+
     ValueTask<EditingSessionPipelineResult> RebuildSceneForTransientPresentationAsync(
         Canvas2DScene previousScene,
         DocumentSnapshot document,

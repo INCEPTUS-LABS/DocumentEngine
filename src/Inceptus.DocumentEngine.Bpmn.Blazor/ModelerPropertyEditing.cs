@@ -1,29 +1,54 @@
+using System.Collections.Immutable;
 using Inceptus.DocumentEngine.Bpmn.Blazor.Presentation;
+using Inceptus.DocumentEngine.Contracts.Documents;
 using Inceptus.DocumentEngine.Bpmn.Commands;
 using Inceptus.DocumentEngine.Bpmn.Semantics;
 using Inceptus.DocumentEngine.Contracts.Commands;
 using Inceptus.DocumentEngine.Contracts.Primitives;
 using Inceptus.DocumentEngine.Contracts.Properties;
+using Inceptus.DocumentEngine.Organizational.Semantics;
 
 namespace Inceptus.DocumentEngine.Bpmn.Blazor;
 
 /// <summary>
-/// BPMN application adapter for the optional SequenceFlow Name field. The generic
-/// property command retains its existing replacement-only contract.
+/// BPMN application adapters for concrete type switching and optional connector
+/// Name field. The generic property command retains its replacement-only contract.
 /// </summary>
 internal static class ModelerPropertyEditing
 {
+    internal static ImmutableArray<KeyValuePair<SemanticElementId, string>> CaptureParticipants(DocumentSnapshot document) =>
+        [.. document.SemanticModel.Elements.Where(element => element.TypeId == BpmnSemanticTypes.Participant)
+            .Select(element => KeyValuePair.Create(element.Id,
+                element.Properties.TryGetValue(BpmnSemanticProperties.Name, out var name) && name.Kind == PropertyValueKind.Text
+                    ? name.TextValue : string.Empty))
+            .OrderBy(option => option.Value, StringComparer.Ordinal).ThenBy(option => option.Key.Value, StringComparer.Ordinal)];
+
+    internal static ICommand CreateTypeCommand(
+        DocumentCanvasPropertySnapshot target, SemanticTypeId targetType) =>
+        new ChangeBpmnElementTypeCommand(target.DocumentId, target.Revision,
+            target.SemanticId, targetType);
+
     internal static bool CanEditMissingValue(
         SemanticTypeId typeId, ElementPropertyFieldDefinition field) =>
-        typeId == BpmnSemanticTypes.SequenceFlow &&
-        field.SemanticPropertyKey == BpmnSemanticProperties.Name;
+        (typeId == BpmnSemanticTypes.SequenceFlow || typeId == BpmnSemanticTypes.MessageFlow) &&
+        field.SemanticPropertyKey == BpmnSemanticProperties.Name || IsParticipantField(typeId, field);
+
+    internal static bool IsParticipantField(SemanticTypeId typeId, ElementPropertyFieldDefinition field) =>
+        typeId == OrganizationalSemanticTypes.Pool && field.SemanticPropertyKey == OrganizationalSemanticProperties.ParticipantId;
 
     internal static ICommand? CreateCommand(
         DocumentCanvasPropertySnapshot target,
         ElementPropertyFieldDefinition field,
-        PropertyValue value) =>
-        CanEditMissingValue(target.TypeId, field)
-            ? new UpdateBpmnSequenceFlowNameCommand(target.DocumentId, target.Revision,
-                target.SemanticId, value.TextValue.Length == 0 ? null : value.TextValue)
-            : null;
+        PropertyValue value)
+    {
+        if (IsParticipantField(target.TypeId, field))
+            return new SetBpmnPoolParticipantCommand(target.DocumentId, target.Revision, target.SemanticId,
+                string.IsNullOrWhiteSpace(value.TextValue) ? null : new SemanticElementId(value.TextValue));
+        if (!CanEditMissingValue(target.TypeId, field)) return null;
+
+        var name = value.TextValue.Length == 0 ? null : value.TextValue;
+        return target.TypeId == BpmnSemanticTypes.MessageFlow
+            ? new UpdateBpmnMessageFlowNameCommand(target.DocumentId, target.Revision, target.SemanticId, name)
+            : new UpdateBpmnSequenceFlowNameCommand(target.DocumentId, target.Revision, target.SemanticId, name);
+    }
 }

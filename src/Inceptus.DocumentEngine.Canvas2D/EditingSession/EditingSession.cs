@@ -7,6 +7,7 @@ using Inceptus.DocumentEngine.Contracts.EditorState;
 using Inceptus.DocumentEngine.Contracts.Geometry;
 using Inceptus.DocumentEngine.Contracts.History;
 using Inceptus.DocumentEngine.Contracts.Primitives;
+using Inceptus.DocumentEngine.Contracts.Presentation;
 using Inceptus.DocumentEngine.Contracts.Profiles;
 using Inceptus.DocumentEngine.Contracts.Routing;
 using Inceptus.DocumentEngine.Contracts.Visuals;
@@ -63,6 +64,8 @@ public sealed partial class EditingSession : IAsyncDisposable
     private ModelProfileElementViewStateSnapshot _activeModelProfileElementViewState;
     private ModelProfileStateSnapshot _lastModelProfileState;
     private DocumentScopeId _activeScopeId;
+    private PresentationViewContext _presentationContext;
+    private readonly Inceptus.DocumentEngine.Runtime.Projection.ProjectionEngine _projectionEngine;
     private ImmutableArray<DocumentScopeId> _activeScopePath;
     private Task? _closeTask;
     private TaskCompletionSource _statePulse = NewStatePulse();
@@ -93,6 +96,8 @@ public sealed partial class EditingSession : IAsyncDisposable
         ConnectorAnchorPolicyProvider = configuration.ConnectorAnchorPolicyProvider;
         _modelProfileCatalog = configuration.ModelProfileCatalog;
         _activeScopeId = document.SemanticModel.RootScopeId;
+        _presentationContext = new ProcessScopePresentationContext(_activeScopeId);
+        _projectionEngine = configuration.ProjectionEngine;
         _activeScopePath = [_activeScopeId];
         _activeModelProfileViewState = configuration.InitialModelProfileViewState;
         _activeModelProfileElementViewState = ModelProfileElementViewStateSnapshot.Empty;
@@ -110,11 +115,13 @@ public sealed partial class EditingSession : IAsyncDisposable
         var subscribers = new IDocumentChangedSubscriber[]
             { _documentChangedSubscriber }
             .Concat(configuration.DocumentChangedSubscribers);
-        _commandProcessor = configuration.RoutingEngine.TryGetStablePolicy(configuration.RoutingAlgorithmId, out _)
+        _elementConnectionRoutingPreparer = configuration.RoutingEngine.TryGetStablePolicy(configuration.RoutingAlgorithmId, out _)
+            ? new ConnectorRoutingStatePreparer(configuration, renderer, renderer.CreateTextMeasurementRequest) : null;
+        _commandProcessor = _elementConnectionRoutingPreparer is not null
             ? new CommandProcessor(
                 configuration.CommandHandlers, configuration.CommandValidators, subscribers,
                 configuration.HistoryPolicies, configuration.ConnectorAnchorPolicyProvider,
-                new ConnectorRoutingStatePreparer(configuration, renderer, renderer.CreateTextMeasurementRequest))
+                _elementConnectionRoutingPreparer)
             : new CommandProcessor(
             configuration.CommandHandlers,
             configuration.CommandValidators,
@@ -255,6 +262,8 @@ public sealed partial class EditingSession : IAsyncDisposable
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(scopeId);
+        if (_presentationContext is DocumentPresentationContext)
+            return ChangePresentationContextAsync(new ProcessScopePresentationContext(scopeId), cancellationToken);
         return NavigateToScopeCoreAsync(scopeId, cancellationToken);
     }
 
@@ -439,7 +448,8 @@ public sealed partial class EditingSession : IAsyncDisposable
                 if (snapshot.VisualModel.RoutingScopes is null)
                 {
                     var visual = new VisualModelSnapshot(snapshot.DocumentId, snapshot.Revision,
-                        snapshot.VisualModel.VisualStates, snapshot.VisualModel.ProfileElementPresentations, prepared.RoutingScopes);
+                        snapshot.VisualModel.VisualStates, snapshot.VisualModel.ProfileElementPresentations, prepared.RoutingScopes,
+                        prepared.DocumentRoutingStates);
                     var reconstructed = DocumentReconstructor.Reconstruct(new Contracts.Documents.DocumentSnapshot(
                         snapshot.SemanticModel, visual, snapshot.Metadata, snapshot.Publication), configuration.ConnectorAnchorPolicyProvider);
                     if (reconstructed.Document is null)

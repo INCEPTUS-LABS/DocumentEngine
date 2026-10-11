@@ -14,6 +14,7 @@ public sealed class ToolboxCatalog
     private readonly ImmutableDictionary<ToolboxGroupId, ImmutableArray<ToolboxItemDefinition>>
         _itemsByGroup;
     private readonly ImmutableDictionary<ToolboxItemId, ToolboxItemDefinition> _itemsById;
+    private readonly ImmutableDictionary<ToolboxItemId, ToolboxConnectionItemDefinition> _connectionsById;
 
     public ToolboxCatalog(IEnumerable<ToolboxContribution>? contributions = null)
     {
@@ -34,10 +35,14 @@ public sealed class ToolboxCatalog
         var items = contributionCopy
             .SelectMany(static contribution => contribution.Items)
             .ToArray();
+        var connections = contributionCopy.SelectMany(static contribution => contribution.ConnectionItems).ToArray();
 
         RejectDuplicateSectionIds(sections, nameof(contributions));
         RejectDuplicateGroupIds(groups, nameof(contributions));
         RejectDuplicateItemIds(items, nameof(contributions));
+        var allItemIds = items.Select(static item => item.ItemId).Concat(connections.Select(static item => item.ItemId)).ToArray();
+        if (allItemIds.Distinct().Count() != allItemIds.Length)
+            throw new ArgumentException("Toolbox item identities must be unique across element and connection options.", nameof(contributions));
 
         Sections = sections
             .OrderBy(static section => section.Order)
@@ -62,6 +67,8 @@ public sealed class ToolboxCatalog
                 index))
             .ToImmutableDictionary();
         RejectUnknownGroupReferences(items, groupRanks, nameof(contributions));
+        if (connections.Any(item => !groupRanks.ContainsKey(item.GroupId)))
+            throw new ArgumentException("A Toolbox connection item references an unknown group.", nameof(contributions));
 
         Items = items
             .OrderBy(item => groupRanks[item.GroupId])
@@ -80,6 +87,9 @@ public sealed class ToolboxCatalog
                 .Where(item => item.GroupId == group.GroupId)
                 .ToImmutableArray());
         _itemsById = Items.ToImmutableDictionary(static item => item.ItemId);
+        ConnectionItems = [.. connections.OrderBy(item => groupRanks[item.GroupId])
+            .ThenBy(static item => item.Order).ThenBy(static item => item.ItemId.Value, StringComparer.Ordinal)];
+        _connectionsById = ConnectionItems.ToImmutableDictionary(static item => item.ItemId);
     }
 
     public static ToolboxCatalog Empty { get; } = new();
@@ -89,6 +99,20 @@ public sealed class ToolboxCatalog
     public ImmutableArray<ToolboxGroupDefinition> Groups { get; }
 
     public ImmutableArray<ToolboxItemDefinition> Items { get; }
+
+    public ImmutableArray<ToolboxConnectionItemDefinition> ConnectionItems { get; }
+
+    public ImmutableArray<ToolboxConnectionItemDefinition> GetConnectionItems(ToolboxGroupId groupId)
+    {
+        ArgumentNullException.ThrowIfNull(groupId);
+        return [.. ConnectionItems.Where(item => item.GroupId == groupId)];
+    }
+
+    public bool TryGetConnectionItem(ToolboxItemId itemId, [NotNullWhen(true)] out ToolboxConnectionItemDefinition? item)
+    {
+        ArgumentNullException.ThrowIfNull(itemId);
+        return _connectionsById.TryGetValue(itemId, out item);
+    }
 
     public ImmutableArray<ToolboxGroupDefinition> GetGroups(ToolboxSectionId sectionId)
     {

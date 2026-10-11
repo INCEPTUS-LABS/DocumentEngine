@@ -6,8 +6,7 @@ namespace Inceptus.DocumentEngine.Organizational.Projection;
 
 internal sealed class OrganizationalPoolProjectionRule : IProjectionRule
 {
-    internal static ProjectionRuleId RuleId { get; } =
-        new("inceptus:organizational/projection/pool-container");
+    internal static ProjectionRuleId RuleId => OrganizationalContainerProjection.PoolRuleId;
 
     internal static ProjectionRuleRegistration Registration { get; } =
         new(
@@ -32,6 +31,8 @@ internal sealed class OrganizationalPoolProjectionRule : IProjectionRule
 
         // Pools are rendered by the Organizational Scene contributor as spatial regions.
         // This rule explicitly consumes the semantic element without duplicating it as a node.
-        return ProjectionRuleResult.Success(ProjectionRuleContribution.Empty);
+        return element.Document is null || !element.Document.SemanticModel.ModelProfiles.IsAvailable(Profiles.OrganizationalModelProfile.Id)
+            ? ProjectionRuleResult.Success(ProjectionRuleContribution.Empty)
+            : OrganizationalContainerProjection.Project(element, RuleId, [element.SemanticId], false);
     }
 }

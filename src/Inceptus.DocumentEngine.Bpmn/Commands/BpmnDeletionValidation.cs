@@ -115,7 +115,7 @@ internal static class BpmnDeletionValidation
             relationship =>
                 (deletionPlan.RemovedElementIds.Contains(relationship.SourceId) ||
                     deletionPlan.RemovedElementIds.Contains(relationship.TargetId)) &&
-                relationship.TypeId != BpmnSemanticTypes.SequenceFlow);
+                relationship.TypeId != BpmnSemanticTypes.SequenceFlow && relationship.TypeId != BpmnSemanticTypes.MessageFlow);
         return unsupportedIncident is null
             ? []
             :

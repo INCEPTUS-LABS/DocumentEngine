@@ -6,6 +6,7 @@ using Inceptus.DocumentEngine.Contracts.Semantics;
 using Inceptus.DocumentEngine.Organizational.Commands;
 using Inceptus.DocumentEngine.Organizational.Profiles;
 using Inceptus.DocumentEngine.Organizational.Semantics;
+using Inceptus.DocumentEngine.Organizational.Spatial;
 
 namespace Inceptus.DocumentEngine.Organizational.ContextMenus;
 
@@ -22,6 +23,12 @@ public static class OrganizationalPoolActions
 
     public static SemanticSceneCommandActionId MoveDownId { get; } =
         new("inceptus:organizational/scene-command-action/move-pool-down");
+
+    public static SemanticSceneCommandActionId MoveLaneUpId { get; } =
+        new("inceptus:organizational/scene-command-action/move-lane-up");
+
+    public static SemanticSceneCommandActionId MoveLaneDownId { get; } =
+        new("inceptus:organizational/scene-command-action/move-lane-down");
 
     public static SemanticSceneViewActionDefinition Expand { get; } = new(
         ExpandId,
@@ -65,25 +72,30 @@ public static class OrganizationalPoolActions
     { get; } = [Expand, Collapse];
 
     public static ImmutableArray<SemanticSceneCommandActionDefinition> CommandDefinitions
-    { get; } = [MoveUp, MoveDown];
+    { get; } = [MoveUp, MoveDown,
+        CreateMoveAction(MoveLaneUpId, "Move Lane Up", OrganizationalPoolMoveDirection.Up, 400, laneOnly: true),
+        CreateMoveAction(MoveLaneDownId, "Move Lane Down", OrganizationalPoolMoveDirection.Down, 500, laneOnly: true)];
 
     private static SemanticSceneCommandActionDefinition CreateMoveAction(
         SemanticSceneCommandActionId id,
         string displayName,
         OrganizationalPoolMoveDirection direction,
-        int order) =>
+        int order,
+        bool laneOnly = false) =>
         new(
             id,
             displayName,
             request => new SemanticSceneCommandActionPlan(
-                new MoveOrganizationalPoolCommand(
+                laneOnly ? new MoveOrganizationalLaneCommand(
+                    request.Document.DocumentId, request.Document.Revision, request.TargetSemanticElementId, direction)
+                : new MoveOrganizationalPoolCommand(
                     request.Document.DocumentId,
                     request.Document.Revision,
                     request.TargetSemanticElementId,
                     direction),
                 request.TargetSemanticElementId),
             order,
-            request => CommandActionIsApplicable(request, direction));
+            request => CommandActionIsApplicable(request, direction, laneOnly));
 
     private static bool ViewActionIsApplicable(
         SemanticSceneViewActionRequest request,
@@ -104,7 +116,8 @@ public static class OrganizationalPoolActions
 
     private static bool CommandActionIsApplicable(
         SemanticSceneCommandActionRequest request,
-        OrganizationalPoolMoveDirection direction)
+        OrganizationalPoolMoveDirection direction,
+        bool laneOnly)
     {
         ArgumentNullException.ThrowIfNull(request);
         if (!request.Document.SemanticModel.ModelProfiles.IsAvailable(
@@ -117,15 +130,8 @@ public static class OrganizationalPoolActions
             return false;
         }
 
-        var ordered = OrganizationalSemantics.GetOrderedPoolsInScope(
-            request.Document,
-            request.ActiveScopeId);
-        var index = Array.FindIndex(
-            ordered.ToArray(),
-            pool => pool.Id == request.TargetSemanticElementId);
-        return direction == OrganizationalPoolMoveDirection.Up
-            ? index > 0
-            : index >= 0 && index < ordered.Length - 1;
+        return OrganizationalPoolOrdering.CanMove(request.Document, request.ActiveScopeId,
+            request.TargetSemanticElementId, direction, laneOnly);
     }
 
     private static bool IsExactActivePool(

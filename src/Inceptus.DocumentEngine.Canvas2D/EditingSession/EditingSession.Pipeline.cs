@@ -3,10 +3,12 @@ using Inceptus.DocumentEngine.Canvas2D.Scene;
 using Inceptus.DocumentEngine.Canvas2D.Rendering;
 using Inceptus.DocumentEngine.Contracts.Canvas2D;
 using Inceptus.DocumentEngine.Contracts.Commands;
+using Inceptus.DocumentEngine.Contracts.ConnectionCreation;
 using Inceptus.DocumentEngine.Contracts.Diagnostics;
 using Inceptus.DocumentEngine.Contracts.Documents;
 using Inceptus.DocumentEngine.Contracts.EditorState;
 using Inceptus.DocumentEngine.Contracts.Primitives;
+using Inceptus.DocumentEngine.Contracts.Presentation;
 using Inceptus.DocumentEngine.Contracts.Profiles;
 
 namespace Inceptus.DocumentEngine.Canvas2D.EditingSession;
@@ -141,12 +143,13 @@ public sealed partial class EditingSession
                     scopeTransition.TargetScopeId);
                 _inactiveScopeViews.Remove(scopeTransition.TargetScopeId);
                 _activeScopeId = scopeTransition.TargetScopeId;
+                _presentationContext = new ProcessScopePresentationContext(_activeScopeId);
                 _activeScopePath = scopeTransition.TargetScopePath;
                 _activeModelProfileViewState =
                     scopeTransition.TargetModelProfileViewState;
             }
 
-            var activeScopeId = _activeScopeId;
+            var activeScopeId = _presentationContext;
             var sourceModelProfileViewState = _activeModelProfileViewState;
             var pipelineModelProfileViewState = requestedModelProfileViewState ??
                 sourceModelProfileViewState;
@@ -158,7 +161,7 @@ public sealed partial class EditingSession
             EditingSessionPipelineArtifacts? preservedNodeLayoutArtifacts = null;
             EditingSessionPipelineArtifacts? compatibleScopeLayoutArtifacts = null;
             if (retainedTargetScopeArtifacts is not null &&
-                retainedTargetScopeArtifacts.ScopeId == activeScopeId &&
+                retainedTargetScopeArtifacts.PresentationContext == activeScopeId &&
                 retainedTargetScopeArtifacts.ProjectedGraph.DocumentId == snapshot.DocumentId &&
                 retainedTargetScopeArtifacts.ProjectedGraph.SourceRevision <= snapshot.Revision)
             {
@@ -176,7 +179,7 @@ public sealed partial class EditingSession
             if (nodeGeometryImpact is not null && preservedNodeLayoutArtifacts is null)
             {
                 if (_compatibleArtifacts is { } compatibleArtifacts &&
-                    compatibleArtifacts.ScopeId == activeScopeId)
+                    compatibleArtifacts.PresentationContext == activeScopeId)
                 {
                     preservedNodeLayoutArtifacts = compatibleArtifacts;
                 }
@@ -185,7 +188,7 @@ public sealed partial class EditingSession
                     for (var index = _nodeLayoutHistory.Length - 1; index >= 0; index--)
                     {
                         var entry = _nodeLayoutHistory[index];
-                        if (!entry.RequiresExplicitHistoricalRevision && entry.Artifacts.ScopeId == activeScopeId)
+                        if (!entry.RequiresExplicitHistoricalRevision && entry.Artifacts.PresentationContext == activeScopeId)
                         {
                             preservedNodeLayoutArtifacts = entry.Artifacts;
                             break;
@@ -198,7 +201,7 @@ public sealed partial class EditingSession
                 nodeGeometryImpact is null &&
                 compatibleScopeLayoutArtifacts is null &&
                 _compatibleArtifacts is { } currentCompatibleArtifacts &&
-                currentCompatibleArtifacts.ScopeId == activeScopeId &&
+                currentCompatibleArtifacts.PresentationContext == activeScopeId &&
                 currentCompatibleArtifacts.ProjectedGraph.DocumentId == snapshot.DocumentId &&
                 currentCompatibleArtifacts.ProjectedGraph.SourceRevision < snapshot.Revision)
             {
@@ -207,7 +210,7 @@ public sealed partial class EditingSession
 
             var nodeLayoutHistory = nodeGeometryImpact is not null
                 ? _nodeLayoutHistory
-                    .Where(entry => entry.Artifacts.ScopeId == activeScopeId &&
+                    .Where(entry => entry.Artifacts.PresentationContext == activeScopeId &&
                         (!entry.RequiresExplicitHistoricalRevision ||
                          nodeGeometryImpact.HistoricalSourceRevision == entry.Artifacts.ProjectedGraph.SourceRevision))
                     .Select(static entry => entry.Artifacts)
@@ -281,12 +284,14 @@ public sealed partial class EditingSession
             var editorState = EditorState.CaptureSnapshot();
             while (clearActiveGesture &&
                    (editorState.ActiveGesture is not null ||
+                    ConnectionToolState.GetSelection(editorState) is not null ||
                     (requestedModelProfileElementViewState is not null &&
                      !editorState.TemporaryFeedback.IsEmpty)))
             {
                 var clearedEditorState = requestedModelProfileElementViewState is not null
                     ? CopyEditorStateWithoutGestureAndTemporaryFeedback(editorState)
                     : CopyEditorStateWithoutGesture(editorState);
+                clearedEditorState = ConnectionToolState.WithSelection(clearedEditorState, null);
                 if (EditorState.TryUpdate(editorState, clearedEditorState))
                 {
                     editorState = clearedEditorState;
@@ -340,7 +345,7 @@ public sealed partial class EditingSession
     private async Task<EditingSessionOperationResult> RunPipelineAsync(
         EditingSessionGeneration generation,
         DocumentSnapshot snapshot,
-        DocumentScopeId activeScopeId,
+        PresentationViewContext activeScopeId,
         EditorStateSnapshot editorState,
         ModelProfileViewStateSnapshot sourceModelProfileViewState,
         ModelProfileViewStateSnapshot pipelineModelProfileViewState,
@@ -405,7 +410,7 @@ public sealed partial class EditingSession
     private async Task<EditingSessionOperationResult> RunPipelineCoreAsync(
         EditingSessionGeneration generation,
         DocumentSnapshot snapshot,
-        DocumentScopeId activeScopeId,
+        PresentationViewContext activeScopeId,
         EditorStateSnapshot editorState,
         ModelProfileViewStateSnapshot sourceModelProfileViewState,
         ModelProfileViewStateSnapshot pipelineModelProfileViewState,
@@ -425,7 +430,10 @@ public sealed partial class EditingSession
         EditingSessionPipelineResult result;
         try
         {
-            result = panSource is not null && sceneOnlyArtifacts is not null
+            result = activeScopeId is DocumentPresentationContext documentContext && sceneOnlyArtifacts is null
+                ? await _pipeline.RunDocumentPresentationAsync(snapshot, documentContext, editorState,
+                    pipelineModelProfileViewState, pipelineModelProfileElementViewState, runCancellation.Token).ConfigureAwait(false)
+                : panSource is not null && sceneOnlyArtifacts is not null
                 ? await _pipeline.RebuildSceneForPanAsync(
                     panSource,
                     snapshot,
@@ -450,7 +458,7 @@ public sealed partial class EditingSession
                 : preservedNodeLayoutArtifacts is not null
                     ? await _pipeline.RunPreservingNodeLayoutAsync(
                         snapshot,
-                        activeScopeId,
+                        ((ProcessScopePresentationContext)activeScopeId).ScopeId,
                         preservedNodeLayoutArtifacts,
                         nodeLayoutHistory,
                         nodeGeometryImpact!,
@@ -461,7 +469,7 @@ public sealed partial class EditingSession
                     : compatibleScopeLayoutArtifacts is not null
                         ? await _pipeline.RunPreservingScopeLayoutIfCompatibleAsync(
                             snapshot,
-                            activeScopeId,
+                            ((ProcessScopePresentationContext)activeScopeId).ScopeId,
                             compatibleScopeLayoutArtifacts,
                             editorState,
                             pipelineModelProfileViewState,
@@ -469,7 +477,7 @@ public sealed partial class EditingSession
                             runCancellation.Token).ConfigureAwait(false)
                     : await _pipeline.RunFullAsync(
                         snapshot,
-                        activeScopeId,
+                        ((ProcessScopePresentationContext)activeScopeId).ScopeId,
                         editorState,
                         pipelineModelProfileViewState,
                         pipelineModelProfileElementViewState,
@@ -722,7 +730,7 @@ public sealed partial class EditingSession
     {
         for (var index = 0; index < _nodeLayoutHistory.Length; index++)
         {
-            if (_nodeLayoutHistory[index].Artifacts.ScopeId == artifacts.ScopeId &&
+            if (_nodeLayoutHistory[index].Artifacts.PresentationContext == artifacts.PresentationContext &&
                 _nodeLayoutHistory[index].Artifacts.ProjectedGraph.SourceRevision ==
                     artifacts.ProjectedGraph.SourceRevision)
             {
@@ -741,7 +749,7 @@ public sealed partial class EditingSession
     private bool CanInstall(
         EditingSessionPipelineResult result,
         DocumentSnapshot snapshot,
-        DocumentScopeId activeScopeId,
+        PresentationViewContext activeScopeId,
         EditorStateSnapshot editorState,
         ModelProfileViewStateSnapshot sourceModelProfileViewState,
         ModelProfileElementViewStateSnapshot sourceModelProfileElementViewState)
@@ -750,7 +758,7 @@ public sealed partial class EditingSession
         var artifacts = result.Artifacts!;
         return AttachedDocument.DocumentId == snapshot.DocumentId &&
             AttachedDocument.Revision == snapshot.Revision &&
-            _activeScopeId == activeScopeId &&
+            _presentationContext == activeScopeId &&
             _activeModelProfileViewState.Equals(sourceModelProfileViewState) &&
             _activeModelProfileElementViewState.Equals(
                 sourceModelProfileElementViewState) &&
@@ -761,6 +769,7 @@ public sealed partial class EditingSession
                 activeScopeId) &&
             scene.DocumentId == snapshot.DocumentId &&
             scene.SourceRevision == snapshot.Revision &&
+            IsScenePresentationCompatible(scene, artifacts, activeScopeId) &&
             scene.LayoutAlgorithmId == artifacts.LayoutResult.AlgorithmId &&
             scene.RoutingAlgorithmId == artifacts.RoutingResult.RoutingAlgorithmId;
     }
@@ -768,22 +777,29 @@ public sealed partial class EditingSession
     private bool HasValidProvenance(
         EditingSessionPipelineResult result,
         DocumentSnapshot snapshot,
-        DocumentScopeId activeScopeId)
+        PresentationViewContext activeScopeId)
     {
         var scene = result.Scene!;
         var artifacts = result.Artifacts!;
         return AttachedDocument.DocumentId == snapshot.DocumentId &&
             AttachedDocument.Revision == snapshot.Revision &&
-            _activeScopeId == activeScopeId &&
+            _presentationContext == activeScopeId &&
             artifacts.IsCompatibleWith(
                 snapshot.DocumentId,
                 snapshot.Revision,
                 activeScopeId) &&
             scene.DocumentId == snapshot.DocumentId &&
             scene.SourceRevision == snapshot.Revision &&
+            IsScenePresentationCompatible(scene, artifacts, activeScopeId) &&
             scene.LayoutAlgorithmId == artifacts.LayoutResult.AlgorithmId &&
             scene.RoutingAlgorithmId == artifacts.RoutingResult.RoutingAlgorithmId;
     }
+
+    private static bool IsScenePresentationCompatible(Canvas2DScene scene,
+        EditingSessionPipelineArtifacts artifacts, PresentationViewContext context) =>
+        context is ProcessScopePresentationContext ||
+        scene.PresentationContext == context && artifacts.PresentationPlan is { } plan &&
+        plan.Equals(scene.PresentationPlan);
 
     private bool TryReconcileEditorStateForScene(
         EditorStateSnapshot source,
@@ -858,7 +874,7 @@ public sealed partial class EditingSession
 
     private static EditorStateSnapshot CopyEditorStateWithoutGestureAndTemporaryFeedback(
         EditorStateSnapshot source) =>
-        new(
+        ClearConnectionSelectionForGesture(source, new(
             source.Selection,
             source.HoveredObjectId,
             source.ActiveToolId,
@@ -867,12 +883,12 @@ public sealed partial class EditingSession
             activeGesture: null,
             temporaryFeedback: null,
             source.ToolState,
-            source.SemanticSceneSelection);
+            source.SemanticSceneSelection));
 
     private async ValueTask<EditingSessionOperationResult> UpdateEditorStateCoreAsync(
         EditorStateSnapshot editorState,
         CancellationToken cancellationToken,
-        DocumentScopeId? expectedScopeId = null,
+        PresentationViewContext? expectedScopeId = null,
         EditingSessionGeneration? requiredGeneration = null,
         Canvas2DSurfaceSize? surfaceSize = null)
     {
@@ -902,7 +918,7 @@ public sealed partial class EditingSession
                     }
 
                     if ((expectedScopeId is not null &&
-                         expectedScopeId != _activeScopeId) ||
+                         expectedScopeId != _presentationContext) ||
                         (requiredGeneration is not null &&
                          requiredGeneration.Value != _generation))
                     {
@@ -953,7 +969,7 @@ public sealed partial class EditingSession
                 !artifacts.IsCompatibleWith(
                     snapshot.DocumentId,
                     snapshot.Revision,
-                    _activeScopeId))
+                    _presentationContext))
             {
                 notifyOnly = true;
             }
@@ -1071,7 +1087,11 @@ public sealed partial class EditingSession
                 _activeModelProfileElementViewState.RetainSemanticElements(
                     change.CommittedSnapshot.SemanticModel.Elements.Select(
                         static element => element.Id));
-            if (ScopeExists(change.CommittedSnapshot.SemanticModel, _activeScopeId))
+            if (_presentationContext is DocumentPresentationContext)
+            {
+                // Document membership is re-resolved for each committed revision by the normal pipeline.
+            }
+            else if (ScopeExists(change.CommittedSnapshot.SemanticModel, _activeScopeId))
             {
                 _activeScopePath = CreateScopePath(
                     change.CommittedSnapshot.SemanticModel,
@@ -1133,7 +1153,8 @@ public sealed partial class EditingSession
             // provenance. Retain old geometry only for an explicit revision replay; a
             // newly created scope reusing the identity must never implicitly revive it.
             _nodeLayoutHistory = _nodeLayoutHistory
-                .Select(entry => ScopeExists(change.CommittedSnapshot.SemanticModel, entry.Artifacts.ScopeId)
+                .Select(entry => entry.Artifacts.PresentationContext is DocumentPresentationContext ||
+                    ScopeExists(change.CommittedSnapshot.SemanticModel, entry.Artifacts.ScopeId)
                     ? entry
                     : entry with { RequiresExplicitHistoricalRevision = true })
                 .ToImmutableArray();
@@ -1177,14 +1198,15 @@ public sealed partial class EditingSession
 
     private bool TryRebindUnchangedPresentation(DocumentChangedEvent change)
     {
-        if (change.PipelineInvalidation != PipelineInvalidation.None)
+        if (_presentationContext is DocumentPresentationContext || change.PipelineInvalidation != PipelineInvalidation.None)
         {
             return false;
         }
 
         lock (_sync)
         {
-            if (_status != EditingSessionStatus.Ready ||
+            if (ConnectionToolState.GetSelection(EditorState.CaptureSnapshot()) is not null ||
+                _status != EditingSessionStatus.Ready ||
                 _currentScene is not { } currentScene ||
                 _artifacts is not { } artifacts ||
                 !artifacts.IsCompatibleWith(
@@ -1240,7 +1262,10 @@ public sealed partial class EditingSession
     private EditingSessionPipelineArtifacts? TryRebindSceneOnlyArtifacts(
         DocumentChangedEvent change)
     {
-        if (change.PipelineInvalidation != PipelineInvalidation.Scene)
+        if (_presentationContext is DocumentPresentationContext ||
+            change.PipelineInvalidation != PipelineInvalidation.Scene &&
+            !(change.PipelineInvalidation == PipelineInvalidation.None &&
+                ConnectionToolState.GetSelection(EditorState.CaptureSnapshot()) is not null))
         {
             return null;
         }

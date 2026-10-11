@@ -12,7 +12,7 @@ using Inceptus.DocumentEngine.Contracts.Visuals;
 namespace Inceptus.DocumentEngine.Bpmn.Routing;
 
 /// <summary>
-/// Provides deterministic polyline routing for the supported BPMN Sequence Flow slice.
+/// Provides deterministic polyline routing for supported BPMN connectors.
 /// </summary>
 public sealed partial class BpmnRoutingAlgorithm : IRoutingAlgorithm, IStableConnectorRoutingPolicy
 {
@@ -30,11 +30,11 @@ public sealed partial class BpmnRoutingAlgorithm : IRoutingAlgorithm, IStableCon
         foreach (var edge in graph.Edges)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (!IsSequenceFlow(edge))
+            if (!IsSupportedConnector(edge))
             {
                 return Failure(
                     BpmnAlgorithmDiagnosticCodes.UnsupportedRoutingContent,
-                    $"Projected edge '{edge.Id}' is not a BPMN Sequence Flow.",
+                    $"Projected edge '{edge.Id}' is not a supported BPMN connector.",
                     edge.Id.Value);
             }
         }
@@ -53,7 +53,7 @@ public sealed partial class BpmnRoutingAlgorithm : IRoutingAlgorithm, IStableCon
             {
                 return Failure(
                     BpmnAlgorithmDiagnosticCodes.InvalidRoutingInput,
-                    $"BPMN Sequence Flow '{edge.Id}' has no complete layout geometry.",
+                    $"BPMN {ConnectorName(edge)} '{edge.Id}' has no complete layout geometry.",
                     edge.Id.Value);
             }
 
@@ -72,7 +72,7 @@ public sealed partial class BpmnRoutingAlgorithm : IRoutingAlgorithm, IStableCon
             {
                 return Failure(
                     BpmnAlgorithmDiagnosticCodes.InvalidRoutingInput,
-                    $"BPMN Sequence Flow '{edge.Id}' has invalid projected connector-anchor metadata.",
+                    $"BPMN {ConnectorName(edge)} '{edge.Id}' has invalid projected connector-anchor metadata.",
                     edge.Id.Value);
             }
 
@@ -116,7 +116,7 @@ public sealed partial class BpmnRoutingAlgorithm : IRoutingAlgorithm, IStableCon
             {
                 return Failure(
                     BpmnAlgorithmDiagnosticCodes.InvalidRoutingOutput,
-                    $"BPMN Sequence Flow '{edge.Id}' produced invalid routing geometry. " +
+                    $"BPMN {ConnectorName(edge)} '{edge.Id}' produced invalid routing geometry. " +
                     failureReason,
                     edge.Id.Value);
             }
@@ -201,11 +201,11 @@ public sealed partial class BpmnRoutingAlgorithm : IRoutingAlgorithm, IStableCon
                 bounds,
                 anchor.Side,
                 anchor.Order,
-                anchor.SideCount));
+                anchor.SideCount, anchor.NormalizedPosition));
         return true;
     }
 
-    private static bool IsSequenceFlow(ProjectedEdge edge) =>
+    private static bool IsSupportedConnector(ProjectedEdge edge) =>
         edge.ProjectedProperties.TryGetValue(
             BpmnProjectionIdentities.ProjectedSemanticTypeProperty,
             out var projectedType) &&
@@ -214,7 +214,11 @@ public sealed partial class BpmnRoutingAlgorithm : IRoutingAlgorithm, IStableCon
             projectedType.TextValue,
             edge.Source.SemanticTypeId.Value,
             StringComparison.Ordinal) &&
-        edge.Source.SemanticTypeId == BpmnSemanticTypes.SequenceFlow;
+        (edge.Source.SemanticTypeId == BpmnSemanticTypes.SequenceFlow ||
+         edge.Source.SemanticTypeId == BpmnSemanticTypes.MessageFlow);
+
+    private static string ConnectorName(ProjectedEdge edge) =>
+        edge.Source.SemanticTypeId == BpmnSemanticTypes.MessageFlow ? "Message Flow" : "Sequence Flow";
 
     private static RoutingAlgorithmResult Failure(
         string code,
@@ -233,7 +237,7 @@ public sealed partial class BpmnRoutingAlgorithm : IRoutingAlgorithm, IStableCon
         new(
             BpmnAlgorithmDiagnosticCodes.NoLegalRoute,
             DiagnosticSeverity.Warning,
-            $"No legal obstacle-safe route could be found for BPMN Sequence Flow " +
+            $"No legal obstacle-safe route could be found for BPMN {ConnectorName(edge)} " +
             $"'{edge.Source.SemanticElementId}' from {sourceAnchor.Side} anchor " +
             $"'{edge.SourcePortId?.Value ?? "implicit"}' at {sourceAnchor.Point} to " +
             $"{targetAnchor.Side} anchor '{edge.TargetPortId?.Value ?? "implicit"}' at " +

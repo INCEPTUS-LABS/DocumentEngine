@@ -182,6 +182,19 @@ public sealed class Canvas2DConnectorEndpointReconnectionSceneTests
     [Theory]
     [InlineData(ConnectorEndpointKind.Source)]
     [InlineData(ConnectorEndpointKind.Target)]
+    internal void CapturedEligibilityRemovesIncompatibleCandidateHandles(ConnectorEndpointKind endpointKind)
+    {
+        var source = CreateSource();
+        var original = Gesture(source, endpointKind, new PointD(180d, 90d));
+        var gesture = new EditorGestureSnapshot(original.Id, original.Kind, original.Origin, original.Current,
+            original.Properties.Concat(ConnectionCandidateMetadata.EncodeAllowedVisuals([])));
+        Assert.Empty(CandidateHandles(Scene(source, gesture)));
+        Assert.NotEmpty(CandidateHandles(Scene(source, original)));
+    }
+
+    [Theory]
+    [InlineData(ConnectorEndpointKind.Source)]
+    [InlineData(ConnectorEndpointKind.Target)]
     internal void PreviewReplacesOnlyMovingDisplayedEndpointAndIsNonHittable(
         ConnectorEndpointKind endpointKind)
     {

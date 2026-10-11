@@ -55,16 +55,35 @@ public sealed partial class ConnectorRoutingStatePreparer : IConnectorRoutingSta
         try
         {
             if (TryPreserveConnectorLabelRouting(request) is { } connectorLabelOnly)
-                return ConnectorRoutingStatePreparationResult.Success(connectorLabelOnly);
+                return ConnectorRoutingStatePreparationResult.Success(connectorLabelOnly, null,
+                    documentRoutingStates: document.VisualModel.DocumentRoutingStates);
             if (await TryPrepareLabelUpdateAsync(request, cancellationToken).ConfigureAwait(false) is { } labelOnly)
-                return ConnectorRoutingStatePreparationResult.Success(labelOnly);
+                return ConnectorRoutingStatePreparationResult.Success(labelOnly, null,
+                    documentRoutingStates: document.VisualModel.DocumentRoutingStates);
             var output = new List<ScopeRoutingSnapshot>();
             var diagnostics = new List<Diagnostic>();
             var beforeScopes = request.Before.VisualModel.RoutingScopes ?? [];
             var proposedScopes = document.VisualModel.RoutingScopes ?? [];
+            var canPreserveScopes = request.Purpose == ConnectorRoutingPreparationPurpose.Mutation &&
+                (request.NodeGeometryImpact is { HasExplicitChanges: true } || !request.SpatialHeightIntents.IsEmpty || !request.SpatialWidthIntents.IsEmpty) &&
+                request.RoutingIntents.IsEmpty &&
+                SemanticContentUnchanged(request.Before, document);
             foreach (var scope in document.SemanticModel.EnumerateScopeForest())
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                var unchanged = beforeScopes.FirstOrDefault(item => item.ScopeId == scope.Id);
+                if (canPreserveScopes && unchanged is not null &&
+                    unchanged.Equals(proposedScopes.FirstOrDefault(item => item.ScopeId == scope.Id)) &&
+                    !request.SpatialHeightIntents.Any(intent => intent.ScopeId == scope.Id) &&
+                    !request.SpatialWidthIntents.Any(intent => intent.ScopeId == scope.Id))
+                {
+                    var priorInputs = CreateInputs(request.Before, scope.Id);
+                    var nextInputs = CreateInputs(document, scope.Id);
+                    if (priorInputs.VisualStates.AsSpan().SequenceEqual(nextInputs.VisualStates.AsSpan()) &&
+                        priorInputs.ProfileElementPresentations.AsSpan().SequenceEqual(nextInputs.ProfileElementPresentations.AsSpan()) &&
+                        !request.RoutingIntents.Any(intent => unchanged.Connectors.Any(record => record.VisualStateId == intent.VisualStateId)))
+                    { output.Add(unchanged); continue; }
+                }
                 var projection = _configuration.ProjectionEngine.Project(document, scope.Id,
                     _configuration.ProjectionContext, cancellationToken);
                 if (projection.Graph is null)
@@ -83,19 +102,22 @@ public sealed partial class ConnectorRoutingStatePreparer : IConnectorRoutingSta
                     .ToDictionary(static group => group.Key, static group => group.Last().OuterWidth);
                 var geometry = await _configuration.SceneBuilder.PrepareScopeGeometryAsync(
                     CreateInputs(document, scope.Id), graph, layout, document.VisualModel, basis, heights, widths,
-                    _textMetrics, _requestFactory, cancellationToken).ConfigureAwait(false);
+                    _textMetrics, _requestFactory, cancellationToken, CreateInputs(request.Before, scope.Id)).ConfigureAwait(false);
                 if (strict && (proposed is null || !geometry.Equals(proposed.Geometry)))
                     return Fail("INCEPTUS.ROUTING.SAVED_STATE.INCOMPATIBLE",
                         $"Saved geometry, contributor policy or text metrics for scope '{scope.Id}' are incompatible.");
                 if (strict) geometry = proposed!.Geometry;
                 var logicalLayout = CreateLogicalLayout(graph, layout, geometry);
-                var domain = new RoutingObstacleDomain(graph.Nodes.Select(static node => node.Id));
                 var context = new RoutingContext(_configuration.RoutingContext.Options,
                     new PreparedRoutingInput(graph, logicalLayout,
-                        graph.Edges.Select(edge => KeyValuePair.Create(edge.Id, domain)),
+                        graph.Edges.Select(edge => KeyValuePair.Create(edge.Id, new RoutingObstacleDomain(
+                            graph.Nodes.Where(node => node.Id == edge.SourceNodeId || node.Id == edge.TargetNodeId ||
+                                !Canvas2DNodePresentationMetadata.IsBoundaryContainer(node.ProjectedProperties)).Select(node => node.Id)))),
                         new RoutingLogicalGeometry(scope.Id, geometry, logicalLayout)));
-                var records = PrepareRecords(request, scope.Id, graph, logicalLayout, context,
-                    current, proposed, beforeScopes, policy, diagnostics, strict, cancellationToken);
+                var records = PrepareRecords(request, graph, logicalLayout, context,
+                    current?.Connectors ?? [], proposed?.Connectors ?? [],
+                    request.Before.VisualModel.EnumerateConnectorRoutingRecords(), policy, diagnostics,
+                    strict, cancellationToken, current?.Geometry);
                 if (strict && !records.AsSpan().SequenceEqual(proposed!.Connectors.AsSpan()))
                     return Fail("INCEPTUS.ROUTING.SAVED_STATE.INCOMPATIBLE",
                         $"Saved connector paths or policy for scope '{scope.Id}' are incompatible.");
@@ -103,7 +125,8 @@ public sealed partial class ConnectorRoutingStatePreparer : IConnectorRoutingSta
             }
             if (strict && output.Count != proposedScopes.Length)
                 return Fail("INCEPTUS.ROUTING.SAVED_STATE.INCOMPATIBLE", "Saved scope coverage does not match the document.");
-            return ConnectorRoutingStatePreparationResult.Success(output, diagnostics);
+            var documentStates = PrepareDocumentRouting(request, output, policy, diagnostics, strict, cancellationToken);
+            return ConnectorRoutingStatePreparationResult.Success(output, diagnostics, documentStates);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
         catch (ScopeGeometryPreparationException exception)
@@ -119,6 +142,21 @@ public sealed partial class ConnectorRoutingStatePreparer : IConnectorRoutingSta
 
     private static ConnectorRoutingStatePreparationResult Fail(string code, string message) =>
         ConnectorRoutingStatePreparationResult.Failure([new Diagnostic(code, DiagnosticSeverity.Error, message)]);
+
+    private static bool SemanticContentUnchanged(DocumentSnapshot before, DocumentSnapshot after) =>
+        SemanticDefinitionsUnchanged(before, after) &&
+        before.VisualModel.VisualStates.Where(visual => before.SemanticModel.TryGetElement(visual.SemanticElementId, out var element) &&
+            element!.ContainmentKind == Inceptus.DocumentEngine.Contracts.Semantics.SemanticElementContainmentKind.Document)
+            .SequenceEqual(after.VisualModel.VisualStates.Where(visual => after.SemanticModel.TryGetElement(visual.SemanticElementId, out var element) &&
+                element!.ContainmentKind == Inceptus.DocumentEngine.Contracts.Semantics.SemanticElementContainmentKind.Document));
+
+    private static bool SemanticDefinitionsUnchanged(DocumentSnapshot before, DocumentSnapshot after) =>
+        before.SemanticModel.Elements.AsSpan().SequenceEqual(after.SemanticModel.Elements.AsSpan()) &&
+        before.SemanticModel.Relationships.AsSpan().SequenceEqual(after.SemanticModel.Relationships.AsSpan()) &&
+        before.SemanticModel.NestedScopes.AsSpan().SequenceEqual(after.SemanticModel.NestedScopes.AsSpan()) &&
+        before.SemanticModel.ScopeMemberships.AsSpan().SequenceEqual(after.SemanticModel.ScopeMemberships.AsSpan()) &&
+        before.SemanticModel.ProfileAssignments.AsSpan().SequenceEqual(after.SemanticModel.ProfileAssignments.AsSpan()) &&
+        before.SemanticModel.ModelProfiles.Equals(after.SemanticModel.ModelProfiles);
 
     private static ScopeGeometryInputs CreateInputs(DocumentSnapshot document, DocumentScopeId scopeId)
     {
@@ -139,7 +177,7 @@ public sealed partial class ConnectorRoutingStatePreparer : IConnectorRoutingSta
         ScopeGeometrySnapshot? proposed, ConnectorRoutingStatePreparationRequest request)
     {
         if (current is null) return proposed;
-        if (proposed is null || !request.IsHistoryReplay) return current;
+        if (proposed is null) return current;
         var currentRegions = current.Regions.Select(static region => region.Id).ToHashSet();
         var currentNodes = current.Nodes.ToDictionary(static node => node.VisualStateId);
         var restoredIds = ChangedNodeGeometry(request);
@@ -148,7 +186,12 @@ public sealed partial class ConnectorRoutingStatePreparer : IConnectorRoutingSta
                 currentNodes[node.VisualStateId] = node;
         return new ScopeGeometrySnapshot(current.PolicyId, current.PolicyVersion, current.LayoutAlgorithmId,
             current.Configuration, current.TextConfiguration, current.Contributors, currentNodes.Values,
-            current.Regions.Concat(proposed.Regions.Where(region => !currentRegions.Contains(region.Id))),
+            current.Regions.Select(region => proposed.Regions.FirstOrDefault(candidate => candidate.Id == region.Id) is { } seed
+                ? new SpatialRegionGeometrySnapshot(seed.Id, seed.ProfileId, seed.ContainerSemanticElementId,
+                    region.ExpandedHeight, seed.LocalToScopeTransform,
+                    seed.ContentBounds is { } bounds ? new RectD(bounds.X, bounds.Y, bounds.Width, region.ExpandedHeight) : null)
+                : region)
+                .Concat(proposed.Regions.Where(region => !currentRegions.Contains(region.Id))),
             [], current.TextMeasurements, current.SpatialWidths.Concat(proposed.SpatialWidths.Where(width =>
                 current.SpatialWidths.All(existing => existing.ProfileId != width.ProfileId))));
     }
@@ -171,12 +214,26 @@ public sealed partial class ConnectorRoutingStatePreparer : IConnectorRoutingSta
         ScopeGeometrySnapshot? saved, ConnectorRoutingStatePreparationRequest request,
         bool strict, CancellationToken cancellationToken)
     {
+        LayoutResult InitialLayout()
+        {
+            var nodes = graph.Nodes.Where(node => node.RegionEnvelope is null).ToArray();
+            var ids = nodes.Select(node => node.Id).ToHashSet();
+            var edges = graph.Edges.Where(edge => ids.Contains(edge.SourceNodeId) && ids.Contains(edge.TargetNodeId)).ToArray();
+            var owners = ids.Concat(edges.Select(edge => edge.Id)).Concat(graph.Groups.Select(group => group.Id)).ToHashSet();
+            var ports = graph.Ports.Where(port => ids.Contains(port.OwnerNodeId)).ToArray();
+            owners.UnionWith(ports.Select(port => port.Id));
+            var layoutGraph = new ProjectedGraph(graph.DocumentId, graph.SourceRevision, nodes, edges, graph.Groups, ports,
+                graph.Labels.Where(label => owners.Contains(label.OwnerId)));
+            var result = _configuration.LayoutEngine.Layout(layoutGraph, _configuration.LayoutAlgorithmId,
+                _configuration.LayoutContext, cancellationToken).Result ?? throw new InvalidOperationException("Initial scope layout failed.");
+            return new LayoutResult(graph.DocumentId, graph.SourceRevision, result.AlgorithmId,
+                new LayoutComputation(result.Nodes.Concat(graph.Nodes.Where(node => node.RegionEnvelope is not null)
+                    .Select(node => new LayoutNodeGeometry(node.Id, new RectD(0, 0, 1, 1), Matrix2D.Identity))), result.Groups));
+        }
         if (saved is null)
         {
             if (strict) throw new InvalidOperationException("Saved geometry is required.");
-            var execution = _configuration.LayoutEngine.Layout(graph, _configuration.LayoutAlgorithmId,
-                _configuration.LayoutContext, cancellationToken);
-            return execution.Result ?? throw new InvalidOperationException("Initial scope layout failed.");
+            return InitialLayout();
         }
         if (!graph.Groups.IsEmpty)
             throw new InvalidOperationException("The saved geometry provider does not support projected groups.");
@@ -190,6 +247,14 @@ public sealed partial class ConnectorRoutingStatePreparer : IConnectorRoutingSta
         LayoutResult? fresh = null;
         LayoutNodeGeometry Resolve(ProjectedNode node)
         {
+            if (node.RegionEnvelope is { } envelope)
+            {
+                // This pre-measurement seed is discarded after the region provider runs.
+                // Only the region-derived result reaches routing and the visible Scene.
+                var boundary = saved is not null && envelope.RegionIds.All(id => saved.Regions.Any(region => region.Id == id && region.IsActive))
+                    ? envelope.Resolve(saved.Regions) : new RectD(0, 0, 1, 1);
+                return new(node.Id, boundary, Matrix2D.CreateTranslation(boundary.X, boundary.Y));
+            }
             if (resolved.TryGetValue(node.Id, out var existing)) return existing;
             if (!resolving.Add(node.Id)) throw new InvalidOperationException("Cyclic node attachment geometry.");
             var hint = node.PlacementHint;
@@ -217,9 +282,7 @@ public sealed partial class ConnectorRoutingStatePreparer : IConnectorRoutingSta
             else
             {
                 if (strict) throw new InvalidOperationException("Saved node coverage is incomplete.");
-                fresh ??= _configuration.LayoutEngine.Layout(graph, _configuration.LayoutAlgorithmId,
-                    _configuration.LayoutContext, cancellationToken).Result
-                    ?? throw new InvalidOperationException("New node layout failed.");
+                fresh ??= InitialLayout();
                 var value = fresh.Nodes.Single(geometry => geometry.ProjectedObjectId == node.Id);
                 bounds = value.Bounds;
                 transform = value.Transform;
@@ -243,6 +306,11 @@ public sealed partial class ConnectorRoutingStatePreparer : IConnectorRoutingSta
         return new LayoutResult(graph.DocumentId, graph.SourceRevision, saved.LayoutAlgorithmId,
             new LayoutComputation(graph.Nodes.Select(node =>
             {
+                if (node.RegionEnvelope is { } envelope)
+                {
+                    var bounds = envelope.Resolve(saved.Regions);
+                    return new LayoutNodeGeometry(node.Id, bounds, Matrix2D.CreateTranslation(bounds.X, bounds.Y));
+                }
                 var value = nodes[node.Source.VisualStateId!];
                 return new LayoutNodeGeometry(node.Id, value.LocalBounds, value.Transform);
             })));
@@ -256,6 +324,11 @@ public sealed partial class ConnectorRoutingStatePreparer : IConnectorRoutingSta
         return new LayoutResult(graph.DocumentId, graph.SourceRevision, local.AlgorithmId,
             new LayoutComputation(graph.Nodes.Select(node =>
             {
+                if (node.RegionEnvelope is { } envelope)
+                {
+                    var bounds = envelope.Resolve(geometry.Regions);
+                    return new LayoutNodeGeometry(node.Id, bounds, Matrix2D.CreateTranslation(bounds.X, bounds.Y));
+                }
                 var value = locals[node.Id];
                 var saved = memberships[node.Source.VisualStateId!];
                 if (saved.RegionId is null) return value;
@@ -285,7 +358,8 @@ public sealed partial class ConnectorRoutingStatePreparer : IConnectorRoutingSta
                 {
                     diagnosticContext ??= new RoutingContext(preparedInput: new PreparedRoutingInput(graph, logicalLayout,
                         graph.Edges.Select(item => KeyValuePair.Create(item.Id,
-                            new RoutingObstacleDomain(graph.Nodes.Select(static node => node.Id)))),
+                            new RoutingObstacleDomain(graph.Nodes.Where(node => node.RegionEnvelope is null ||
+                                node.Id == item.SourceNodeId || node.Id == item.TargetNodeId).Select(static node => node.Id)))),
                         new RoutingLogicalGeometry(scope.ScopeId, scope.Geometry, logicalLayout)));
                     diagnostics.AddRange(policy.Assess(graph, logicalLayout, diagnosticContext, edge.Id, record).Diagnostics);
                 }

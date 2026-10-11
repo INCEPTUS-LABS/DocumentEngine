@@ -8,7 +8,7 @@ namespace Inceptus.DocumentEngine.UnitTests.Architecture;
 public sealed class PhaseM31GenericPropertiesArchitectureTests
 {
     [Fact]
-    public void BlazorPropertiesPresentationIsSchemaDrivenWithExplicitBpmnEventExclusion()
+    public void BlazorPropertiesPresentationIsSchemaDrivenWithTypeOnlyBpmnEventAccess()
     {
         var component = ReadProductionFile(
             "Inceptus.DocumentEngine.Bpmn.Blazor",
@@ -20,11 +20,13 @@ public sealed class PhaseM31GenericPropertiesArchitectureTests
             ApprovedN104Changes.IsPublishingApplicationCompositionPath);
         var dataGroup = Between(
             component,
-            "<fieldset data-property-group=\"data\">",
+            "<fieldset data-property-group=\"data\"",
             "</fieldset>");
 
         const string eventExclusion = "!BpmnSemanticTypes.IsEvent(TypeId)";
         Assert.Equal(1, CountOccurrences(presentation, eventExclusion));
+        Assert.Contains("BpmnElementTypeSwitching.GetSwitchableTypes(TypeId)", presentation, StringComparison.Ordinal);
+        Assert.Contains("authoritative.CanEditData ? authoritative.DataFields : []", presentation, StringComparison.Ordinal);
         Assert.DoesNotContain("BpmnSemanticTypes", component + presentation.Replace(eventExclusion, string.Empty, StringComparison.Ordinal),
             StringComparison.Ordinal);
         Assert.DoesNotContain("BpmnPluginRegistration", component + presentation,
@@ -37,7 +39,7 @@ public sealed class PhaseM31GenericPropertiesArchitectureTests
             StringComparison.Ordinal);
         Assert.DoesNotContain("demo:", component + presentation,
             StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("@foreach (var field in draft.DataFields)", dataGroup,
+        Assert.Contains("@foreach (var field in PropertiesDataFieldsForLayout(draft.DataFields, compactDataLayout))", dataGroup,
             StringComparison.Ordinal);
         Assert.Contains(
             "DomId($\"properties-data-field-{fieldId.Value}\")",
@@ -45,7 +47,7 @@ public sealed class PhaseM31GenericPropertiesArchitectureTests
             StringComparison.Ordinal);
         Assert.Contains("@switch (field.Definition.EditorKind)", dataGroup,
             StringComparison.Ordinal);
-        Assert.Equal(4, CountOccurrences(dataGroup, "case ElementPropertyEditorKind."));
+        Assert.Equal(5, CountOccurrences(dataGroup, "case ElementPropertyEditorKind."));
         Assert.Contains("case ElementPropertyEditorKind.SingleLineText:", dataGroup,
             StringComparison.Ordinal);
         Assert.Contains("case ElementPropertyEditorKind.Integer:", dataGroup,
@@ -134,12 +136,14 @@ public sealed class PhaseM31GenericPropertiesArchitectureTests
             "DocumentCanvasHost.cs");
         var dataGroup = Between(
             component,
-            "<fieldset data-property-group=\"data\">",
+            "<fieldset data-property-group=\"data\"",
             "</fieldset>");
         var inputHandler = Between(
             component,
             "private void UpdateDataDraftValue(",
             "private void UpdateVisualDraftValue(");
+        var typeInputHandler = Between(component, "private void UpdateTypeDraftValue(",
+            "private void UpdateRoutingTypeDraftValue(");
         var apply = Between(
             host,
             "internal async ValueTask<DocumentCanvasPropertiesApplyResult> ApplyPropertiesAsync(",
@@ -151,12 +155,17 @@ public sealed class PhaseM31GenericPropertiesArchitectureTests
 
         Assert.Equal(3, CountOccurrences(dataGroup, "@oninput="));
         Assert.DoesNotContain("@onblur", dataGroup, StringComparison.Ordinal);
-        Assert.Equal(2, CountOccurrences(dataGroup, "@onchange="));
+        Assert.Equal(3, CountOccurrences(dataGroup, "@onchange="));
         Assert.Contains("UpdateRoutingTypeDraftValue", dataGroup, StringComparison.Ordinal);
         Assert.Contains("new SetConnectorRoutingTypeCommand(", apply, StringComparison.Ordinal);
         Assert.DoesNotContain("@onkeydown", dataGroup, StringComparison.Ordinal);
         Assert.DoesNotContain("Command", inputHandler, StringComparison.Ordinal);
         Assert.DoesNotContain("Execute", inputHandler, StringComparison.Ordinal);
+        Assert.DoesNotContain("Command", typeInputHandler, StringComparison.Ordinal);
+        Assert.DoesNotContain("Execute", typeInputHandler, StringComparison.Ordinal);
+        Assert.Contains("draft.TypeIdValue =", typeInputHandler, StringComparison.Ordinal);
+        Assert.Contains("ModelerPropertyEditing.CreateTypeCommand(current, targetType)", propertiesApply,
+            StringComparison.Ordinal);
         Assert.Contains("field.EditorValue =", inputHandler, StringComparison.Ordinal);
         Assert.Contains("SemanticPropertyMutationKind.Name", apply, StringComparison.Ordinal);
         Assert.Contains("SemanticPropertyMutationKind.Property", apply,

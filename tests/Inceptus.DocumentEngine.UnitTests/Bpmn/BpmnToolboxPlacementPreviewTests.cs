@@ -21,12 +21,12 @@ namespace Inceptus.DocumentEngine.UnitTests.Bpmn;
 public sealed class BpmnToolboxPlacementPreviewTests
 {
     public static IEnumerable<object[]> OrdinaryTools() =>
-        BpmnPluginRegistration.N100.ToolboxPlacementRegistrations
+        BpmnPluginRegistration.N91.ToolboxPlacementRegistrations
             .Where(static registration => registration.CandidateProvider is null)
             .Select(static registration => new object[] { registration.ToolboxItemId.Value });
 
     public static IEnumerable<object[]> AllTools() =>
-        BpmnPluginRegistration.N100.ToolboxPlacementRegistrations
+        BpmnPluginRegistration.N91.ToolboxPlacementRegistrations
             .Select(static registration => new object[] { registration.ToolboxItemId.Value });
 
     [Theory]
@@ -187,7 +187,7 @@ public sealed class BpmnToolboxPlacementPreviewTests
             Canvas2DSceneConfiguration.Default, registration.Descriptor);
 
     private static ToolboxPlacementRegistration Registration(string id) =>
-        Assert.Single(BpmnPluginRegistration.N100.ToolboxPlacementRegistrations, item => item.ToolboxItemId.Value == id);
+        Assert.Single(BpmnPluginRegistration.N91.ToolboxPlacementRegistrations, item => item.ToolboxItemId.Value == id);
 
     private static DocumentSnapshot Document(IEnumerable<SemanticElementSnapshot>? elements = null)
     {

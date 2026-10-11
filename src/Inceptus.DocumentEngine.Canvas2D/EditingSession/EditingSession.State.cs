@@ -22,7 +22,7 @@ public sealed partial class EditingSession
             _currentScene is not null &&
             snapshot is not null &&
             (_currentScene.SourceRevision != snapshot.Revision ||
-             _artifacts?.ScopeId != _activeScopeId))
+             _artifacts?.PresentationContext != _presentationContext))
         {
             // Atomic Document installation precedes outside-gate event dispatch. During that
             // short window report conservative Rebuilding currency without mutating session
@@ -63,7 +63,9 @@ public sealed partial class EditingSession
                 _pendingPanPresentation is { } pending && pending.Generation == _generation &&
                 pending.Revision == snapshot?.Revision &&
                 pending.SurfaceGeneration == _surfaceGeneration && _surfaceOperations == 0 &&
-                ReferenceEquals(pending.EditorState, editorState));
+                ReferenceEquals(pending.EditorState, editorState),
+            presentationContext: _presentationContext,
+            presentationPlan: observedStatus == EditingSessionStatus.Ready ? observedArtifacts?.PresentationPlan : null);
     }
 
     private bool IsUnavailable(out EditingSessionState state)

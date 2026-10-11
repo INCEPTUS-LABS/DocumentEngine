@@ -316,7 +316,7 @@ public sealed class BpmnN90TimerBoundaryEventSemanticMatrixTests
     }
 
     [Fact]
-    public async Task BooleanPropertiesDraftProducesTypedApplyAndUndoRedoRestoresExactly()
+    public async Task TypeOnlyEventPropertiesRetainTypedBooleanCommandsAndExactUndoRedo()
     {
         var harness = CreateHarness(Snapshot(
             [Activity(BpmnSemanticTypes.UserTask, ActivityId)],
@@ -347,16 +347,24 @@ public sealed class BpmnN90TimerBoundaryEventSemanticMatrixTests
         Assert.True(interruptingField.Value!.BooleanValue);
 
         var draft = new DocumentCanvasPropertiesDraft(authoritative);
-        Assert.True(draft.TryGetDataField(
+        Assert.True(authoritative.CanEditType);
+        Assert.False(authoritative.CanEditData);
+        Assert.Empty(draft.DataFields);
+        Assert.False(draft.TryGetDataField(
             new ElementPropertyFieldId("interrupting"),
-            out var interruptingDraft));
-        var typedDraft = Assert.IsType<DocumentCanvasDataPropertyDraft>(
-            interruptingDraft);
-        typedDraft.EditorValue = "false";
+            out _));
         Assert.True(draft.TryValidate(out _, out var validationMessages));
         Assert.Empty(validationMessages);
-        Assert.True(draft.TryGetDirtyDataField(out var dirtyField));
-        Assert.Same(typedDraft, dirtyField);
+        Assert.False(draft.TryGetDirtyDataField(out _));
+        Assert.False(draft.IsDirty);
+
+        // A2.1 exposes only Type through the Event form. The existing typed
+        // schema and property command remain available to domain operations.
+        var typedDraft = new DocumentCanvasDataPropertyDraft(interruptingField)
+        {
+            EditorValue = "false",
+        };
+        Assert.True(typedDraft.IsDirty);
         Assert.True(typedDraft.TryCreateTargetValue(out var applyTarget));
         Assert.Equal(PropertyValueKind.Boolean, applyTarget?.Kind);
         Assert.False(applyTarget!.BooleanValue);

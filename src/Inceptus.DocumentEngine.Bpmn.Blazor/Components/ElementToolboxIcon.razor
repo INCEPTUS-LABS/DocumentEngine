@@ -1,0 +1,6 @@
+@using Inceptus.DocumentEngine.Bpmn.Toolbox
+@((MarkupString)BpmnToolboxIcons.Render(IconKey))
+
+@code {
+    [Parameter, EditorRequired] public string IconKey { get; set; } = string.Empty;
+}

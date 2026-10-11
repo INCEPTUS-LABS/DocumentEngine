@@ -8,6 +8,7 @@ using Inceptus.DocumentEngine.Contracts.Semantics;
 using Inceptus.DocumentEngine.Contracts.Visuals;
 using Inceptus.DocumentEngine.Organizational.Profiles;
 using Inceptus.DocumentEngine.Organizational.Semantics;
+using Inceptus.DocumentEngine.Organizational.Spatial;
 
 namespace Inceptus.DocumentEngine.Organizational.Commands;
 
@@ -83,7 +84,10 @@ internal sealed class OrganizationalCommandHandler<TCommand> : ICommandHandler
 
         return ValueTask.FromResult(CommandHandlerResult.Success(
             proposed,
-            pipelineInvalidation: PipelineInvalidation.Scene));
+            pipelineInvalidation: command is MoveOrganizationalPoolCommand or MoveOrganizationalLaneCommand
+                ? CommandPipelineInvalidation.WithoutNodeLayout : PipelineInvalidation.Scene,
+            nodeGeometryImpact: command is MoveOrganizationalPoolCommand or MoveOrganizationalLaneCommand
+                ? NodeGeometryPipelineImpact.PreserveAll : null));
     }
 }
 
@@ -226,10 +230,9 @@ internal static class OrganizationalCommandSupport
                 out proposed,
                 out diagnostics),
             MoveOrganizationalPoolCommand move => TryMovePool(
-                move,
-                document,
-                out proposed,
-                out diagnostics),
+                document, move.PoolId, move.Direction, false, out proposed, out diagnostics),
+            MoveOrganizationalLaneCommand lane => TryMovePool(
+                document, lane.PoolId, lane.Direction, true, out proposed, out diagnostics),
             DeleteOrganizationalPoolCommand deletion => TryDeletePool(
                 deletion,
                 document,
@@ -494,47 +497,34 @@ internal static class OrganizationalCommandSupport
     }
 
     private static bool TryMovePool(
-        MoveOrganizationalPoolCommand move,
         DocumentSnapshot document,
+        SemanticElementId poolId,
+        OrganizationalPoolMoveDirection direction,
+        bool laneOnly,
         out DocumentSnapshot? proposed,
         out ImmutableArray<Diagnostic> diagnostics)
     {
-        if (!TryGetPool(document, move.PoolId, out var pool, out var poolDiagnostic))
+        if (!TryGetPool(document, poolId, out var pool, out var poolDiagnostic))
         {
             return Fail(poolDiagnostic!, out proposed, out diagnostics);
         }
 
         var scopeId = document.SemanticModel.GetScope(pool!.Id).Id;
-        var ordered = OrganizationalSemantics.GetOrderedPoolsInScope(document, scopeId)
-            .ToArray();
-        var currentIndex = Array.FindIndex(ordered, candidate => candidate.Id == move.PoolId);
-        var targetIndex = move.Direction == OrganizationalPoolMoveDirection.Up
-            ? currentIndex - 1
-            : currentIndex + 1;
-        if (currentIndex < 0 || targetIndex < 0 || targetIndex >= ordered.Length)
+        if (laneOnly && OrganizationalSemantics.GetParticipantId(pool) is null)
+            return Fail(Error(OrganizationalCommandDiagnosticCodes.PoolInvalid,
+                "Lane ordering requires a Pool assigned to a Participant.", poolId.Value), out proposed, out diagnostics);
+        if (!OrganizationalPoolOrdering.CanMove(document, scopeId, poolId, direction, laneOnly))
         {
             return Fail(
                 Error(
                     OrganizationalCommandDiagnosticCodes.Unchanged,
-                    $"Pool '{move.PoolId}' cannot move {move.Direction.ToString().ToLowerInvariant()}.",
-                    move.PoolId.Value),
+                    $"Pool '{poolId}' cannot move {direction.ToString().ToLowerInvariant()}.",
+                    poolId.Value),
                 out proposed,
                 out diagnostics);
         }
 
-        (ordered[currentIndex], ordered[targetIndex]) =
-            (ordered[targetIndex], ordered[currentIndex]);
-        var poolIds = ordered.Select(static candidate => candidate.Id).ToHashSet();
-        var presentations = document.VisualModel.ProfileElementPresentations
-            .Where(presentation =>
-                presentation.ProfileId != OrganizationalModelProfile.Id ||
-                !poolIds.Contains(presentation.SemanticElementId))
-            .Concat(ordered.Select(static (candidate, index) =>
-                new ModelProfileElementPresentationSnapshot(
-                    OrganizationalModelProfile.Id,
-                    candidate.Id,
-                    index)));
-        proposed = Replace(document, presentations: presentations);
+        proposed = OrganizationalPoolOrdering.Move(document, scopeId, poolId, direction, laneOnly);
         diagnostics = [];
         return true;
     }
@@ -622,7 +612,7 @@ internal static class OrganizationalCommandSupport
             document.Revision,
             document.VisualModel.VisualStates,
             presentations ?? document.VisualModel.ProfileElementPresentations,
-            document.VisualModel.RoutingScopes);
+            document.VisualModel.RoutingScopes, document.VisualModel.DocumentRoutingStates);
         return new DocumentSnapshot(
             semanticModel,
             visualModel,

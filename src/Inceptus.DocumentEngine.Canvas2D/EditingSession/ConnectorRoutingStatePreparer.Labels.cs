@@ -22,6 +22,7 @@ public sealed partial class ConnectorRoutingStatePreparer
             before.VisualModel.RoutingScopes is not { } scopes ||
             after.VisualModel.RoutingScopes is not { } proposedScopes ||
             !scopes.AsSpan().SequenceEqual(proposedScopes.AsSpan()) ||
+            !before.VisualModel.DocumentRoutingStates.AsSpan().SequenceEqual(after.VisualModel.DocumentRoutingStates.AsSpan()) ||
             !semantic.Elements.AsSpan().SequenceEqual(proposed.Elements.AsSpan()) ||
             !semantic.Relationships.AsSpan().SequenceEqual(proposed.Relationships.AsSpan()) ||
             !semantic.NestedScopes.AsSpan().SequenceEqual(proposed.NestedScopes.AsSpan()) ||

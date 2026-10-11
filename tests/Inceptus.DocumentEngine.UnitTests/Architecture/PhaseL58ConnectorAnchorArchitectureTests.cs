@@ -43,9 +43,9 @@ public sealed class PhaseL58ConnectorAnchorArchitectureTests
         var anchorProperties = typeof(ConnectorAnchor).GetProperties(
             BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly);
         Assert.Equal(
-            ["Id", "Order", "Role", "Side"],
+            ["Id", "NormalizedPosition", "Order", "Role", "Side"],
             anchorProperties.Select(static property => property.Name).Order(StringComparer.Ordinal));
-        Assert.DoesNotContain(anchorProperties, static property => ContainsAny(
+        Assert.DoesNotContain(anchorProperties.Where(static property => property.Name != "NormalizedPosition"), static property => ContainsAny(
             property.Name,
             "Position",
             "Boundary",
@@ -191,6 +191,8 @@ public sealed class PhaseL58ConnectorAnchorArchitectureTests
             "Inceptus.DocumentEngine.Canvas2D",
             "Scene",
             "Canvas2DConnectorArrowGeometry.cs");
+        var decorations = ReadProductionFile(
+            "Inceptus.DocumentEngine.Canvas2D", "Scene", "Canvas2DSceneBuilder.ConnectorVisuals.cs");
         var controller = ReadProductionFile(
             "Inceptus.DocumentEngine.Canvas2D",
             "Interaction",
@@ -205,12 +207,13 @@ public sealed class PhaseL58ConnectorAnchorArchitectureTests
             "wwwroot",
             "inceptus.canvas2d.js"));
 
-        Assert.Contains("Canvas2DConnectorArrowGeometry.Create(logicalPath)", composition,
+        Assert.Contains("CreateConnectorDecorations(edge, origin, persistentAppearance, logicalPath", composition,
             StringComparison.Ordinal);
+        Assert.Contains("Canvas2DConnectorArrowGeometry.Create(directed)", decorations, StringComparison.Ordinal);
         Assert.Contains("routedPath[^1]", geometry, StringComparison.Ordinal);
         Assert.Contains("index = routedPath.Count - 2", geometry, StringComparison.Ordinal);
         Assert.Contains("isClosed: true", geometry, StringComparison.Ordinal);
-        Assert.Contains("connector-target-arrow", composition, StringComparison.Ordinal);
+        Assert.Contains("connector-target-arrow", decorations, StringComparison.Ordinal);
         Assert.Contains("Canvas2DConnectorArrowMetadata.TargetArrow", controller,
             StringComparison.Ordinal);
         Assert.DoesNotContain("ConnectorArrow", renderer, StringComparison.OrdinalIgnoreCase);

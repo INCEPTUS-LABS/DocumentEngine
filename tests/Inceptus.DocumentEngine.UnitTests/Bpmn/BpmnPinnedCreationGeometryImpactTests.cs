@@ -24,7 +24,7 @@ public sealed class BpmnPinnedCreationGeometryImpactTests
             var data = new TheoryData<string, VisualPlacementMode>();
             foreach (var kind in new[] { "task", "gateway", "event", "subprocess" })
             {
-                foreach (var mode in Enum.GetValues<VisualPlacementMode>())
+                foreach (var mode in Enum.GetValues<VisualPlacementMode>().Where(mode => mode != VisualPlacementMode.Derived))
                 {
                     data.Add(kind, mode);
                 }

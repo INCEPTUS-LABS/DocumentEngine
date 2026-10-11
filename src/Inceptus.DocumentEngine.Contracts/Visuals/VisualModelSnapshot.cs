@@ -22,6 +22,17 @@ public sealed class VisualModelSnapshot : IVisualModelView, IEquatable<VisualMod
         IEnumerable<VisualStateSnapshot>? visualStates,
         IEnumerable<ModelProfileElementPresentationSnapshot>? profileElementPresentations,
         IEnumerable<ScopeRoutingSnapshot>? routingScopes)
+        : this(documentId, revision, visualStates, profileElementPresentations, routingScopes, null)
+    {
+    }
+
+    public VisualModelSnapshot(
+        DocumentId documentId,
+        DocumentRevision revision,
+        IEnumerable<VisualStateSnapshot>? visualStates,
+        IEnumerable<ModelProfileElementPresentationSnapshot>? profileElementPresentations,
+        IEnumerable<ScopeRoutingSnapshot>? routingScopes,
+        IEnumerable<DocumentRoutingSnapshot>? documentRoutingStates)
     {
         ArgumentNullException.ThrowIfNull(documentId);
 
@@ -31,6 +42,8 @@ public sealed class VisualModelSnapshot : IVisualModelView, IEquatable<VisualMod
         ProfileElementPresentations = CopyAndOrderPresentations(profileElementPresentations);
         RoutingScopes = routingScopes is null ? null : RoutingStateCollection.Unique(
             routingScopes, static scope => scope.ScopeId.Value, nameof(routingScopes));
+        DocumentRoutingStates = RoutingStateCollection.Unique(documentRoutingStates ?? [],
+            static state => state.OwnerId.Value, nameof(documentRoutingStates));
     }
 
     public DocumentId DocumentId { get; }
@@ -52,6 +65,14 @@ public sealed class VisualModelSnapshot : IVisualModelView, IEquatable<VisualMod
     /// fresh in-memory construction awaiting preparation, never a supported native file.
     /// </summary>
     public ImmutableArray<ScopeRoutingSnapshot>? RoutingScopes { get; }
+
+    /// <summary>Saved routes belonging to document-level presentation owners; absent for process-only documents.</summary>
+    public ImmutableArray<DocumentRoutingSnapshot> DocumentRoutingStates { get; }
+
+    /// <summary>Enumerates the unique saved routing authority across process and document presentations.</summary>
+    public IEnumerable<ConnectorRoutingRecord> EnumerateConnectorRoutingRecords() =>
+        (RoutingScopes ?? []).SelectMany(static scope => scope.Connectors)
+            .Concat(DocumentRoutingStates.SelectMany(static state => state.Connectors));
 
     public bool TryGetVisualState(VisualStateId id, out VisualStateSnapshot? visualState)
     {
@@ -79,7 +100,8 @@ public sealed class VisualModelSnapshot : IVisualModelView, IEquatable<VisualMod
          ProfileElementPresentations.AsSpan().SequenceEqual(other.ProfileElementPresentations.AsSpan()) &&
          RoutingScopes.HasValue == other.RoutingScopes.HasValue &&
          RoutingScopes.GetValueOrDefault().AsSpan().SequenceEqual(
-             other.RoutingScopes.GetValueOrDefault().AsSpan()));
+             other.RoutingScopes.GetValueOrDefault().AsSpan()) &&
+         DocumentRoutingStates.AsSpan().SequenceEqual(other.DocumentRoutingStates.AsSpan()));
 
     public override bool Equals(object? obj) => Equals(obj as VisualModelSnapshot);
 
@@ -107,6 +129,8 @@ public sealed class VisualModelSnapshot : IVisualModelView, IEquatable<VisualMod
                 hash.Add(scope);
             }
         }
+
+        foreach (var state in DocumentRoutingStates) hash.Add(state);
 
         return hash.ToHashCode();
     }

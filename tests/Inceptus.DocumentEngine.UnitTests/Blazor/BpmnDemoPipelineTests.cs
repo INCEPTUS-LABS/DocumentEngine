@@ -676,7 +676,8 @@ public sealed class BpmnDemoPipelineTests
                 .OrderBy(static schema => schema.SemanticTypeId.Value, StringComparer.Ordinal),
             composition.PropertiesSchemaCatalog.Schemas.AsEnumerable());
         Assert.Equal(
-            BpmnPluginRegistration.N100.ConnectorEndpointReconnectionRegistrations.AsEnumerable(),
+            BpmnPluginRegistration.N100.ConnectorEndpointReconnectionRegistrations
+                .OrderBy(static registration => registration.ReconnectionId.Value, StringComparer.Ordinal),
             composition.EndpointReconnectionCatalog.Registrations.AsEnumerable());
         Assert.Equal(
             BpmnPluginRegistration.N100.DiagramDeletionRegistrations

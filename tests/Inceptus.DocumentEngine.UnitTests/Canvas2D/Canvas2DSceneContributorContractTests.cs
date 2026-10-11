@@ -7,6 +7,7 @@ using Inceptus.DocumentEngine.Contracts.EditorState;
 using Inceptus.DocumentEngine.Contracts.Geometry;
 using Inceptus.DocumentEngine.Contracts.Layout;
 using Inceptus.DocumentEngine.Contracts.Metadata;
+using Inceptus.DocumentEngine.Contracts.Presentation;
 using Inceptus.DocumentEngine.Contracts.Primitives;
 using Inceptus.DocumentEngine.Contracts.Profiles;
 using Inceptus.DocumentEngine.Contracts.Projection;
@@ -125,6 +126,8 @@ public sealed class Canvas2DSceneContributorContractTests
                 [nameof(Canvas2DScenePresentationContext.Document)] = typeof(DocumentSnapshot),
                 [nameof(Canvas2DScenePresentationContext.ActiveScopeId)] =
                     typeof(DocumentScopeId),
+                [nameof(Canvas2DScenePresentationContext.PresentationContext)] =
+                    typeof(PresentationViewContext),
                 [nameof(Canvas2DScenePresentationContext.ModelProfileViewState)] =
                     typeof(ModelProfileViewStateSnapshot),
                 [nameof(Canvas2DScenePresentationContext.ModelProfileElementViewState)] =
