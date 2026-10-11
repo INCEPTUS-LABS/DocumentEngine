@@ -384,8 +384,9 @@ public sealed partial class PhaseA22MessageFlowDomainTests
             imported.Document.VisualModel.VisualStates.Single(visual => visual.Id == Visual("message")));
         Assert.DoesNotContain("subtype", Encoding.UTF8.GetString(bytes.AsSpan()), StringComparison.OrdinalIgnoreCase);
         var root = new DirectoryInfo(AppContext.BaseDirectory);
-        while (root is not null && !File.Exists(Path.Combine(root.FullName, "AGENTS.md"))) root = root.Parent;
-        Assert.NotNull(root);
+        while (root is not null && !File.Exists(Path.Combine(root.FullName, "Inceptus.DocumentEngine.sln"))) root = root.Parent;
+        if (root is null)
+            throw new DirectoryNotFoundException($"Could not locate Inceptus.DocumentEngine.sln above '{AppContext.BaseDirectory}'.");
         var folder = Path.Combine(root.FullName, "TestResults", "phase-a22");
         Directory.CreateDirectory(folder);
         await File.WriteAllBytesAsync(Path.Combine(folder,
