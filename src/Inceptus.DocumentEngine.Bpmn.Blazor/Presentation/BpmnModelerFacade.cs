@@ -10,7 +10,7 @@ namespace Inceptus.DocumentEngine.Bpmn.Blazor.Presentation;
 /// Per-component bridge from the public handle to the existing canvas-host authorities.
 /// The child component continues to own asynchronous host and browser disposal.
 /// </summary>
-internal sealed class BpmnModelerFacade : IDisposable
+internal sealed partial class BpmnModelerFacade : IDisposable, IBpmnDocumentEditor
 {
     private readonly object _sync = new();
     private DocumentCanvasHost? _host;
@@ -29,9 +29,9 @@ internal sealed class BpmnModelerFacade : IDisposable
 
     internal BpmnModelerNotifications Notifications { get; }
 
-    internal BpmnModelerNativeSaveStatus? NativeSaveStatus => CaptureHost()?.CaptureNativeSaveStatus();
+    public BpmnModelerNativeSaveStatus? NativeSaveStatus => CaptureHost()?.CaptureNativeSaveStatus();
 
-    internal bool AcknowledgeNativeSave(BpmnModelerSaveCheckpoint checkpoint)
+    public bool AcknowledgeNativeSave(BpmnModelerSaveCheckpoint checkpoint)
     {
         ArgumentNullException.ThrowIfNull(checkpoint);
         return CaptureHost()?.AcknowledgeNativeSave(checkpoint) == true;
@@ -54,6 +54,7 @@ internal sealed class BpmnModelerFacade : IDisposable
 
             host.ModelerNotifications = Notifications;
             _host = host;
+            host.ViewChanged += OnViewChanged;
         }
     }
 
@@ -95,59 +96,12 @@ internal sealed class BpmnModelerFacade : IDisposable
                 Map(result.Status), result.Snapshot, result.Diagnostics);
         }, cancellationToken);
 
-    internal ValueTask<BpmnModelerDocumentResult> ImportNativeDocumentAsync(
-        ReadOnlyMemory<byte> utf8Json,
-        CancellationToken cancellationToken = default) => ImportNativeDocumentAsync(utf8Json, new BpmnModelerNativeImportOptions(), cancellationToken);
-
-    internal ValueTask<BpmnModelerDocumentResult> ImportNativeDocumentAsync(
-        ReadOnlyMemory<byte> utf8Json,
-        BpmnModelerNativeImportOptions options,
-        CancellationToken cancellationToken = default) =>
-        ExecuteDocumentOperationAsync(BpmnModelerOperation.Import, async (host, token) =>
-        {
-            ArgumentNullException.ThrowIfNull(options);
-            var result = await host.ImportNativeDocumentAsync(utf8Json, options, token).ConfigureAwait(false);
-            return new BpmnModelerDocumentResult(
-                Map(result.Status), result.Snapshot, result.Diagnostics);
-        }, cancellationToken);
-
-    internal ValueTask<BpmnModelerFileResult> ExportNativeDocumentAsync(
-        CancellationToken cancellationToken = default) =>
-        ExecuteFileOperationAsync(BpmnModelerOperation.Export, async (host, token) =>
-        {
-            var result = await host.ExportNativeDocumentAsync(token).ConfigureAwait(false);
-            return new BpmnModelerFileResult(
-                Map(result.Status),
-                result.Succeeded
-                    ? new BpmnModelerFileArtifact(
-                        DocumentCanvas.NativeDocumentFileName,
-                        DocumentCanvas.NativeDocumentContentType,
-                        result.Payload)
-                    : null,
-                result.Diagnostics, result.SaveCheckpoint);
-        }, cancellationToken);
-
-    internal ValueTask<BpmnModelerFileResult> PublishAsync(
-        CancellationToken cancellationToken = default) =>
-        ExecuteFileOperationAsync(BpmnModelerOperation.Publish, async (host, token) =>
-        {
-            var result = await host.PublishProcessAsync(token).ConfigureAwait(false);
-            return new BpmnModelerFileResult(
-                Map(result.Status),
-                result.Succeeded
-                    ? new BpmnModelerFileArtifact(
-                        DocumentCanvas.PublishFileName,
-                        DocumentCanvas.PublishContentType,
-                        result.Payload)
-                    : null,
-                result.Diagnostics);
-        }, cancellationToken);
-
     public void Dispose()
     {
         lock (_sync)
         {
             _disposed = true;
+            if (_host is not null) _host.ViewChanged -= OnViewChanged;
             _host = null;
             Notifications.Dispose();
         }
@@ -200,44 +154,6 @@ internal sealed class BpmnModelerFacade : IDisposable
 #pragma warning restore CA1031
     }
 
-    private async ValueTask<BpmnModelerFileResult> ExecuteFileOperationAsync(
-        BpmnModelerOperation operation,
-        Func<DocumentCanvasHost, CancellationToken, ValueTask<BpmnModelerFileResult>> execute,
-        CancellationToken cancellationToken)
-    {
-        if (cancellationToken.IsCancellationRequested)
-        {
-            return new(BpmnModelerOperationStatus.Cancelled, null, []);
-        }
-
-        var host = CaptureHost();
-        if (host is null)
-        {
-            var diagnostics = UnavailableDiagnostics();
-            await ReportFailureAsync(operation, BpmnModelerOperationStatus.Unavailable, diagnostics)
-                .ConfigureAwait(false);
-            return new(BpmnModelerOperationStatus.Unavailable, null, diagnostics);
-        }
-
-        try
-        {
-            return await execute(host, cancellationToken).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-            return new(BpmnModelerOperationStatus.Cancelled, null, []);
-        }
-#pragma warning disable CA1031 // Unexpected bridge failures become bounded operation diagnostics.
-        catch (Exception exception) when (IsNonFatal(exception))
-        {
-            var diagnostics = FailedDiagnostics();
-            await ReportFailureAsync(operation, BpmnModelerOperationStatus.Failed, diagnostics)
-                .ConfigureAwait(false);
-            return new(BpmnModelerOperationStatus.Failed, null, diagnostics);
-        }
-#pragma warning restore CA1031
-    }
-
     private Task ReportFailureAsync(
         BpmnModelerOperation operation,
         BpmnModelerOperationStatus status,
@@ -255,23 +171,13 @@ internal sealed class BpmnModelerFacade : IDisposable
         [new("BPMN_MODELER_OPERATION_FAILED", DiagnosticSeverity.Error,
             "The modeler operation could not be completed.")];
 
-    private static BpmnModelerOperationStatus Map(NativeDocumentHostOperationStatus status) =>
+    private static BpmnModelerOperationStatus Map(BpmnModelerOperationStatus status) =>
         status switch
         {
-            NativeDocumentHostOperationStatus.Succeeded => BpmnModelerOperationStatus.Succeeded,
-            NativeDocumentHostOperationStatus.Rejected => BpmnModelerOperationStatus.Rejected,
-            NativeDocumentHostOperationStatus.Unavailable => BpmnModelerOperationStatus.Unavailable,
-            NativeDocumentHostOperationStatus.Cancelled => BpmnModelerOperationStatus.Cancelled,
-            _ => BpmnModelerOperationStatus.Failed,
-        };
-
-    private static BpmnModelerOperationStatus Map(PublishedProcessHostOperationStatus status) =>
-        status switch
-        {
-            PublishedProcessHostOperationStatus.Succeeded => BpmnModelerOperationStatus.Succeeded,
-            PublishedProcessHostOperationStatus.Rejected => BpmnModelerOperationStatus.Rejected,
-            PublishedProcessHostOperationStatus.Unavailable => BpmnModelerOperationStatus.Unavailable,
-            PublishedProcessHostOperationStatus.Cancelled => BpmnModelerOperationStatus.Cancelled,
+            BpmnModelerOperationStatus.Succeeded => BpmnModelerOperationStatus.Succeeded,
+            BpmnModelerOperationStatus.Rejected => BpmnModelerOperationStatus.Rejected,
+            BpmnModelerOperationStatus.Unavailable => BpmnModelerOperationStatus.Unavailable,
+            BpmnModelerOperationStatus.Cancelled => BpmnModelerOperationStatus.Cancelled,
             _ => BpmnModelerOperationStatus.Failed,
         };
 

@@ -196,15 +196,45 @@ function Read-StringResourceKeys([byte[]]$Bytes) {
     } finally { $reader.Dispose() }
 }
 $repository = 'https://github.com/INCEPTUS-LABS/DocumentEngine'
-$prefix = 'Inceptus.DocumentEngine.'
-$family = @('Contracts', 'Runtime', 'Bpmn', 'Organizational', 'Canvas2D', 'Bpmn.Blazor')
-$edges = @{
-    Contracts = @()
-    Runtime = @('Contracts')
-    Bpmn = @('Contracts', 'Organizational')
-    Organizational = @('Contracts')
-    Canvas2D = @('Contracts', 'Runtime')
-    'Bpmn.Blazor' = @('Bpmn', 'Canvas2D', 'Contracts', 'Organizational', 'Runtime')
+$edges = [ordered]@{
+    'Inceptus.DocumentEngine.Contracts' = @()
+    'Inceptus.DocumentEngine.Runtime' = @('Inceptus.DocumentEngine.Contracts')
+    'Inceptus.DocumentEngine.Bpmn' = @('Inceptus.DocumentEngine.Contracts', 'Inceptus.DocumentEngine.Organizational')
+    'Inceptus.DocumentEngine.Organizational' = @('Inceptus.DocumentEngine.Contracts')
+    'Inceptus.DocumentEngine.Canvas2D' = @('Inceptus.DocumentEngine.Contracts', 'Inceptus.DocumentEngine.Runtime')
+    'Inceptus.DocumentEngine.Bpmn.Blazor' = @('Inceptus.DocumentEngine.Bpmn', 'Inceptus.DocumentEngine.Canvas2D', 'Inceptus.DocumentEngine.Contracts', 'Inceptus.DocumentEngine.Organizational', 'Inceptus.DocumentEngine.Runtime')
+    'Inceptus.Bpmn.Integration' = @('Inceptus.DocumentEngine.Bpmn', 'Inceptus.DocumentEngine.Canvas2D', 'Inceptus.DocumentEngine.Contracts', 'Inceptus.DocumentEngine.Organizational', 'Inceptus.DocumentEngine.Runtime')
+}
+$family = @($edges.Keys)
+function Assert-PackageInventory([string]$Directory, [string]$ExpectedVersion) {
+    foreach ($extension in @('nupkg', 'snupkg')) {
+        $actual = @(Get-ChildItem -LiteralPath $Directory -File -Filter "*.$extension" | ForEach-Object Name | Sort-Object)
+        $expected = @($family | ForEach-Object { "$_.$ExpectedVersion.$extension" } | Sort-Object)
+        Require (($actual -join ',') -ceq ($expected -join ',')) "Expected exactly the seven $extension identities at version $ExpectedVersion; missing, unexpected, duplicate or mixed-version archive."
+    }
+}
+function Assert-PackageDependencies([string]$Id, $Metadata, [string]$ExpectedVersion) {
+    $groups = @($Metadata.dependencies.group)
+    Require ($groups.Count -eq 1 -and $groups[0].targetFramework -ceq 'net10.0') "Framework: $Id"
+    $dependencies = @($groups[0].dependency | Where-Object { $null -ne $_ })
+    $external = if ($Id -ceq 'Inceptus.DocumentEngine.Canvas2D') { @('Microsoft.JSInterop') } elseif ($Id -ceq 'Inceptus.DocumentEngine.Bpmn.Blazor') { @('Microsoft.JSInterop', 'Microsoft.AspNetCore.Components.Web', 'Microsoft.Extensions.Localization') } else { @() }
+    $expectedIds = @($edges[$Id]) + $external
+    Require ((@($dependencies.id | Sort-Object) -join ',') -ceq (@($expectedIds | Sort-Object) -join ',')) "Dependency identities: $Id"
+    foreach ($dependency in $dependencies) {
+        $range = if ($family -ccontains $dependency.id) {
+            if ($Id -ceq 'Inceptus.DocumentEngine.Canvas2D' -and $dependency.id -ceq 'Inceptus.DocumentEngine.Runtime') { "[$ExpectedVersion]" } else { $ExpectedVersion }
+        } else { '10.0.5' }
+        Require ($dependency.version -ceq $range) "Dependency range: $Id -> $($dependency.id)"
+    }
+}
+function Assert-IntegrationResources([byte[]]$Assembly) {
+    $resources = @('Bpmn202ImportProfile.xml', 'Bpmn202ImportProfile.xsd', 'Schemas/BPMN20.xsd', 'Schemas/Semantic.xsd', 'Schemas/BPMNDI.xsd', 'Schemas/DC.xsd', 'Schemas/DI.xsd')
+    foreach ($resource in $resources) {
+        $name = 'Inceptus.Bpmn.Integration.' + $resource.Replace('/', '.')
+        $bytes = [ReleaseSymbols]::Resource($Assembly, $name)
+        $expected = [IO.File]::ReadAllBytes((Join-Path $PWD "src/Inceptus.Bpmn.Integration/$resource"))
+        Require ([Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)) -ceq [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($expected))) "Embedded Integration resource: $name"
+    }
 }
 Require ($Commit -cmatch '^[0-9a-f]{40}$') 'Expected an actual full Git commit.'
 if ($RequireSourceLink) {
@@ -214,11 +244,8 @@ if ($RequireSourceLink) {
     git -c core.quotepath=false ls-files | ForEach-Object { [void]$trackedSources.Add($_) }
     Require ($LASTEXITCODE -eq 0) 'Could not enumerate committed source files.'
 }
-$packages = @(Get-ChildItem -LiteralPath $PackageDirectory -Filter '*.nupkg')
-$symbols = @(Get-ChildItem -LiteralPath $PackageDirectory -Filter '*.snupkg')
-Require ($packages.Count -eq 6 -and $symbols.Count -eq 6) 'Expected six nupkg/snupkg pairs.'
-$records = foreach ($name in $family) {
-    $id = $prefix + $name
+Assert-PackageInventory $PackageDirectory $Version
+$records = foreach ($id in $family) {
     $archive = Join-Path $PackageDirectory "$id.$Version.nupkg"
     $symbolArchive = Join-Path $PackageDirectory "$id.$Version.snupkg"
     $zip = [IO.Compression.ZipFile]::OpenRead($archive)
@@ -231,6 +258,7 @@ $records = foreach ($name in $family) {
         Require ($symbolSpec.package.metadata.id -ceq $id -and $symbolSpec.package.metadata.version -ceq $Version) "Symbol identity: $id"
         Require ($symbolSpec.package.metadata.packageTypes.packageType.name -ceq 'SymbolsPackage') "Symbol type: $id"
         Require ($metadata.repository.url -ceq $repository -and $metadata.repository.type -ceq 'git' -and $metadata.repository.commit -ceq $Commit) "Repository provenance: $id"
+        Require ($symbolSpec.package.metadata.repository.url -ceq $repository -and $symbolSpec.package.metadata.repository.type -ceq 'git' -and $symbolSpec.package.metadata.repository.commit -ceq $Commit) "Symbol repository provenance: $id"
         Require ($metadata.license.type -ceq 'expression' -and $metadata.license.InnerText -ceq 'MIT') "MIT metadata: $id"
         Require ($metadata.copyright -ceq 'Copyright (c) 2026 Inceptus Robert Prokopczuk') "Copyright: $id"
         Require ($metadata.projectUrl -ceq 'https://inceptus.online/bpmn/') "Project URL: $id"
@@ -241,21 +269,8 @@ $records = foreach ($name in $family) {
             Require ($actual -ceq [IO.File]::ReadAllText((Join-Path $PWD $document))) "Document content: $id/$document"
         }
         Require ((Read-EntryText $zip 'README.md').Contains('https://bpmn-editor.inceptus.online')) "Application URL: $id"
-        $groups = @($metadata.dependencies.group)
-        Require ($groups.Count -eq 1 -and $groups[0].targetFramework -ceq 'net10.0') "Framework: $id"
-        $dependencies = @($groups[0].dependency | Where-Object { $null -ne $_ })
-        $external = if ($name -ceq 'Canvas2D') { @('Microsoft.JSInterop') } elseif ($name -ceq 'Bpmn.Blazor') { @('Microsoft.JSInterop', 'Microsoft.AspNetCore.Components.Web', 'Microsoft.Extensions.Localization') } else { @() }
-        Require ($dependencies.Count -eq ($edges[$name].Count + $external.Count)) "Dependency count: $id"
-        $actualEdges = @($dependencies | Where-Object { $_.id.StartsWith($prefix) } | ForEach-Object { $_.id.Substring($prefix.Length) } | Sort-Object)
-        Require (($actualEdges -join ',') -ceq (($edges[$name] | Sort-Object) -join ',')) "Family graph: $id"
-        foreach ($dependency in $dependencies) {
-            if ($dependency.id.StartsWith($prefix)) {
-                $range = if ($name -ceq 'Canvas2D' -and $dependency.id -ceq ($prefix + 'Runtime')) { "[$Version]" } else { $Version }
-                Require ($dependency.version -ceq $range) "Dependency range: $id -> $($dependency.id)"
-            } else {
-                Require ($dependency.id -cin $external -and $dependency.version -ceq '10.0.5') "External dependency: $id"
-            }
-        }
+        Assert-PackageDependencies $id $metadata $Version
+        $dependencies = @($metadata.dependencies.group.dependency | Where-Object { $null -ne $_ })
         $dllName = "lib/net10.0/$id.dll"
         $pdbName = "lib/net10.0/$id.pdb"
         $dll = Read-EntryBytes $zip $dllName
@@ -290,13 +305,14 @@ $records = foreach ($name in $family) {
         $entries = @($zip.Entries.FullName)
         Require (@($entries | Where-Object { $_ -match '(?i)(^|/)(bin|obj|tests|demo|\.git)/|\.csproj$|\.user$|UnitTests|IntegrationTests|Inceptus\.DocumentEngine\.Blazor\.(dll|pdb)' }).Count -eq 0) "Unexpected package content: $id"
         $expectedAssemblies = @($dllName)
-        if ($name -ceq 'Bpmn.Blazor') {
+        if ($id -ceq 'Inceptus.DocumentEngine.Bpmn.Blazor') {
             $expectedAssemblies += @('pl', 'fr', 'de', 'es') | ForEach-Object { "lib/net10.0/$_/$id.resources.dll" }
         }
         $actualAssemblies = @($entries | Where-Object { $_ -match '\.dll$' } | Sort-Object)
         Require (($actualAssemblies -join ',') -ceq (($expectedAssemblies | Sort-Object) -join ',')) "Unexpected assembly set: $id"
         $uiResourceKeyCounts = [ordered]@{}
-        if ($name -ceq 'Canvas2D') {
+        if ($id -ceq 'Inceptus.Bpmn.Integration') { Assert-IntegrationResources $dll }
+        if ($id -ceq 'Inceptus.DocumentEngine.Canvas2D') {
             Require ($entries -contains 'staticwebassets/inceptus.canvas2d.js') 'Canvas JavaScript missing.'
             foreach ($asset in @('index.html', 'inceptus.publish.js', 'styles.css')) {
                 $bytes = [ReleaseSymbols]::Resource($dll, "Inceptus.DocumentEngine.Canvas2D.Publishing.$asset")
@@ -304,7 +320,7 @@ $records = foreach ($name in $family) {
                 Require ([Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)) -ceq [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($expected))) "Embedded Publish asset: $asset"
             }
         }
-        if ($name -ceq 'Bpmn.Blazor') {
+        if ($id -ceq 'Inceptus.DocumentEngine.Bpmn.Blazor') {
             $resourceBase = "$id.Resources.ModelerStrings"
             $neutralKeys = @(Read-StringResourceKeys ([ReleaseSymbols]::Resource($dll, "$resourceBase.resources")))
             $uiResourceKeyCounts['en'] = $neutralKeys.Count
@@ -337,4 +353,4 @@ $records = foreach ($name in $family) {
     } finally { $zip.Dispose(); $symbolZip.Dispose() }
 }
 $records | ConvertTo-Json -Depth 10 | Set-Content (Join-Path $PackageDirectory 'provenance.json')
-Write-Output 'Six package/symbol pairs passed release artifact inspection.'
+Write-Output 'Seven package/symbol pairs passed release artifact inspection.'

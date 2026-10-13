@@ -14,6 +14,7 @@ public sealed class SolutionArchitectureTests
     private const string Bpmn = "Inceptus.DocumentEngine.Bpmn";
     private const string BpmnBlazor = "Inceptus.DocumentEngine.Bpmn.Blazor";
     private const string Organizational = "Inceptus.DocumentEngine.Organizational";
+    private const string Integration = "Inceptus.Bpmn.Integration";
     private const string Blazor = "Inceptus.DocumentEngine.Blazor";
 
     private static readonly IReadOnlyDictionary<string, string[]> ExpectedProductionGraph =
@@ -25,11 +26,12 @@ public sealed class SolutionArchitectureTests
             [Bpmn] = [Contracts, Organizational],
             [Organizational] = [Contracts],
             [BpmnBlazor] = [Bpmn, Canvas2D, Contracts, Organizational, Runtime],
-            [Blazor] = [BpmnBlazor, Canvas2D, Contracts, Runtime],
+            [Integration] = [Bpmn, Canvas2D, Contracts, Organizational, Runtime],
+            [Blazor] = [Integration, BpmnBlazor, Canvas2D, Contracts, Runtime],
         };
 
     private static readonly string[] ProductionAssemblyNames =
-        [Contracts, Runtime, Canvas2D, Bpmn, Organizational, BpmnBlazor, Blazor];
+        [Contracts, Runtime, Canvas2D, Bpmn, Organizational, BpmnBlazor, Integration, Blazor];
 
     [Fact]
     public void ProductionProjectReferencesMatchTheApprovedGraphExactly()
@@ -49,7 +51,7 @@ public sealed class SolutionArchitectureTests
     }
 
     [Fact]
-    public void ProductionProjectSetContainsExactlyTheSevenApprovedProjects()
+    public void ProductionProjectSetContainsExactlyTheApprovedProjects()
     {
         var actualProjects = GetProductionProjectPaths().Keys.Order(StringComparer.Ordinal);
         var expectedProjects = ExpectedProductionGraph.Keys.Order(StringComparer.Ordinal);
@@ -109,7 +111,7 @@ public sealed class SolutionArchitectureTests
     {
         var buildProperties = XDocument.Load(Path.Combine(RepositoryRoot, "Directory.Build.props"));
 
-        Assert.Equal("0.1.9", ReadElementValue(buildProperties, "Version"));
+        Assert.Equal("0.1.10", ReadElementValue(buildProperties, "Version"));
         Assert.Equal("Robert Prokopczuk", ReadElementValue(buildProperties, "Authors"));
 
         var releaseTargets = XDocument.Load(Path.Combine(RepositoryRoot, "Directory.Build.targets"));
@@ -1007,7 +1009,7 @@ public sealed class SolutionArchitectureTests
     }
 
     [Fact]
-    public void DemoBlazorExportsOnlyItsApplicationRoot()
+    public void DemoBlazorExportsOnlyItsApplicationComponents()
     {
         var actualTypeNames = LoadProductionAssembly(Blazor)
             .GetExportedTypes()
@@ -1015,7 +1017,7 @@ public sealed class SolutionArchitectureTests
             .Where(name => name is not null)
             .Cast<string>();
 
-        Assert.Equal(["Inceptus.DocumentEngine.Blazor.App"], actualTypeNames);
+        Assert.Equal(["Inceptus.DocumentEngine.Blazor.App", "Inceptus.DocumentEngine.Blazor.Demo.BpmnDemoHost"], actualTypeNames.Order(StringComparer.Ordinal));
     }
 
     [Fact]

@@ -35,7 +35,7 @@ public sealed class PhaseN105NewDiagramArchitectureTests
         var import = ReadProductionFile(
             "Inceptus.DocumentEngine.Bpmn.Blazor",
             "Presentation",
-            "DocumentCanvasHost.NativeDocuments.cs");
+            "DocumentCanvasHost.Loading.cs");
         var newDiagram = ReadProductionFile(
             "Inceptus.DocumentEngine.Bpmn.Blazor",
             "Presentation",

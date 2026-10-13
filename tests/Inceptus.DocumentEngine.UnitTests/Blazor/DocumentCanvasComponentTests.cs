@@ -61,12 +61,14 @@ public sealed class DocumentCanvasComponentTests
         await using var renderer = new HtmlRenderer(services, NullLoggerFactory.Instance);
 
         var component = await renderer.Dispatcher.InvokeAsync(
-            () => renderer.RenderComponentAsync<DocumentCanvas>());
+            () => renderer.RenderComponentAsync<BpmnDemoHost>());
         var initial = await renderer.Dispatcher.InvokeAsync(component.ToHtmlString);
         var repeatedComponent = await renderer.Dispatcher.InvokeAsync(
-            () => renderer.RenderComponentAsync<DocumentCanvas>(ParameterView.Empty));
+            () => renderer.RenderComponentAsync<BpmnDemoHost>(ParameterView.Empty));
         var rerendered = await renderer.Dispatcher.InvokeAsync(repeatedComponent.ToHtmlString);
         var prefix = ExtractDomIdPrefix(initial);
+        var hostPrefix = Regex.Match(initial, "id=\"(?<prefix>bpmn-host-[0-9a-f]{32})-import\"").Groups["prefix"].Value;
+        Assert.NotEmpty(hostPrefix);
 
         AssertDoubleBufferedCanvas(initial);
         AssertDoubleBufferedCanvas(rerendered);
@@ -135,29 +137,28 @@ public sealed class DocumentCanvasComponentTests
             StringComparison.Ordinal);
         Assert.Contains($"id=\"{prefix}-undo\"", initial, StringComparison.Ordinal);
         Assert.Contains($"id=\"{prefix}-redo\"", initial, StringComparison.Ordinal);
-        Assert.Contains($"id=\"{prefix}-import\"", initial, StringComparison.Ordinal);
+        Assert.Contains($"id=\"{hostPrefix}-import\"", initial, StringComparison.Ordinal);
         Assert.Contains($"id=\"{prefix}-new-diagram\"", initial, StringComparison.Ordinal);
         Assert.Contains("aria-label=\"New diagram\"", initial, StringComparison.Ordinal);
         Assert.Contains("title=\"New diagram\"", initial, StringComparison.Ordinal);
         Assert.Matches(
             $"<button id=\"{prefix}-new-diagram\"[\\s\\S]*?type=\"button\"",
             initial);
-        Assert.Contains($"id=\"{prefix}-import-file\"", initial, StringComparison.Ordinal);
+        Assert.Contains($"id=\"{hostPrefix}-import-file\"", initial, StringComparison.Ordinal);
         Assert.Contains("accept=\".inceptus.json,application/json\"", initial,
             StringComparison.Ordinal);
         Assert.Contains("title=\"Import native Document (maximum 16 MiB)\"", initial,
             StringComparison.Ordinal);
-        Assert.Contains($"id=\"{prefix}-export\"", initial, StringComparison.Ordinal);
-        Assert.Contains("aria-label=\"Export native Document\"", initial,
+        Assert.Contains($"id=\"{hostPrefix}-export\"", initial, StringComparison.Ordinal);
+        Assert.Contains("aria-label=\"Export Inceptus JSON\"", initial,
             StringComparison.Ordinal);
-        Assert.Matches(
-            "<span class=\"native-document-action-icon\"[^>]*aria-hidden=\"true\"[^>]*>⇩</span>",
-            initial);
-        Assert.Matches(
-            "<span class=\"native-document-action-icon\"[^>]*aria-hidden=\"true\"[^>]*>⇧</span>",
-            initial);
-        Assert.DoesNotMatch(">\\s*Import\\s*<", initial);
-        Assert.DoesNotMatch(">\\s*Export\\s*<", initial);
+        Assert.Contains("aria-label=\"Import Inceptus JSON\"", initial, StringComparison.Ordinal);
+        Assert.Contains("aria-label=\"Import BPMN 2.0.2\"", initial, StringComparison.Ordinal);
+        Assert.Contains("aria-label=\"Export BPMN 2.0.2\"", initial, StringComparison.Ordinal);
+        Assert.Equal(2, Regex.Count(initial, "class=\"document-format-menu\" hidden", RegexOptions.CultureInvariant));
+        Assert.Equal(2, Regex.Count(initial, "aria-expanded=\"false\" aria-controls=\"bpmn-host-[^\"]*-formats\"", RegexOptions.CultureInvariant));
+        Assert.Matches(">\\s*Import\\s*<", initial);
+        Assert.Matches(">\\s*Export\\s*<", initial);
         Assert.DoesNotContain("Inceptus Document Engine", initial, StringComparison.Ordinal);
         Assert.DoesNotContain("Persistent visual editing pipeline", initial,
             StringComparison.Ordinal);
@@ -181,13 +182,13 @@ public sealed class DocumentCanvasComponentTests
             StringComparison.Ordinal);
         Assert.DoesNotContain($"id=\"{prefix}-new-diagram-dialog\"", initial,
             StringComparison.Ordinal);
-        Assert.DoesNotContain($"id=\"{prefix}-publication-dialog\"", initial,
+        Assert.DoesNotContain($"id=\"{hostPrefix}-publication-dialog\"", initial,
             StringComparison.Ordinal);
-        Assert.Contains($"id=\"{prefix}-publish\"", initial, StringComparison.Ordinal);
+        Assert.Contains($"id=\"{hostPrefix}-publish\"", initial, StringComparison.Ordinal);
         Assert.Contains("aria-label=\"Publish\"", initial, StringComparison.Ordinal);
         Assert.Contains($"data-active-canvas-id=\"{prefix}-document-canvas\"", initial,
             StringComparison.Ordinal);
-        Assert.DoesNotContain($"id=\"{prefix}-native-document-error\"", initial,
+        Assert.DoesNotContain($"id=\"{hostPrefix}-native-document-error\"", initial,
             StringComparison.Ordinal);
         Assert.Contains("role=\"toolbar\"", initial, StringComparison.Ordinal);
         Assert.Contains("aria-label=\"Editor toolbar\"", initial, StringComparison.Ordinal);
@@ -198,21 +199,21 @@ public sealed class DocumentCanvasComponentTests
         Assert.Contains("aria-label=\"Set zoom to 100%\"", initial, StringComparison.Ordinal);
         Assert.Contains($"id=\"{prefix}-zoom-in\"", initial, StringComparison.Ordinal);
         Assert.Contains("aria-label=\"Zoom in\"", initial, StringComparison.Ordinal);
-        Assert.Contains($"id=\"{prefix}-validate\"", initial, StringComparison.Ordinal);
+        Assert.Contains($"id=\"{hostPrefix}-validate\"", initial, StringComparison.Ordinal);
         Assert.Contains("aria-label=\"Model validation\"", initial,
             StringComparison.Ordinal);
         Assert.Contains($"id=\"{prefix}-editor-status\"", initial,
             StringComparison.Ordinal);
-        Assert.Contains($"id=\"{prefix}-issues-toggle\"", initial,
+        Assert.DoesNotContain($"id=\"{hostPrefix}-issues-toggle\"", initial,
             StringComparison.Ordinal);
-        Assert.Contains($"aria-controls=\"{prefix}-issues-panel\"", initial,
+        Assert.DoesNotContain($"aria-controls=\"{hostPrefix}-issues-panel\"", initial,
             StringComparison.Ordinal);
         Assert.Contains("aria-expanded=\"false\"", initial, StringComparison.Ordinal);
-        Assert.Contains("Errors 0", initial, StringComparison.Ordinal);
-        Assert.Contains("Warnings 0", initial, StringComparison.Ordinal);
-        Assert.Contains("Info 0", initial, StringComparison.Ordinal);
+        Assert.DoesNotContain("Errors 0", initial, StringComparison.Ordinal);
+        Assert.DoesNotContain("Warnings 0", initial, StringComparison.Ordinal);
+        Assert.DoesNotContain("Info 0", initial, StringComparison.Ordinal);
         Assert.Contains("Not validated", initial, StringComparison.Ordinal);
-        Assert.DoesNotContain($"id=\"{prefix}-issues-panel\"", initial,
+        Assert.DoesNotContain($"id=\"{hostPrefix}-issues-panel\"", initial,
             StringComparison.Ordinal);
         Assert.DoesNotContain("class=\"issues-list\"", initial, StringComparison.Ordinal);
         Assert.DoesNotContain("class=\"presentation-status\"", initial,
@@ -243,12 +244,12 @@ public sealed class DocumentCanvasComponentTests
         Assert.DoesNotContain($"id=\"{prefix}-properties-apply\"", initial, StringComparison.Ordinal);
         Assert.True(
             initial.IndexOf($"id=\"{prefix}-toolbox\"", StringComparison.Ordinal) <
-            initial.IndexOf("role=\"toolbar\"", StringComparison.Ordinal) &&
-            initial.IndexOf("role=\"toolbar\"", StringComparison.Ordinal) <
-            initial.IndexOf("<canvas", StringComparison.Ordinal));
+            initial.LastIndexOf("role=\"toolbar\"", StringComparison.Ordinal) &&
+            initial.LastIndexOf("role=\"toolbar\"", StringComparison.Ordinal) <
+            initial.IndexOf($"<canvas id=\"{prefix}-document-canvas\"", StringComparison.Ordinal));
         Assert.DoesNotContain("@onclick", initial, StringComparison.Ordinal);
         Assert.Contains("role=\"status\"", initial, StringComparison.Ordinal);
-        Assert.Single(Regex.Matches(
+        Assert.Equal(1, Regex.Count(
             initial,
             "role=\"status\"",
             RegexOptions.CultureInvariant));
@@ -291,7 +292,7 @@ public sealed class DocumentCanvasComponentTests
         string expectedMessageFragment)
     {
         using var culture = new ModelerCultureScope("en");
-        var result = NativeDocumentHostImportResult.Rejected(
+        var result = new BpmnModelerDocumentResult(BpmnModelerOperationStatus.Rejected, null,
         [
             new Diagnostic(
                 code,
@@ -300,7 +301,7 @@ public sealed class DocumentCanvasComponentTests
                 "System.InvalidOperationException"),
         ]);
 
-        var (actualCode, actualMessage) = DocumentCanvas.NativeDocumentImportMessage(result);
+        var (actualCode, actualMessage) = BpmnDemoHost.NativeDocumentImportMessage(result);
 
         Assert.Equal(code, actualCode);
         using var services = new ServiceCollection().AddLogging().AddInceptusBpmnModeler().BuildServiceProvider();
@@ -314,18 +315,18 @@ public sealed class DocumentCanvasComponentTests
     [Fact]
     public void SuccessfulNativeImportClearsAStaleTransientOperationError()
     {
-        var component = new DocumentCanvas();
+        var component = new BpmnDemoHost();
         var flags = BindingFlags.NonPublic | BindingFlags.Instance;
-        var complete = typeof(DocumentCanvas).GetMethod(
+        var complete = typeof(BpmnDemoHost).GetMethod(
             "CompleteNativeDocumentOperation",
             flags)!;
-        var clear = typeof(DocumentCanvas).GetMethod(
+        var clear = typeof(BpmnDemoHost).GetMethod(
             "ClearNativeDocumentOperationError",
             flags)!;
-        var errorCode = typeof(DocumentCanvas).GetField(
+        var errorCode = typeof(BpmnDemoHost).GetField(
             "_nativeDocumentOperationErrorCode",
             flags)!;
-        var errorMessage = typeof(DocumentCanvas).GetField(
+        var errorMessage = typeof(BpmnDemoHost).GetField(
             "_nativeDocumentOperationErrorMessage",
             flags)!;
 
@@ -342,11 +343,11 @@ public sealed class DocumentCanvasComponentTests
     [Fact]
     public void NativeDocumentBrowserPolicyUsesTheDeterministicFallbackAndHostLocalLimit()
     {
-        Assert.Equal("application/json", DocumentCanvas.NativeDocumentContentType);
-        Assert.Equal("document.inceptus.json", DocumentCanvas.NativeDocumentFileName);
-        Assert.EndsWith(".inceptus.json", DocumentCanvas.NativeDocumentFileName,
+        Assert.Equal("application/json", BpmnDemoHost.NativeDocumentContentType);
+        Assert.Equal("document.inceptus.json", BpmnDemoHost.NativeDocumentFileName);
+        Assert.EndsWith(".inceptus.json", BpmnDemoHost.NativeDocumentFileName,
             StringComparison.Ordinal);
-        Assert.Equal(16L * 1024L * 1024L, DocumentCanvas.MaximumNativeDocumentFileSize);
+        Assert.Equal(16L * 1024L * 1024L, BpmnDemoHost.MaximumNativeDocumentFileSize);
     }
 
     [Fact]
@@ -419,17 +420,17 @@ public sealed class DocumentCanvasComponentTests
     [Fact]
     public void PublicationDraftValidationAndCancelRemainTransient()
     {
-        var component = new DocumentCanvas();
+        var component = new BpmnDemoHost();
         var flags = BindingFlags.NonPublic | BindingFlags.Instance;
-        var open = typeof(DocumentCanvas).GetField("_publicationDialogOpen", flags)!;
-        var code = typeof(DocumentCanvas).GetField("_publicationCodeDraft", flags)!;
-        var title = typeof(DocumentCanvas).GetField("_publicationTitleDraft", flags)!;
-        var description = typeof(DocumentCanvas).GetField(
+        var open = typeof(BpmnDemoHost).GetField("_publicationDialogOpen", flags)!;
+        var code = typeof(BpmnDemoHost).GetField("_publicationCodeDraft", flags)!;
+        var title = typeof(BpmnDemoHost).GetField("_publicationTitleDraft", flags)!;
+        var description = typeof(BpmnDemoHost).GetField(
             "_publicationDescriptionDraft",
             flags)!;
-        var status = typeof(DocumentCanvas).GetField("_publishOperationStatus", flags)!;
-        var valid = typeof(DocumentCanvas).GetProperty("PublicationDraftIsValid", flags)!;
-        var cancel = typeof(DocumentCanvas).GetMethod("CancelPublicationDialog", flags)!;
+        var status = typeof(BpmnDemoHost).GetField("_publishOperationStatus", flags)!;
+        var valid = typeof(BpmnDemoHost).GetProperty("PublicationDraftIsValid", flags)!;
+        var cancel = typeof(BpmnDemoHost).GetMethod("CancelPublicationDialog", flags)!;
 
         open.SetValue(component, true);
         status.SetValue(component, "editing");
@@ -453,15 +454,15 @@ public sealed class DocumentCanvasComponentTests
     [Fact]
     public async Task EscapeCancelsPublicationDialogBeforeAnyHostOperation()
     {
-        var component = new DocumentCanvas();
+        var component = new BpmnDemoHost();
         var flags = BindingFlags.NonPublic | BindingFlags.Instance;
-        var open = typeof(DocumentCanvas).GetField("_publicationDialogOpen", flags)!;
-        var code = typeof(DocumentCanvas).GetField("_publicationCodeDraft", flags)!;
-        var status = typeof(DocumentCanvas).GetField("_publishOperationStatus", flags)!;
+        var open = typeof(BpmnDemoHost).GetField("_publicationDialogOpen", flags)!;
+        var code = typeof(BpmnDemoHost).GetField("_publicationCodeDraft", flags)!;
+        var status = typeof(BpmnDemoHost).GetField("_publishOperationStatus", flags)!;
         open.SetValue(component, true);
         code.SetValue(component, "draft");
         status.SetValue(component, "editing");
-        var handler = typeof(DocumentCanvas).GetMethod("HandleEditorKeyDownAsync", flags)!;
+        var handler = typeof(BpmnDemoHost).GetMethod("HandleHostKeyDown", flags)!;
 
         await Assert.IsAssignableFrom<Task>(handler.Invoke(
             component,
@@ -475,19 +476,19 @@ public sealed class DocumentCanvasComponentTests
     [Fact]
     public void OpeningPublicationDialogUsesLatestAuthoritativePublicationAndFreshDraft()
     {
-        var component = new DocumentCanvas();
+        var component = new BpmnDemoHost();
         var flags = BindingFlags.NonPublic | BindingFlags.Instance;
         var documentId = new DocumentId("test:n10.6:dialog");
         var revision = new DocumentRevision(12);
         var scopeId = new DocumentScopeId(documentId.Value);
         var validation = new ValidationSnapshot(documentId, scopeId, revision);
-        var open = typeof(DocumentCanvas).GetMethod(
+        var open = typeof(BpmnDemoHost).GetMethod(
             "InitializePublicationDialogDraft",
             flags)!;
-        var cancel = typeof(DocumentCanvas).GetMethod("CancelPublicationDialog", flags)!;
-        var code = typeof(DocumentCanvas).GetField("_publicationCodeDraft", flags)!;
-        var title = typeof(DocumentCanvas).GetField("_publicationTitleDraft", flags)!;
-        var description = typeof(DocumentCanvas).GetField(
+        var cancel = typeof(BpmnDemoHost).GetMethod("CancelPublicationDialog", flags)!;
+        var code = typeof(BpmnDemoHost).GetField("_publicationCodeDraft", flags)!;
+        var title = typeof(BpmnDemoHost).GetField("_publicationTitleDraft", flags)!;
+        var description = typeof(BpmnDemoHost).GetField(
             "_publicationDescriptionDraft",
             flags)!;
         var emptyState = HostState(
@@ -541,25 +542,25 @@ public sealed class DocumentCanvasComponentTests
     [InlineData(true)]
     public async Task AcceptedSaveAndPublishDiscardDialogDraftBeforeHostWork(bool publish)
     {
-        var component = new DocumentCanvas();
+        var component = new BpmnDemoHost();
         var flags = BindingFlags.NonPublic | BindingFlags.Instance;
-        var dialogOpen = typeof(DocumentCanvas).GetField("_publicationDialogOpen", flags)!;
-        var code = typeof(DocumentCanvas).GetField("_publicationCodeDraft", flags)!;
-        var title = typeof(DocumentCanvas).GetField("_publicationTitleDraft", flags)!;
-        var description = typeof(DocumentCanvas).GetField(
+        var dialogOpen = typeof(BpmnDemoHost).GetField("_publicationDialogOpen", flags)!;
+        var code = typeof(BpmnDemoHost).GetField("_publicationCodeDraft", flags)!;
+        var title = typeof(BpmnDemoHost).GetField("_publicationTitleDraft", flags)!;
+        var description = typeof(BpmnDemoHost).GetField(
             "_publicationDescriptionDraft",
             flags)!;
         dialogOpen.SetValue(component, true);
         code.SetValue(component, "process-a");
         title.SetValue(component, "Process A");
         description.SetValue(component, "Description A");
-        typeof(DocumentCanvas).GetField("_publicationSourceDocumentId", flags)!.SetValue(
+        typeof(BpmnDemoHost).GetField("_publicationSourceDocumentId", flags)!.SetValue(
             component,
             new DocumentId("test:n10.6:dialog-action"));
-        typeof(DocumentCanvas).GetField("_publicationSourceRevision", flags)!.SetValue(
+        typeof(BpmnDemoHost).GetField("_publicationSourceRevision", flags)!.SetValue(
             component,
             new DocumentRevision(7));
-        var action = typeof(DocumentCanvas).GetMethod(
+        var action = typeof(BpmnDemoHost).GetMethod(
             "ExecutePublicationDialogActionAsync",
             flags)!;
 
@@ -574,17 +575,17 @@ public sealed class DocumentCanvasComponentTests
     [Fact]
     public void OpenIssuesPanelKeepsItsPositionAndShowsNotValidatedForAnotherScope()
     {
-        var component = new DocumentCanvas();
-        var issuesPanel = Assert.IsType<FloatingIssuesPanelState>(typeof(DocumentCanvas)
+        var component = new BpmnDemoHost();
+        var issuesPanel = Assert.IsType<FloatingIssuesPanelState>(typeof(BpmnDemoHost)
             .GetField("_issuesPanel", BindingFlags.NonPublic | BindingFlags.Instance)!
             .GetValue(component));
-        var stateField = typeof(DocumentCanvas).GetField(
+        var stateField = typeof(BpmnDemoHost).GetField(
             "_state",
             BindingFlags.NonPublic | BindingFlags.Instance)!;
-        var validationState = typeof(DocumentCanvas).GetProperty(
+        var validationState = typeof(BpmnDemoHost).GetProperty(
             "ValidationStateValue",
             BindingFlags.NonPublic | BindingFlags.Instance)!;
-        var issuesPanelOpen = typeof(DocumentCanvas).GetProperty(
+        var issuesPanelOpen = typeof(BpmnDemoHost).GetProperty(
             "IssuesPanelOpenValue",
             BindingFlags.NonPublic | BindingFlags.Instance)!;
         var documentId = new DocumentId("test:n82:issues-document");
@@ -615,8 +616,10 @@ public sealed class DocumentCanvasComponentTests
     {
         var prefix = ExtractDomIdPrefix(markup);
         Assert.Equal(
-            2,
+            3,
             Regex.Count(markup, "<canvas\\b", RegexOptions.CultureInvariant));
+        Assert.Single(Regex.Matches(markup, "<canvas[^>]*class=\"import-measurement\"[^>]*aria-hidden=\"true\"", RegexOptions.CultureInvariant));
+        Assert.Equal(2, Regex.Count(markup, "<canvas[^>]*id=\"inceptus-", RegexOptions.CultureInvariant));
         Assert.Contains($"id=\"{prefix}-document-canvas\"", markup, StringComparison.Ordinal);
         Assert.Contains($"id=\"{prefix}-document-canvas-standby\"", markup,
             StringComparison.Ordinal);
@@ -673,32 +676,12 @@ public sealed class DocumentCanvasComponentTests
             presentationDiagnostics: null,
             isClosed: false);
 
-    private static DocumentCanvasHostState HostState(
+    private static DemoHostEditorState HostState(
         EditingSessionState session,
         ValidationSnapshot validation,
         DocumentPublicationSnapshot? publication = null,
         long documentSessionVersion = 0) => new(
-            session,
-            SurfaceSize: null,
-            HostDiagnostics: [],
-            InteractionDiagnostics: [],
-            PipelineCounters: null,
-            InitializationAttempted: true,
-            IsInitialized: true,
-            IsDisposed: false,
-            SuccessfulRenderCount: 1,
-            LatestPresentationSucceeded: true,
-            CssCursor: "default",
-            ContextMenu: null,
-            PropertiesTargetVisualStateId: null,
-            PropertiesFormOpen: false,
-            PropertiesFormDirty: false,
-            PropertiesApplyInFlight: false,
-            ValidationSnapshot: validation,
-            ValidationInFlight: false,
-            ScopeBreadcrumb: [],
-            Publication: publication,
-            DocumentSessionVersion: documentSessionVersion);
+            session, true, documentSessionVersion, publication, validation, false, false, null);
 
     private sealed class RecordingJsRuntime : IJSRuntime
     {

@@ -1,7 +1,6 @@
 using System.Collections.Immutable;
 using Inceptus.DocumentEngine.Canvas2D.EditingSession;
 using Inceptus.DocumentEngine.Canvas2D.Interaction;
-using Inceptus.DocumentEngine.Canvas2D.Publishing;
 using Inceptus.DocumentEngine.Canvas2D.Rendering;
 using Inceptus.DocumentEngine.Canvas2D.Scene;
 using Inceptus.DocumentEngine.Contracts.Canvas2D;
@@ -26,7 +25,6 @@ using Inceptus.DocumentEngine.Contracts.Text;
 using Inceptus.DocumentEngine.Contracts.Toolbox;
 using Inceptus.DocumentEngine.Contracts.Validation;
 using Inceptus.DocumentEngine.Contracts.Visuals;
-using Inceptus.DocumentEngine.Runtime.Validation;
 using Microsoft.JSInterop;
 
 namespace Inceptus.DocumentEngine.Bpmn.Blazor.Presentation;
@@ -37,7 +35,7 @@ namespace Inceptus.DocumentEngine.Bpmn.Blazor.Presentation;
 /// Document replacement prepares against the inactive host canvas before atomically swapping the
 /// active session.
 /// </summary>
-internal sealed partial class DocumentCanvasHost : IAsyncDisposable
+internal sealed partial class DocumentCanvasHost : IAsyncDisposable, IBpmnDocumentEditor
 {
     private const string ModelerFontFamily = "DejaVu Sans";
     private const string ModelerFontIdentity = "org.dejavu.DejaVuSans";
@@ -66,7 +64,6 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
         "CANVAS_SEMANTIC_SCENE_VIEW_ACTION_FAILED";
     private const string HostSemanticSceneCommandActionFailed =
         "CANVAS_SEMANTIC_SCENE_COMMAND_ACTION_FAILED";
-    private const string HostModelValidationFailed = "CANVAS_MODEL_VALIDATION_FAILED";
     private const string HostDisposalFailed = "CANVAS_HOST_DISPOSAL_FAILED";
 
     private readonly object _sync = new();
@@ -107,9 +104,6 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
         SemanticSceneCommandActionCatalog.Empty;
     private IDocumentCreationIdentityProvider _documentCreationIdentityProvider =
         GuidDocumentCreationIdentityProvider.Instance;
-    private ModelValidationEngine _modelValidationEngine = new();
-    private ValidationSnapshot? _validationSnapshot;
-    private bool _validationInFlight;
     private IDocumentCanvasPipelineCounters? _pipelineCounters;
     private Canvas2DSurfaceSize? _surfaceSize;
     private ImmutableArray<Diagnostic> _hostDiagnostics = [];
@@ -167,8 +161,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
         ICanvasPresentationSurfaceObserverFactory observerFactory,
         ICanvasPresentationPointerObserverFactory? pointerObserverFactory = null,
         ToolboxSelectionState? toolboxSelection = null,
-        Func<Canvas2DRenderer>? replacementRendererFactory = null,
-        PublishedProcessPackageBuilder? publishPackageBuilder = null)
+        Func<Canvas2DRenderer>? replacementRendererFactory = null)
     {
         ArgumentNullException.ThrowIfNull(compositionFactory);
         ArgumentNullException.ThrowIfNull(renderer);
@@ -180,7 +173,6 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
         _compositionFactory = compositionFactory;
         _toolboxSelection = toolboxSelection ?? new ToolboxSelectionState();
         _replacementRendererFactory = replacementRendererFactory;
-        _publishPackageBuilder = publishPackageBuilder ?? PublishPackageBuilder;
     }
 
     internal event Func<EditingSessionGeneration?, Task>? StateChanged;
@@ -207,127 +199,11 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
             static _ => DocumentCanvasZoomPolicy.ActualSize,
             cancellationToken);
 
-    internal async ValueTask<ValidationSnapshot?> ValidateAsync(
+    public async ValueTask<Canvas2DInteractionResult?> SelectVisualAsync(
+        DocumentId documentId, DocumentRevision revision, PresentationViewContext context, VisualStateId visualStateId,
         CancellationToken cancellationToken = default)
     {
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(
-            cancellationToken,
-            _lifetimeToken);
-        try
-        {
-            await EnterModelerOperationAsync(linked.Token).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (linked.IsCancellationRequested)
-        {
-            return null;
-        }
-
-        try
-        {
-            EditingSession? session;
-            ModelValidationEngine engine;
-            lock (_sync)
-            {
-                if (_disposed || _validationInFlight)
-                {
-                    return null;
-                }
-
-                session = _session;
-                engine = _modelValidationEngine;
-                _validationInFlight = true;
-            }
-
-            if (session is null)
-            {
-                return null;
-            }
-
-            var observed = session.CaptureState();
-            if (!IsValidationContextAvailable(observed) ||
-                !session.TryCaptureDocumentSnapshot(out var document) ||
-                document is null)
-            {
-                return null;
-            }
-
-            var confirmed = session.CaptureState();
-            if (!IsSameValidationContext(observed, confirmed) ||
-                document.DocumentId != confirmed.DocumentId ||
-                document.Revision != confirmed.DocumentRevision)
-            {
-                return null;
-            }
-
-            var routingIssues = RoutingModelValidationIssueProvider.CreateIssues(
-                confirmed.ProjectedGraph!,
-                confirmed.RoutingResult!);
-            var validation = engine.Validate(
-                confirmed.PresentationPlan is { } plan
-                    ? new ModelValidationContext(document, plan)
-                    : new ModelValidationContext(document, confirmed.ActiveScopeId),
-                routingIssues,
-                confirmed.Generation.Value);
-
-            var current = session.CaptureState();
-            if (!IsValidationContextAvailable(current) ||
-                current.DocumentId != validation.DocumentId ||
-                current.DocumentRevision != validation.SourceRevision ||
-                current.PresentationContext != validation.PresentationContext)
-            {
-                return null;
-            }
-
-            lock (_sync)
-            {
-                if (!_disposed)
-                {
-                    _validationSnapshot = validation;
-                    RemoveHostDiagnosticUnderLock(HostModelValidationFailed);
-                }
-            }
-
-            return validation;
-        }
-#pragma warning disable CA1031 // Plugin faults are exposed as infrastructure diagnostics.
-        catch (Exception exception) when (IsNonFatal(exception))
-        {
-            lock (_sync)
-            {
-                _validationSnapshot = null;
-                RemoveHostDiagnosticUnderLock(HostModelValidationFailed);
-                _hostDiagnostics = _hostDiagnostics.Add(new Diagnostic(
-                    HostModelValidationFailed,
-                    DiagnosticSeverity.Error,
-                    "Model validation failed because a validation contribution threw unexpectedly.",
-                    context:
-                    [
-                        new KeyValuePair<string, string>(
-                            "ExceptionType",
-                            exception.GetType().FullName ?? exception.GetType().Name),
-                    ]));
-            }
-
-            return null;
-        }
-#pragma warning restore CA1031
-        finally
-        {
-            lock (_sync)
-            {
-                _validationInFlight = false;
-            }
-
-            await CompleteModelerOperationAsync().ConfigureAwait(false);
-            _ = NotifyStateChangedSafelyAsync();
-        }
-    }
-
-    internal async ValueTask<Canvas2DInteractionResult?> SelectValidationIssueAsync(
-        ModelValidationIssueId issueId,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(issueId);
+        ArgumentNullException.ThrowIfNull(visualStateId);
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(
             cancellationToken,
             _lifetimeToken);
@@ -344,34 +220,26 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
         {
             EditingSession? session;
             Canvas2DInteractionController? interactionController;
-            ValidationSnapshot? validation;
             lock (_sync)
             {
                 session = _session;
                 interactionController = _interactionController;
-                validation = _validationSnapshot;
             }
 
-            if (session is null || interactionController is null || validation is null)
-            {
-                return null;
-            }
-
-            var issue = validation.Issues.FirstOrDefault(candidate => candidate.Id == issueId);
-            if (issue?.Target.VisualStateId is not { } visualStateId)
+            if (session is null || interactionController is null)
             {
                 return null;
             }
 
             var state = session.CaptureState();
-            if (!IsValidationContextAvailable(state) ||
-                state.DocumentId != validation.DocumentId ||
-                state.DocumentRevision != validation.SourceRevision ||
-                state.PresentationContext != validation.PresentationContext ||
+            if (!IsPresentationContextAvailable(state) ||
+                state.DocumentId != documentId ||
+                state.DocumentRevision != revision ||
+                state.PresentationContext != context ||
                 !session.TryCaptureDocumentSnapshot(out var document) ||
                 document is null ||
-                document.DocumentId != validation.DocumentId ||
-                document.Revision != validation.SourceRevision ||
+                document.DocumentId != documentId ||
+                document.Revision != revision ||
                 !document.VisualModel.TryGetVisualState(visualStateId, out var visualState) ||
                 visualState is null ||
                 state.PresentationPlan is { } plan && !plan.Contains(visualState.SemanticElementId) ||
@@ -390,8 +258,9 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
             {
                 _ = ReplaceInteractionDiagnosticsUnderLock(result.Diagnostics);
             }
-
             return result;
+
+
         }
         finally
         {
@@ -460,11 +329,15 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                 return null;
             }
 
-            return await NavigateToScopeUnderGateAsync(
+            var result = await NavigateToScopeUnderGateAsync(
                 session,
                 scopeId,
                 changed => notify |= changed,
                 linked.Token).ConfigureAwait(false);
+            // Session notifications can arrive while navigation still holds its command
+            // gate. Notify again after completion so the host can capture a ready context.
+            notify |= result?.Succeeded == true;
+            return result;
         }
         finally
         {
@@ -1344,6 +1217,20 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
         bool applyInFlight = false,
         SemanticElementId? targetSemanticElementId = null,
         Canvas2DSpatialRegionId? targetPresentationId = null)
+    {
+        var updated = UpdatePropertiesFormStateCore(isOpen, targetVisualStateId, isDirty,
+            applyInFlight, targetSemanticElementId, targetPresentationId);
+        if (updated) ViewChanged?.Invoke();
+        return updated;
+    }
+
+    private bool UpdatePropertiesFormStateCore(
+        bool isOpen,
+        VisualStateId? targetVisualStateId,
+        bool isDirty,
+        bool applyInFlight,
+        SemanticElementId? targetSemanticElementId,
+        Canvas2DSpatialRegionId? targetPresentationId)
     {
         lock (_sync)
         {
@@ -2264,6 +2151,13 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
         bool isDirty,
         bool applyInFlight = false)
     {
+        var updated = UpdateModelViewPropertiesFormStateCore(isOpen, isDirty, applyInFlight);
+        if (updated) ViewChanged?.Invoke();
+        return updated;
+    }
+
+    private bool UpdateModelViewPropertiesFormStateCore(bool isOpen, bool isDirty, bool applyInFlight)
+    {
         lock (_sync)
         {
             if (_disposed)
@@ -2476,8 +2370,6 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                 _propertiesFormOpen,
                 _propertiesFormDirty,
                 _propertiesApplyInFlight,
-                _validationSnapshot,
-                _validationInFlight,
                 CaptureScopeBreadcrumbUnderLock(sessionState),
                 _modelViewPropertiesFormOpen,
                 _modelViewPropertiesFormDirty,
@@ -2619,8 +2511,6 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                         composition.SemanticSceneCommandActionCatalog;
                     _documentCreationIdentityProvider =
                         composition.DocumentCreationIdentityProvider;
-                    _modelValidationEngine = new ModelValidationEngine(
-                        composition.ModelValidationCatalog);
                     _pipelineCounters = composition.Counters;
                     _interactionController = new Canvas2DInteractionController(
                         session,
@@ -2953,7 +2843,6 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                 _propertiesFormDirty ||
                 _modelViewPropertiesFormOpen ||
                 _modelViewPropertiesFormDirty ||
-                _validationSnapshot is not null ||
                 !_interactionDiagnostics.IsEmpty;
             _contextMenu = null;
             _propertiesFormOpen = false;
@@ -2963,9 +2852,9 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
             _propertiesFormDirty = false;
             _propertiesApplyInFlight = false;
             ClearModelViewPropertiesFormUnderLock();
-            _validationSnapshot = null;
+
             _ = ReplaceInteractionDiagnosticsUnderLock([]);
-            RemoveHostDiagnosticUnderLock(HostModelValidationFailed);
+
         }
 
         if (viewportPanGesture is not null &&
@@ -4469,7 +4358,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                 _observedDocumentRevision == eventArgs.State.DocumentRevision &&
                 _hostDiagnostics.IsEmpty && _interactionDiagnostics.IsEmpty &&
                 _contextMenu is null && !_propertiesFormOpen && !_modelViewPropertiesFormOpen &&
-                !_validationInFlight && !_surfaceRenderPending)
+                !_surfaceRenderPending)
             {
                 pendingPanGeneration = eventArgs.State.Generation;
             }
@@ -4524,7 +4413,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
             if (documentRevisionChanged)
             {
                 _ = ReplaceInteractionDiagnosticsUnderLock([]);
-                RemoveHostDiagnosticUnderLock(HostModelValidationFailed);
+
             }
 
             // A completed command's feedback belongs to its authoritative context,
@@ -4540,15 +4429,6 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
                 !contextCommandDiagnosticIsCurrent)
             {
                 _ = ReplaceInteractionDiagnosticsUnderLock([]);
-            }
-
-            if (_validationSnapshot is { } validation &&
-                (validation.DocumentId != eventArgs.State.DocumentId ||
-                 validation.SourceRevision != eventArgs.State.DocumentRevision ||
-                 validation.PresentationContext != eventArgs.State.PresentationContext))
-            {
-                _validationSnapshot = null;
-                RemoveHostDiagnosticUnderLock(HostModelValidationFailed);
             }
 
             if ((eventArgs.State.IsClosed ||
@@ -4731,6 +4611,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
 
     private async Task NotifyStateChangedAsync(EditingSessionGeneration? pendingPanGeneration = null)
     {
+        ViewChanged?.Invoke();
         var handlers = StateChanged;
         if (handlers is null)
         {
@@ -5550,7 +5431,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
     private static bool HasError(IEnumerable<Diagnostic> diagnostics) =>
         diagnostics.Any(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
 
-    private static bool IsValidationContextAvailable(EditingSessionState state) =>
+    private static bool IsPresentationContextAvailable(EditingSessionState state) =>
         !state.IsClosed &&
         state.Status == EditingSessionStatus.Ready &&
         state.CurrentScene is not null &&
@@ -5564,10 +5445,10 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable
          plan.SourceRevision == state.DocumentRevision) &&
         state.EditorState.ActiveGesture is null;
 
-    private static bool IsSameValidationContext(
+    private static bool IsSamePresentationContext(
         EditingSessionState observed,
         EditingSessionState confirmed) =>
-        IsValidationContextAvailable(confirmed) &&
+        IsPresentationContextAvailable(confirmed) &&
         observed.DocumentId == confirmed.DocumentId &&
         observed.DocumentRevision == confirmed.DocumentRevision &&
         observed.PresentationContext == confirmed.PresentationContext &&
@@ -5777,8 +5658,6 @@ internal sealed record DocumentCanvasHostState(
     bool PropertiesFormOpen,
     bool PropertiesFormDirty,
     bool PropertiesApplyInFlight,
-    ValidationSnapshot? ValidationSnapshot,
-    bool ValidationInFlight,
     ImmutableArray<DocumentCanvasScopeBreadcrumbSegment> ScopeBreadcrumb,
     bool ModelViewPropertiesFormOpen = false,
     bool ModelViewPropertiesFormDirty = false,

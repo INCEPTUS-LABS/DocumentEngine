@@ -54,9 +54,8 @@ public sealed partial class DocumentCanvasHostTests
                 BpmnModelerOperation.Capture,
                 BpmnModelerOperation.New,
                 BpmnModelerOperation.Load,
-                BpmnModelerOperation.Import,
-                BpmnModelerOperation.Export,
-                BpmnModelerOperation.Publish,
+                BpmnModelerOperation.Capture,
+                BpmnModelerOperation.Capture,
             },
             notifications.Select(value => Assert.IsType<BpmnModelerOperationFailedEventArgs>(value)
                 .Operation));
@@ -77,8 +76,8 @@ public sealed partial class DocumentCanvasHostTests
         var artifact = Assert.IsType<BpmnModelerFileArtifact>(export.Artifact);
 
         Assert.True(export.Succeeded);
-        Assert.Equal(DocumentCanvas.NativeDocumentFileName, artifact.FileName);
-        Assert.Equal(DocumentCanvas.NativeDocumentContentType, artifact.ContentType);
+        Assert.Equal(BpmnDemoHost.NativeDocumentFileName, artifact.FileName);
+        Assert.Equal(BpmnDemoHost.NativeDocumentContentType, artifact.ContentType);
         Assert.True(NativeDocumentSerializer.Export(snapshot).AsSpan()
             .SequenceEqual(artifact.Content.AsSpan()));
         Assert.Same(snapshot, fixture.Facade.CaptureDocumentSnapshot().Snapshot);
@@ -134,12 +133,10 @@ public sealed partial class DocumentCanvasHostTests
         Assert.Same(session, Session(fixture.Host));
         Assert.Same(snapshot, fixture.Facade.CaptureDocumentSnapshot().Snapshot);
         Assert.Equal(before.Session!.HistoryStatus, fixture.Host.CaptureState().Session!.HistoryStatus);
-        Assert.Null(fixture.Host.CaptureState().ValidationSnapshot);
+        Assert.Null(fixture.Host.Operations().ValidationSnapshot);
         Assert.Collection(fixture.Notifications,
             ready => Assert.IsType<BpmnModelerReadyEventArgs>(ready),
-            failure => AssertFacadeFailure(failure, BpmnModelerOperation.Import),
-            failure => AssertFacadeFailure(failure, BpmnModelerOperation.Load),
-            failure => AssertFacadeFailure(failure, BpmnModelerOperation.Publish));
+            failure => AssertFacadeFailure(failure, BpmnModelerOperation.Load));
     }
 
     [Theory]
@@ -172,10 +169,10 @@ public sealed partial class DocumentCanvasHostTests
         Assert.Equal(before.Session!.HistoryStatus, after.Session!.HistoryStatus);
         Assert.Same(before.Session.EditorState, after.Session.EditorState);
         Assert.Equal(before.ActiveCanvasElementId, after.ActiveCanvasElementId);
-        Assert.Null(after.ValidationSnapshot);
+        Assert.Null(fixture.Host.Operations().ValidationSnapshot);
         Assert.Collection(fixture.Notifications,
             ready => Assert.IsType<BpmnModelerReadyEventArgs>(ready),
-            failure => AssertFacadeFailure(failure, operation));
+            failure => AssertFacadeFailure(failure, operation == BpmnModelerOperation.Import ? BpmnModelerOperation.Load : operation));
     }
 
     [Fact]
@@ -228,8 +225,8 @@ public sealed partial class DocumentCanvasHostTests
 
         Assert.True(published.Succeeded, PublishDiagnostics(published.Diagnostics));
         var artifact = Assert.IsType<BpmnModelerFileArtifact>(published.Artifact);
-        Assert.Equal(DocumentCanvas.PublishFileName, artifact.FileName);
-        Assert.Equal(DocumentCanvas.PublishContentType, artifact.ContentType);
+        Assert.Equal(BpmnDemoHost.PublishFileName, artifact.FileName);
+        Assert.Equal(BpmnDemoHost.PublishContentType, artifact.ContentType);
         var entries = ReadPublishedArchive(artifact.Content);
         Assert.Equal(
             FacadeExpectedPublishEntries,
@@ -309,14 +306,8 @@ public sealed partial class DocumentCanvasHostTests
         Assert.Contains(afterStart.SemanticModel.Elements, static element =>
             element.TypeId == BpmnSemanticTypes.StartEvent);
         Assert.Equal(3, ModelerChanges(recreated.Notifications).Length);
-        if (publish)
-        {
-            Assert.Single(recreated.Notifications.OfType<BpmnModelerOperationFailedEventArgs>());
-        }
-        else
-        {
-            Assert.Empty(recreated.Notifications.OfType<BpmnModelerOperationFailedEventArgs>());
-        }
+        // Package failures belong to the host workflow; the editor reports only its committed edit.
+        Assert.Empty(recreated.Notifications.OfType<BpmnModelerOperationFailedEventArgs>());
 
         Assert.Empty(recreated.Host.CaptureState().InteractionDiagnostics);
     }
@@ -344,8 +335,8 @@ public sealed partial class DocumentCanvasHostTests
                 var accepted = Assert.IsType<BpmnModelerDocumentChangedEventArgs>(change);
                 Assert.Equal(BpmnModelerDocumentChangeKind.PersistentMutation, accepted.Kind);
                 Assert.Equal(publication, accepted.Snapshot.Publication);
-            },
-            failure => AssertFacadeFailure(failure, BpmnModelerOperation.Publish));
+            });
+        Assert.NotEmpty(result.Diagnostics);
         Assert.Equal(publication, fixture.Facade.CaptureDocumentSnapshot().Snapshot!.Publication);
     }
 
@@ -366,7 +357,7 @@ public sealed partial class DocumentCanvasHostTests
         });
         await fixture.InitializeAsync();
 
-        var import = fixture.Facade.ImportNativeDocumentAsync(Encoding.UTF8.GetBytes("{")).AsTask();
+        var import = fixture.Facade.LoadDocumentAsync(null).AsTask();
         Task<BpmnModelerDocumentResult> replacement;
         try
         {
@@ -385,7 +376,7 @@ public sealed partial class DocumentCanvasHostTests
 
         Assert.Collection(fixture.Notifications,
             ready => Assert.IsType<BpmnModelerReadyEventArgs>(ready),
-            failure => AssertFacadeFailure(failure, BpmnModelerOperation.Import),
+            failure => AssertFacadeFailure(failure, BpmnModelerOperation.Load),
             changed => AssertFacadeReplacement(changed, created.Snapshot!));
     }
 

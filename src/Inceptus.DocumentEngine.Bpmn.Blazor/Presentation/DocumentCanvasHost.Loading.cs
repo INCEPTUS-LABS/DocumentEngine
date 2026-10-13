@@ -19,8 +19,13 @@ internal sealed partial class DocumentCanvasHost
             "The loaded Document could not reach a ready editing session.",
             "The loaded Document could not replace the current editor session.");
 
+    internal ValueTask<NativeDocumentHostImportResult> LoadDocumentAsync(
+        DocumentSnapshot? document,
+        CancellationToken cancellationToken = default) => LoadDocumentAsync(document, null, cancellationToken);
+
     internal async ValueTask<NativeDocumentHostImportResult> LoadDocumentAsync(
         DocumentSnapshot? document,
+        BpmnModelerDocumentLoadOptions? options,
         CancellationToken cancellationToken = default)
     {
         NativeDocumentHostImportResult? outcome = null;
@@ -46,7 +51,7 @@ internal sealed partial class DocumentCanvasHost
                 if (_disposed || !_initialized || currentSession is null)
                 {
                     return outcome = NativeDocumentHostImportResult.Failure(
-                        NativeDocumentHostOperationStatus.Unavailable,
+                        BpmnModelerOperationStatus.Unavailable,
                         Error(
                             DocumentLoadUnavailable,
                             DocumentLoadReplacementMessages.UnavailableMessage));
@@ -70,7 +75,7 @@ internal sealed partial class DocumentCanvasHost
             var replacement = await ReplaceDocumentUnderGateAsync(
                 reconstruction.Document!,
                 DocumentLoadReplacementMessages,
-                linked.Token).ConfigureAwait(false);
+                linked.Token, options).ConfigureAwait(false);
             notify = replacement.ShouldNotify;
             return outcome = replacement.Status switch
             {
@@ -78,13 +83,15 @@ internal sealed partial class DocumentCanvasHost
                     NativeDocumentHostImportResult.Success with
                     {
                         Snapshot = replacement.Snapshot,
+                        Diagnostics = replacement.Diagnostics,
                     },
+                DocumentSessionReplacementStatus.Rejected => NativeDocumentHostImportResult.Rejected(replacement.Diagnostics),
                 DocumentSessionReplacementStatus.Unavailable =>
                     NativeDocumentHostImportResult.Failure(
-                        NativeDocumentHostOperationStatus.Unavailable,
+                        BpmnModelerOperationStatus.Unavailable,
                         replacement.Diagnostic!),
                 _ => NativeDocumentHostImportResult.Failure(
-                    NativeDocumentHostOperationStatus.Failed,
+                    BpmnModelerOperationStatus.Failed,
                     replacement.Diagnostic!),
             };
         }
@@ -96,7 +103,7 @@ internal sealed partial class DocumentCanvasHost
         catch (Exception exception) when (IsNonFatal(exception))
         {
             return outcome = NativeDocumentHostImportResult.Failure(
-                NativeDocumentHostOperationStatus.Failed,
+                BpmnModelerOperationStatus.Failed,
                 Error(
                     DocumentLoadFailed,
                     "The Document snapshot could not be loaded.",

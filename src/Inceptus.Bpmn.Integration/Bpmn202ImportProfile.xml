@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="utf-8"?>
+<BpmnImportProfile xmlns="urn:inceptus:bpmn:import-profile:1"
+  xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+  version="1" standard="BPMN" standardVersion="2.0.2">
+  <!-- Policy only. Existing converter code constructs semantics, geometry and native defaults. -->
+
+  <Fallback>
+    <Element action="Ignore"><Report disposition="Ignored" code="BPMN_IMPORT_UNMAPPED_ELEMENT" scope="Element">Unsupported XML element {element} and its content were ignored.</Report></Element>
+    <Attribute action="Ignore"><Report disposition="Ignored" code="BPMN_IMPORT_UNMAPPED_ATTRIBUTE" scope="Element">{message}</Report></Attribute>
+  </Fallback>
+  <Element qnames="bpmn:definitions">
+    <Attribute name="exporter"><Any action="AcceptMetadata"/></Attribute>
+    <Attribute name="exporterVersion"><Any action="AcceptMetadata"/></Attribute>
+  </Element>
+  <Element qnames="bpmn:process">
+    <Attribute name="isExecutable" valueKind="Boolean">
+      <Missing action="AcceptDefault" targetValue="false"/>
+      <Value value="false" action="AcceptDefault"/>
+      <Any action="Ignore"><Report disposition="Ignored" code="BPMN_IMPORT_EXECUTABLE_SEMANTICS_IGNORED" scope="Element">Executable-process semantics are not represented; the process was retained.</Report></Any>
+    </Attribute>
+    <Attribute name="isClosed" valueKind="Boolean">
+      <Missing action="AcceptDefault" targetValue="false"/>
+      <Value value="false" action="AcceptDefault"/>
+      <Any action="Ignore"><Report disposition="Ignored" code="BPMN_IMPORT_CLOSED_SEMANTICS_IGNORED" scope="Element">Closed-process semantics are not represented; the process was retained.</Report></Any>
+    </Attribute>
+    <Attribute name="processType" valueKind="Text">
+      <Missing action="AcceptDefault" targetValue="None"/>
+      <Value value="None" action="AcceptDefault"/>
+      <Any action="Ignore"><Report disposition="Ignored" code="BPMN_IMPORT_PROCESS_TYPE_IGNORED" scope="Element">Process classification '{value}' is not represented; the process was retained.</Report></Any>
+    </Attribute>
+  </Element>
+  <Element qnames="bpmn:task bpmn:userTask bpmn:manualTask bpmn:serviceTask bpmn:sendTask bpmn:receiveTask bpmn:scriptTask bpmn:businessRuleTask bpmn:callActivity bpmn:subProcess bpmn:transaction bpmn:adHocSubProcess">
+    <Attribute name="isForCompensation" valueKind="Boolean">
+      <Missing action="AcceptDefault" targetValue="false"/>
+      <Value value="false" action="AcceptDefault"/>
+      <Any action="Ignore"><Report disposition="Ignored" code="BPMN_IMPORT_COMPENSATION_IGNORED" scope="Element">Compensation execution semantics are not represented; the Activity was retained.</Report></Any>
+    </Attribute>
+    <Attribute name="startQuantity" valueKind="WholeNumber">
+      <Missing action="AcceptDefault" targetValue="1"/>
+      <Value value="1" action="AcceptDefault"/>
+      <Any action="Ignore"><Report disposition="Ignored" code="BPMN_IMPORT_START_QUANTITY_IGNORED" scope="Element">Start quantity '{value}' is not represented; the Activity was retained.</Report></Any>
+    </Attribute>
+    <Attribute name="completionQuantity" valueKind="WholeNumber">
+      <Missing action="AcceptDefault" targetValue="1"/>
+      <Value value="1" action="AcceptDefault"/>
+      <Any action="Ignore"><Report disposition="Ignored" code="BPMN_IMPORT_COMPLETION_QUANTITY_IGNORED" scope="Element">Completion quantity '{value}' is not represented; the Activity was retained.</Report></Any>
+    </Attribute>
+  </Element>
+  <Element qnames="bpmn:subProcess bpmn:transaction bpmn:adHocSubProcess">
+    <Attribute name="triggeredByEvent" valueKind="Boolean">
+      <Missing action="AcceptDefault" targetValue="false"/>
+      <Value value="false" action="AcceptDefault"/>
+      <Any action="Ignore"><Report disposition="Ignored" code="BPMN_IMPORT_EVENT_SUBPROCESS_IGNORED" scope="Element">Event-SubProcess specialization is not represented; the ordinary SubProcess was retained.</Report></Any>
+    </Attribute>
+  </Element>
+  <Element qnames="bpmn:eventBasedGateway">
+    <Attribute name="instantiate" valueKind="Boolean">
+      <Missing action="AcceptDefault" targetValue="false"/>
+      <Value value="false" action="AcceptDefault"/>
+      <Any action="Ignore"><Report disposition="Ignored" code="BPMN_IMPORT_GATEWAY_INSTANTIATE_IGNORED" scope="Element">Gateway instantiation semantics are not represented; the Event-Based Gateway was retained.</Report></Any>
+    </Attribute>
+    <Attribute name="eventGatewayType" valueKind="Text">
+      <Missing action="AcceptDefault" targetValue="Exclusive"/>
+      <Value value="Exclusive" action="AcceptDefault"/>
+      <Any action="Degrade"><Report disposition="Ignored" code="BPMN_IMPORT_GATEWAY_TYPE_DEGRADED" scope="Element">Event gateway type '{value}' was degraded to the supported Event-Based Gateway.</Report></Any>
+    </Attribute>
+  </Element>
+  <Element qnames="bpmn:exclusiveGateway bpmn:inclusiveGateway bpmn:parallelGateway bpmn:eventBasedGateway">
+    <Attribute name="gatewayDirection">
+      <Missing action="AcceptDefault" targetValue="Unspecified"/>
+      <Value value="Unspecified" action="AcceptDefault"/>
+      <Any action="AcceptDerived" strategy="DerivedFromTopology"><Report disposition="Ignored" code="BPMN_IMPORT_GATEWAY_DIRECTION_IGNORED" scope="Element">Declared gateway direction '{value}' cannot be derived from the retained Sequence Flow topology.</Report></Any>
+    </Attribute>
+  </Element>
+  <Element qnames="bpmn:documentation">
+    <Attribute name="textFormat">
+      <Missing action="AcceptDefault" targetValue="text/plain"/>
+      <Value value="text/plain" action="Map"/>
+      <Any action="Normalize" targetValue="text/plain"><Report disposition="Ignored" code="BPMN_IMPORT_DOCUMENTATION_FORMAT_IGNORED" scope="Element">Documentation format '{value}' is not represented; the available plain text was retained.</Report></Any>
+    </Attribute>
+  </Element>
+  <Element qnames="bpmndi:BPMNShape">
+    <Attribute name="isHorizontal" valueKind="Boolean" context="PoolOrLane">
+      <Missing action="AcceptDefault" targetValue="true"/>
+      <Value value="true" action="AcceptDefault"/>
+      <Value value="false" action="Normalize" targetValue="true"><Report disposition="Ignored" code="BPMN_IMPORT_VERTICAL_ORIENTATION_NORMALIZED" scope="Element">Vertical Pool/Lane orientation is not supported by Inceptus. The element was normalized to horizontal orientation.</Report></Value>
+    </Attribute>
+  </Element>
+  <Element qnames="bpmn:dataObject bpmn:dataObjectReference bpmn:dataStore bpmn:dataStoreReference bpmn:dataInput bpmn:dataOutput bpmn:dataInputAssociation bpmn:dataOutputAssociation bpmn:itemDefinition bpmn:group bpmn:textAnnotation bpmn:association">
+    <Behavior action="Ignore"><Report disposition="Ignored" code="BPMN_IMPORT_DATA_ARTIFACT_IGNORED" scope="Element">Unsupported BPMN {element} and its content were ignored.</Report></Behavior>
+  </Element>
+  <Element qnames="bpmn:scriptTask bpmn:businessRuleTask bpmn:callActivity">
+    <Behavior action="Degrade" targetValue="task"><Report disposition="Ignored" code="BPMN_IMPORT_ACTIVITY_DEGRADED" scope="Element">{element} was represented as an abstract Task; specialized execution behavior was ignored.</Report></Behavior>
+  </Element>
+  <Element qnames="bpmn:transaction bpmn:adHocSubProcess">
+    <Behavior action="Degrade" targetValue="subProcess"><Report disposition="Ignored" code="BPMN_IMPORT_SUBPROCESS_DEGRADED" scope="Element">{element} was represented as an ordinary SubProcess; specialized execution behavior was ignored.</Report></Behavior>
+  </Element>
+  <Transformation id="PoolLocalCoordinates" action="Normalize" targetValue="PoolLocal">
+    <Report disposition="Ignored" code="BPMN_POOL_GEOMETRY_NORMALIZED" scope="Owner">Absolute BPMN DI placement of Pool '{name}' was normalized to Inceptus Pool-local coordinates; existing A2 preparation determines frames and spacing.</Report>
+  </Transformation>
+
+  <Transformation id="DiagramOrigin" action="Normalize" targetValue="Nonnegative">
+    <Report disposition="Ignored" code="BPMN_DI_TRANSLATED" scope="Element">The original negative diagram origin cannot be retained; coordinates were translated into the nonnegative native region.</Report>
+  </Transformation>
+  <Transformation id="BoundaryPosition" action="Normalize" targetValue="Attachment">
+    <Report disposition="Ignored" code="BPMN_BOUNDARY_SNAPPED" scope="Element">The original boundary event position cannot be retained; geometry was synchronized to the existing attachment authority.</Report>
+  </Transformation>
+  <Transformation id="ConnectorEndpoint" action="Normalize" targetValue="Anchor">
+    <Report disposition="Ignored" code="BPMN_ANCHOR_NORMALIZED" scope="Element">The original DI endpoint cannot be retained; it was projected onto the existing native anchor geometry.</Report>
+  </Transformation>
+  <Transformation id="ConnectorPath" action="Normalize" targetValue="PreparedRoute">
+    <Report disposition="Ignored" code="BPMN_PATH_NORMALIZED" scope="Element">The original DI path cannot be retained exactly; the existing geometry/anchor policy adjusted coordinates or endpoints.</Report>
+  </Transformation>
+</BpmnImportProfile>

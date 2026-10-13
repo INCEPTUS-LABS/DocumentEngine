@@ -138,14 +138,17 @@ public sealed class PhaseP12ReusableBpmnBlazorArchitectureTests
             nameof(InceptusBpmnModeler.CaptureDocumentSnapshot),
             nameof(InceptusBpmnModeler.LoadDocumentAsync),
             nameof(InceptusBpmnModeler.NewDocumentAsync),
-            nameof(InceptusBpmnModeler.ImportNativeDocumentAsync),
-            nameof(InceptusBpmnModeler.ExportNativeDocumentAsync),
-            nameof(InceptusBpmnModeler.PublishAsync),
+            nameof(InceptusBpmnModeler.GetDocument),
+            nameof(InceptusBpmnModeler.GetDocumentAsync),
+            nameof(InceptusBpmnModeler.SetDocumentAsync),
         ];
         Assert.All(approvedMembers, member => Assert.Contains(member, publicMembers));
 
         string[] deferredMembers =
         [
+            "ImportNativeDocumentAsync",
+            "ExportNativeDocumentAsync",
+            "PublishAsync",
             "DiagnosticsChanged",
             "InitialDocumentChanged",
             "InitialDocumentExpression",

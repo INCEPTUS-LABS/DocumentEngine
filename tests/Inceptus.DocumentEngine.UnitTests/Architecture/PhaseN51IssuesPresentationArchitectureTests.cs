@@ -3,22 +3,27 @@ namespace Inceptus.DocumentEngine.UnitTests.Architecture;
 public sealed class PhaseN51IssuesPresentationArchitectureTests
 {
     [Fact]
-    public void StatusRowUnifiesIssuesCanvasStatusAndAlwaysVisibleCounts()
+    public void HostToolbarContainsConditionalCountsAsTheIssuesAction()
     {
         var component = ReadProductionFile(
-            "Inceptus.DocumentEngine.Bpmn.Blazor",
-            "Components",
-            "DocumentCanvas.razor");
+            "Inceptus.DocumentEngine.Blazor",
+            "Demo",
+            "BpmnDemoHost.razor") + ReadProductionFile("Inceptus.DocumentEngine.Blazor", "Demo", "BpmnDemoHost.razor.cs");
         var statusRow = Between(
             component,
-            "<footer id=\"@DomId(\"editor-status\")\"",
-            "</footer>");
+            "<div class=\"editor-toolbar host-toolbar\"",
+            "@if (Editor is null)");
 
         Assert.Contains("id=\"@DomId(\"issues-toggle\")\"", statusRow,
             StringComparison.Ordinal);
-        Assert.Contains("class=\"canvas-presentation-status\"", statusRow,
-            StringComparison.Ordinal);
-        Assert.Contains("@StatusMessage", statusRow, StringComparison.Ordinal);
+        Assert.Contains("@if (CurrentValidation is null)", statusRow, StringComparison.Ordinal);
+        Assert.Contains("class=\"validation-currency status-issue-counts\"", statusRow, StringComparison.Ordinal);
+        Assert.Contains("class=\"issues-toggle issues-counts status-issue-counts\"", statusRow, StringComparison.Ordinal);
+        Assert.DoesNotContain("<span>@Text[\"Status_Issues\"]</span>", statusRow, StringComparison.Ordinal);
+        var editor = ReadProductionFile("Inceptus.DocumentEngine.Bpmn.Blazor", "Components", "DocumentCanvas.razor");
+        Assert.Contains("@StatusMessage", editor, StringComparison.Ordinal);
+        Assert.DoesNotContain("issues-toggle", editor, StringComparison.Ordinal);
+        Assert.DoesNotContain("<footer", component, StringComparison.Ordinal);
         Assert.Contains("@Text[\"Status_Errors\"] @ValidationErrorCount", statusRow,
             StringComparison.Ordinal);
         Assert.Contains("@Text[\"Status_Warnings\"] @ValidationWarningCount", statusRow,
@@ -33,20 +38,20 @@ public sealed class PhaseN51IssuesPresentationArchitectureTests
     public void ClosedPanelLeavesNoIssueListInNormalWorkspaceFlow()
     {
         var component = ReadProductionFile(
-            "Inceptus.DocumentEngine.Bpmn.Blazor",
-            "Components",
-            "DocumentCanvas.razor");
+            "Inceptus.DocumentEngine.Blazor",
+            "Demo",
+            "BpmnDemoHost.razor") + ReadProductionFile("Inceptus.DocumentEngine.Blazor", "Demo", "BpmnDemoHost.razor.cs");
         var panelCondition = component.IndexOf(
             "@if (_issuesPanel.IsOpen)",
             StringComparison.Ordinal);
         var panel = component.IndexOf(
             "<aside id=\"@DomId(\"issues-panel\")\"",
             StringComparison.Ordinal);
-        var status = component.IndexOf(
-            "<footer id=\"@DomId(\"editor-status\")\"",
+        var toggle = component.IndexOf(
+            "id=\"@DomId(\"issues-toggle\")\"",
             StringComparison.Ordinal);
 
-        Assert.True(panelCondition >= 0 && panel > panelCondition && status > panel);
+        Assert.True(toggle >= 0 && panelCondition > toggle && panel > panelCondition);
         Assert.Contains("class=\"issues-floating-panel\"", component,
             StringComparison.Ordinal);
         Assert.DoesNotContain("class=\"issues-panel\"", component,
@@ -54,21 +59,43 @@ public sealed class PhaseN51IssuesPresentationArchitectureTests
     }
 
     [Fact]
-    public void FloatingPanelIsGenericScrollableAndLayeredBetweenCanvasAndProperties()
+    public void FeedbackUsesAnOverlayAndOneFixedHeightEditorRow()
+    {
+        var hostStyles = ReadProductionFile("Inceptus.DocumentEngine.Blazor", "Demo", "BpmnDemoHost.razor.css");
+        Assert.Contains("grid-template-rows: auto minmax(0, 1fr);", hostStyles, StringComparison.Ordinal);
+        Assert.Contains("position: absolute", Between(hostStyles, ".operation-feedback-panel {", "}"), StringComparison.Ordinal);
+        Assert.Contains("overflow: auto", Between(hostStyles, ".operation-feedback-body {", "}"), StringComparison.Ordinal);
+        var editor = ReadProductionFile("Inceptus.DocumentEngine.Bpmn.Blazor", "Components", "DocumentCanvas.razor");
+        var footer = Between(editor, "<footer id=\"@DomId(\"editor-status\")\"", "</footer>");
+        Assert.Contains("@StatusMessage", footer, StringComparison.Ordinal);
+        Assert.Contains("@ErrorMessage", footer, StringComparison.Ordinal);
+        Assert.Contains("new-diagram-error", footer, StringComparison.Ordinal);
+        Assert.DoesNotContain("canvas-diagnostics", editor, StringComparison.Ordinal);
+        var editorStyles = ReadProductionFile("Inceptus.DocumentEngine.Bpmn.Blazor", "Components", "DocumentCanvas.razor.css");
+        Assert.Contains("flex: 0 0 2rem", Between(editorStyles, ".editor-status-row {", "}"), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FloatingHostPanelIsScrollableAboveEditorToolbarAndBelowProperties()
     {
         var component = ReadProductionFile(
-            "Inceptus.DocumentEngine.Bpmn.Blazor",
-            "Components",
-            "DocumentCanvas.razor");
+            "Inceptus.DocumentEngine.Blazor",
+            "Demo",
+            "BpmnDemoHost.razor") + ReadProductionFile("Inceptus.DocumentEngine.Blazor", "Demo", "BpmnDemoHost.razor.cs");
         var styles = ReadProductionFile(
-            "Inceptus.DocumentEngine.Bpmn.Blazor",
-            "Components",
-            "DocumentCanvas.razor.css");
+            "Inceptus.DocumentEngine.Blazor",
+            "Demo",
+            "BpmnDemoHost.razor.css");
         var panelStyle = Between(styles, ".issues-floating-panel {", "}");
         var bodyStyle = Between(styles, ".issues-panel-body {", "}");
 
         Assert.Contains("position: absolute", panelStyle, StringComparison.Ordinal);
-        Assert.Contains("z-index: 24", panelStyle, StringComparison.Ordinal);
+        Assert.Contains("z-index: 31", panelStyle, StringComparison.Ordinal);
+        var editorStyles = ReadProductionFile("Inceptus.DocumentEngine.Bpmn.Blazor", "Components", "DocumentCanvas.razor.css");
+        Assert.Contains("z-index: 31", Between(editorStyles, ".editor-toolbar {", "}"), StringComparison.Ordinal);
+        Assert.Contains("z-index: 32", Between(editorStyles, ".properties-form {", "}"), StringComparison.Ordinal);
+        Assert.True(component.IndexOf("<InceptusBpmnModeler", StringComparison.Ordinal) <
+            component.IndexOf("<aside id=\"@DomId(\"issues-panel\")\"", StringComparison.Ordinal));
         Assert.Contains("overflow-y: auto", bodyStyle, StringComparison.Ordinal);
         Assert.Contains("overflow-x: hidden", bodyStyle, StringComparison.Ordinal);
         Assert.Contains("overscroll-behavior: contain", bodyStyle,
@@ -86,9 +113,9 @@ public sealed class PhaseN51IssuesPresentationArchitectureTests
     public void HeaderOwnsPointerCaptureAndBodyCannotStartMovement()
     {
         var component = ReadProductionFile(
-            "Inceptus.DocumentEngine.Bpmn.Blazor",
-            "Components",
-            "DocumentCanvas.razor");
+            "Inceptus.DocumentEngine.Blazor",
+            "Demo",
+            "BpmnDemoHost.razor") + ReadProductionFile("Inceptus.DocumentEngine.Blazor", "Demo", "BpmnDemoHost.razor.cs");
         var header = Between(
             component,
             "<header id=\"@DomId(\"issues-panel-header\")\"",
@@ -122,8 +149,8 @@ public sealed class PhaseN51IssuesPresentationArchitectureTests
     public void PanelStateHasNoValidationDocumentCommandOrViewportAuthority()
     {
         var state = ReadProductionFile(
-            "Inceptus.DocumentEngine.Bpmn.Blazor",
-            "Presentation",
+            "Inceptus.DocumentEngine.Blazor",
+            "Demo",
             "FloatingIssuesPanelState.cs");
         string[] forbidden =
         [

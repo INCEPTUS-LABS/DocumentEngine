@@ -66,7 +66,7 @@ public sealed class PhaseN5ModelValidationIntegrationTests
             Assert.Single(harness.State.EditorState.Selection));
         Assert.Equal(beforeState.DocumentRevision, harness.State.DocumentRevision);
         Assert.Equal(beforeState.HistoryStatus, harness.State.HistoryStatus);
-        Assert.Same(validation, harness.Host.CaptureState().ValidationSnapshot);
+        Assert.Same(validation, harness.Host.Operations().ValidationSnapshot);
 
         var movedVisual = beforeDocument.VisualModel.VisualStates.First(visual =>
             visual.Id == BpmnDemoPipeline.TaskVisualId);
@@ -78,7 +78,7 @@ public sealed class PhaseN5ModelValidationIntegrationTests
             VisualPlacementMode.Pinned));
         Assert.True(mutation.IsCommitted);
         await harness.Session.WaitForIdleAsync();
-        Assert.Null(harness.Host.CaptureState().ValidationSnapshot);
+        Assert.Null(harness.Host.Operations().ValidationSnapshot);
 
         var refreshed = Assert.IsType<ValidationSnapshot>(
             await harness.Host.ValidateAsync());

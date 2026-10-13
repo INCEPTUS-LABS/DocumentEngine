@@ -689,7 +689,7 @@ public sealed partial class DocumentCanvasHostTests
         Assert.Equal(before.HistoryStatus, after.HistoryStatus);
         Assert.Equal(before.ModelProfileState, after.ModelProfileState);
         Assert.NotEqual(before.ModelProfileViewState, after.ModelProfileViewState);
-        Assert.Same(validation, host.CaptureState().ValidationSnapshot);
+        Assert.Same(validation, host.Operations().ValidationSnapshot);
         Assert.Equal(
             organization.IsPreferredVisible,
             after.ModelProfileViewState.IsPreferredVisible(
@@ -850,7 +850,7 @@ public sealed partial class DocumentCanvasHostTests
         Assert.Equal(documentBefore, AttachedDocument(session).CaptureSnapshot());
         Assert.Empty(after.Session.EditorState.Selection);
         Assert.Null(after.ContextMenu);
-        Assert.Null(after.ValidationSnapshot);
+        Assert.Null(host.Operations().ValidationSnapshot);
         Assert.Null(toolboxSelection.SelectedItemId);
         Assert.Equal(
             [DocumentCanvasScopeBreadcrumb.RootLabel, "Process order"],
@@ -1251,7 +1251,7 @@ public sealed partial class DocumentCanvasHostTests
         var child = session.CaptureState();
 
         Assert.Equal(BpmnDemoPipeline.ProcessOrderScopeId, child.ActiveScopeId);
-        Assert.Null(host.CaptureState().ValidationSnapshot);
+        Assert.Null(host.Operations().ValidationSnapshot);
         Assert.Null(await host.SelectValidationIssueAsync(rootRoutingIssue.Id));
         Assert.Equal(5, child.ProjectedGraph!.Nodes.Length);
         Assert.Equal(4, child.ProjectedGraph.Edges.Length);
@@ -1297,11 +1297,11 @@ public sealed partial class DocumentCanvasHostTests
         Assert.Equal(
             childTaskVisualId,
             Assert.Single(session.CaptureState().EditorState.Selection));
-        Assert.Same(childValidation, host.CaptureState().ValidationSnapshot);
+        Assert.Same(childValidation, host.Operations().ValidationSnapshot);
 
         Assert.True((await host.NavigateToScopeAsync(rootScopeId))?.Succeeded);
         var restoredRoot = session.CaptureState();
-        Assert.Null(host.CaptureState().ValidationSnapshot);
+        Assert.Null(host.Operations().ValidationSnapshot);
         Assert.Equal(rootScopeId, restoredRoot.ActiveScopeId);
         Assert.DoesNotContain(restoredRoot.ProjectedGraph!.Nodes, node =>
             node.Source.SemanticElementId == BpmnDemoPipeline.ProcessOrderTaskId);
@@ -1369,7 +1369,7 @@ public sealed partial class DocumentCanvasHostTests
 
         await host.ZoomInAsync();
         await session.PanViewportAsync(new VectorD(40d, -20d));
-        Assert.Same(validation, host.CaptureState().ValidationSnapshot);
+        Assert.Same(validation, host.Operations().ValidationSnapshot);
         Assert.Equal(beforeDocument, document.CaptureSnapshot());
     }
 
@@ -1399,7 +1399,7 @@ public sealed partial class DocumentCanvasHostTests
         Assert.Equal(before.HistoryStatus, selected.HistoryStatus);
         Assert.Equal(before.EditorState.Viewport, selected.EditorState.Viewport);
         Assert.Equal(beforeDocument, document.CaptureSnapshot());
-        Assert.Same(validation, host.CaptureState().ValidationSnapshot);
+        Assert.Same(validation, host.Operations().ValidationSnapshot);
 
         var visual = beforeDocument.VisualModel.VisualStates.First(item =>
             item.SemanticElementId == BpmnDemoPipeline.TaskId);
@@ -1411,7 +1411,7 @@ public sealed partial class DocumentCanvasHostTests
             VisualPlacementMode.Pinned));
         Assert.True(committed.IsCommitted);
         await session.WaitForIdleAsync();
-        Assert.Null(host.CaptureState().ValidationSnapshot);
+        Assert.Null(host.Operations().ValidationSnapshot);
 
         var refreshed = Assert.IsType<ValidationSnapshot>(await host.ValidateAsync());
         var rejected = await session.ExecuteAsync(new MoveVisualStateCommand(
@@ -1421,7 +1421,7 @@ public sealed partial class DocumentCanvasHostTests
             visual.Position,
             VisualPlacementMode.Pinned));
         Assert.False(rejected.IsCommitted);
-        Assert.Same(refreshed, host.CaptureState().ValidationSnapshot);
+        Assert.Same(refreshed, host.Operations().ValidationSnapshot);
     }
 
     [Fact]
@@ -1935,7 +1935,7 @@ public sealed partial class DocumentCanvasHostTests
             ImmutableArray.Create(primaryRuntimeDiagnostic));
 
         Assert.Null(await host.ValidateAsync());
-        Assert.Null(host.CaptureState().ValidationSnapshot);
+        Assert.Null(host.Operations().ValidationSnapshot);
 
         Assert.True(selection.Select(PlacementOverrideCompositionFactory.TaskItemId));
         await host.RefreshToolboxPlacementAsync();
@@ -2084,7 +2084,7 @@ public sealed partial class DocumentCanvasHostTests
             Assert.Single(session.CaptureState().EditorState.Selection));
         Assert.Equal(noRoute.DocumentRevision, session.CaptureState().DocumentRevision);
         Assert.Equal(noRoute.HistoryStatus, session.CaptureState().HistoryStatus);
-        Assert.Same(validation, host.CaptureState().ValidationSnapshot);
+        Assert.Same(validation, host.Operations().ValidationSnapshot);
 
         await pointer.ClickDocumentPointAsync(noRouteScene, fallbackMidpoint);
         var selectedFallback = session.CaptureState();
@@ -5330,8 +5330,8 @@ public sealed partial class DocumentCanvasHostTests
             observerFactory,
             pointerObserverFactory,
             toolboxSelection,
-            replacementRendererFactory,
-            publishPackageBuilder);
+            replacementRendererFactory);
+        host.ConfigureOperations(rules: compositionFactory is null ? ModelValidationCatalog.Empty : null, publisher: publishPackageBuilder);
         HostObservers.Add(host, pointerObserver);
         return host;
     }
@@ -6106,7 +6106,7 @@ public sealed partial class DocumentCanvasHostTests
                 composition.DocumentCreationIdentityProvider,
                 composition.EndpointReconnectionCatalog,
                 composition.DeletionCatalog,
-                composition.ModelValidationCatalog,
+
                 composition.ScopeNavigationCatalog,
                 composition.BackgroundActionCatalog);
         }

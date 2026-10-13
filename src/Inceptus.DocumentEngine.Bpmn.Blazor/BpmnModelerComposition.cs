@@ -100,9 +100,6 @@ internal static class BpmnModelerComposition
             deletionCatalog: new DiagramDeletionCatalog(
                 BpmnRegistration.DiagramDeletionRegistrations.AddRange(
                     OrganizationalRegistration.DiagramDeletionRegistrations)),
-            modelValidationCatalog: new ModelValidationCatalog(
-                BpmnRegistration.ModelValidationRules.AddRange(
-                    OrganizationalRegistration.ModelValidationRules)),
             scopeNavigationCatalog: new ScopeNavigationCatalog(
                 BpmnRegistration.ScopeNavigationRegistrations),
             backgroundActionCatalog: new CanvasBackgroundActionCatalog(

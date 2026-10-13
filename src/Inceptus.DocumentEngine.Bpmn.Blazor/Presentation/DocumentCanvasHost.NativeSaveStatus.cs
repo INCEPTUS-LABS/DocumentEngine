@@ -26,7 +26,7 @@ internal sealed partial class DocumentCanvasHost
         }
     }
 
-    internal bool AcknowledgeNativeSave(BpmnModelerSaveCheckpoint checkpoint)
+    public bool AcknowledgeNativeSave(BpmnModelerSaveCheckpoint checkpoint)
     {
         ArgumentNullException.ThrowIfNull(checkpoint);
         lock (_sync)
@@ -54,11 +54,4 @@ internal sealed partial class DocumentCanvasHost
         }
     }
 
-    private void MarkImportedNativeSnapshotSaved(DocumentSnapshot snapshot)
-    {
-        lock (_sync)
-        {
-            _acknowledgedNativeSave = CreateNativeSaveCheckpointUnderLock(snapshot);
-        }
-    }
 }

@@ -93,7 +93,7 @@ public sealed partial class DocumentCanvasHostTests
         Assert.Equal(0, test.Execution.FullUploadCount - test.FullUploadsBefore);
         Assert.InRange(test.Activator.Canvas.BuildCount, 1, 2);
         Assert.Equal(0, test.Activator.Toolbox.BuildCount);
-        Assert.InRange(test.Activator.Input.BuildCount, 1, 2);
+        Assert.Equal(0, test.Activator.Input.BuildCount); // Host file control is outside viewport rendering.
         var markup = await test.MarkupAsync();
         Assert.Contains(succeeds ? "data-presentation-status=\"ready\"" : "data-presentation-status=\"renderfaulted\"", markup);
         Assert.Contains("data-scene-status=\"ready\"", markup);
@@ -181,7 +181,7 @@ public sealed partial class DocumentCanvasHostTests
         Assert.True(test.Activator.Canvas.BuildCount > 0);
         if (action == "properties") { Assert.True(test.Host.CaptureState().PropertiesFormOpen); }
         if (action == "import") { Assert.Equal("test:a125:queued-import", Session(test.Host).CaptureState().DocumentId.Value); }
-        if (action == "validation") { Assert.NotNull(test.Host.CaptureState().ValidationSnapshot); }
+        if (action == "validation") { Assert.NotNull(test.Host.Operations().ValidationSnapshot); }
     }
 
     [Theory]
@@ -219,10 +219,10 @@ public sealed partial class DocumentCanvasHostTests
             switch (action)
             {
                 case "zoom": await test.Host.ZoomInAsync(); break;
-                case "validation": await test.Host.ValidateAsync(); break;
+                case "validation": await test.Host.ValidateAsync(); await test.Activator.Demo.RefreshAsync(); break;
                 case "issues":
-                    InvokePublishComponent(test.Activator.Canvas, "ToggleIssuesPanel");
-                    await test.Activator.Canvas.RefreshAsync();
+                    InvokePublishComponent(test.Activator.Demo, "ToggleIssuesPanel");
+                    await test.Activator.Demo.RefreshAsync();
                     break;
                 case "selection": await PointerObserver(test.Host).ClickDocumentPointAsync(scene, Center(body.Bounds)); break;
                 case "hover": await PointerObserver(test.Host).MoveDocumentPointAsync(scene, Center(body.Bounds)); break;
@@ -262,7 +262,12 @@ public sealed partial class DocumentCanvasHostTests
             }
         });
         await test.DrainAsync();
-        Assert.True(test.Activator.Canvas.BuildCount > 0);
+        if (action is "validation" or "issues")
+        {
+            Assert.Equal(0, test.Activator.Canvas.BuildCount);
+            Assert.True(test.Activator.Demo.BuildCount > 0);
+        }
+        else Assert.True(test.Activator.Canvas.BuildCount > 0);
         Assert.All(hints, Assert.Null);
         var markup = await test.MarkupAsync();
         await test.Renderer.Dispatcher.InvokeAsync(test.Activator.Canvas.RefreshAsync);
@@ -282,13 +287,14 @@ public sealed partial class DocumentCanvasHostTests
             observerFailure = Record.Exception(() =>
             {
                 var component = test.Activator.Canvas;
-                Assert.False((bool)typeof(DocumentCanvas).GetProperty("CanUseNativeDocumentTransfer", PropertiesUxFlags)!.GetValue(component)!);
-                var import = (Task)typeof(DocumentCanvas).GetMethod("ImportNativeDocumentAsync", PropertiesUxFlags)!
-                    .Invoke(component, [new InputFileChangeEventArgs([])])!;
+                var demo = test.Activator.Demo;
+                Assert.False((bool)typeof(BpmnDemoHost).GetProperty("CanUseNativeDocumentTransfer", PropertiesUxFlags)!.GetValue(demo)!);
+                var import = (Task)typeof(BpmnDemoHost).GetMethod("ImportNativeDocumentAsync", PropertiesUxFlags)!
+                    .Invoke(demo, [new InputFileChangeEventArgs([])])!;
                 Assert.True(import.IsCompletedSuccessfully);
                 InvokePublishComponent(component, "OpenNewDiagramConfirmation");
                 Assert.False((bool)typeof(DocumentCanvas).GetField("_newDiagramConfirmationOpen", PropertiesUxFlags)!.GetValue(component)!);
-                Assert.False((bool)typeof(DocumentCanvas).GetField("_nativeDocumentImportInProgress", PropertiesUxFlags)!.GetValue(component)!);
+                Assert.False((bool)typeof(BpmnDemoHost).GetField("_nativeDocumentImportInProgress", PropertiesUxFlags)!.GetValue(demo)!);
             });
         };
         await test.Renderer.Dispatcher.InvokeAsync(() => PointerObserver(test.Host).WheelAsync(11, 7));
@@ -328,8 +334,8 @@ public sealed partial class DocumentCanvasHostTests
         {
             await test.Renderer.Dispatcher.InvokeAsync(() =>
             {
-                InvokePublishComponent(test.Activator.Canvas, "ToggleIssuesPanel");
-                return test.Activator.Canvas.RefreshAsync();
+                InvokePublishComponent(test.Activator.Demo, "ToggleIssuesPanel");
+                return test.Activator.Demo.RefreshAsync();
             });
         }
         if (reason == "tool-selected")
@@ -346,6 +352,11 @@ public sealed partial class DocumentCanvasHostTests
             Assert.Equal(0, test.Activator.Toolbox.BuildCount);
             Assert.Equal(test.FullUploadsBefore, test.Execution.FullUploadCount);
             Assert.Equal(2, Session(test.Host).CaptureState().CurrentScene!.BoundaryGuides.Items.Length);
+        }
+        else if (reason == "issues-open")
+        {
+            Assert.InRange(test.Activator.Canvas.BuildCount, 1, 2); // Host Issues do not disable quiet editor pan.
+            Assert.Contains("data-issues-panel-open=\"true\"", await test.MarkupAsync());
         }
         else
         {
@@ -383,7 +394,7 @@ public sealed partial class DocumentCanvasHostTests
                 .AddSingleton<IComponentActivator>(test.Activator).BuildServiceProvider();
             test.Renderer = new HtmlRenderer(test._services, NullLoggerFactory.Instance);
             test._rendered = await test.Renderer.Dispatcher.InvokeAsync(
-                () => test.Renderer.RenderComponentAsync<DocumentCanvas>());
+                () => test.Renderer.RenderComponentAsync<PanTestHost>());
             // The existing HtmlRenderer seam omits OnAfterRender; attach the real callback.
             test.Host.StateChanged += typeof(DocumentCanvas).GetMethod("HandleHostStateChangedAsync",
                 BindingFlags.NonPublic | BindingFlags.Instance)!
@@ -398,6 +409,7 @@ public sealed partial class DocumentCanvasHostTests
             Activator.Canvas.BuildCount = 0;
             Activator.Toolbox.BuildCount = 0;
             Activator.Input.BuildCount = 0;
+            Activator.Demo.BuildCount = 0;
             FullUploadsBefore = Execution.FullUploadCount;
         }
 
@@ -411,12 +423,20 @@ public sealed partial class DocumentCanvasHostTests
 
     private sealed class PanComponentActivator(DocumentCanvasHost host, ToolboxSelectionState selection) : IComponentActivator
     {
+        internal CountingPanDemo Demo { get; private set; } = null!;
         internal CountingPanCanvas Canvas { get; private set; } = null!;
         internal CountingPanToolbox Toolbox { get; private set; } = null!;
         internal CountingPanInput Input { get; private set; } = null!;
 
         public IComponent CreateInstance(Type componentType)
         {
+            if (componentType == typeof(PanTestHost)) return new PanTestHost(host);
+            if (componentType == typeof(BpmnDemoHost))
+            {
+                Demo = new CountingPanDemo(host);
+                Demo.AttachEditor(host, host.Operations());
+                return Demo;
+            }
             if (componentType == typeof(DocumentCanvas))
             {
                 Canvas = new CountingPanCanvas();
@@ -428,6 +448,33 @@ public sealed partial class DocumentCanvasHostTests
             if (componentType == typeof(ToolboxPanel)) { return Toolbox = new CountingPanToolbox(); }
             if (componentType == typeof(InputFile)) { return Input = new CountingPanInput(); }
             return (IComponent)System.Activator.CreateInstance(componentType)!;
+        }
+    }
+
+    private sealed class PanTestHost(DocumentCanvasHost host) : ComponentBase
+    {
+        protected override void BuildRenderTree(RenderTreeBuilder builder)
+        {
+            builder.OpenComponent<BpmnDemoHost>(0);
+            builder.AddAttribute(1, nameof(BpmnDemoHost.Editor), host);
+            builder.CloseComponent();
+            builder.OpenComponent<DocumentCanvas>(2);
+            builder.CloseComponent();
+        }
+    }
+
+    private sealed class CountingPanDemo(DocumentCanvasHost host) : BpmnDemoHost
+    {
+        internal int BuildCount { get; set; }
+        internal Task RefreshAsync() => InvokeAsync(() =>
+        {
+            typeof(BpmnDemoHost).GetField("_state", PropertiesUxFlags)!.SetValue(this, DemoState(host));
+            StateHasChanged();
+        });
+        protected override void BuildRenderTree(RenderTreeBuilder builder)
+        {
+            BuildCount++;
+            base.BuildRenderTree(builder);
         }
     }
 

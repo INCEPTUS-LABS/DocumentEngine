@@ -80,8 +80,7 @@ public sealed partial class DocumentCanvasHostTests
             Assert.Equal(before.VisualModel.VisualStates.AsEnumerable(), document.VisualModel.VisualStates);
             Assert.Equal(before.VisualModel.EnumerateConnectorRoutingRecords(), document.CaptureSnapshot().VisualModel.EnumerateConnectorRoutingRecords());
             AssertName(name.Length == 0 ? null : name);
-            Assert.Equal(name.Length == 0 ? null : name, host.GetValidationTargetName(
-                ModelValidationTarget.ForSemanticElement(relationshipId)));
+            Assert.Equal(name.Length == 0 ? null : name, ModelerLabels.ValidationTargetName(host.GetDocument().Snapshot!, relationshipId));
             Assert.True(host.UpdatePropertiesFormState(false, null, false));
             Assert.True((await session.UndoAsync()).IsCommitted);
             await session.WaitForIdleAsync();

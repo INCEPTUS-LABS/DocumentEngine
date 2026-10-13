@@ -3,9 +3,9 @@ using Microsoft.Extensions.Localization;
 namespace Inceptus.DocumentEngine.Bpmn.Blazor;
 
 /// <summary>Localizes modeler diagnostics at presentation time; diagnostic contracts stay unchanged.</summary>
-internal static class ModelerDiagnosticLabels
+public static class ModelerDiagnosticLabels
 {
-    internal static string Message(IStringLocalizer<ModelerStrings> text, string code, string fallback) =>
+    public static string Message(IStringLocalizer<ModelerStrings> text, string code, string fallback) =>
         ResourceKey(code) is { } key ? text[key].Value : fallback;
 
     internal static string? ResourceKey(string code) => code switch

@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    xmlns:p="urn:inceptus:bpmn:import-profile:1"
+    targetNamespace="urn:inceptus:bpmn:import-profile:1" elementFormDefault="qualified">
+  <xs:simpleType name="Action"><xs:restriction base="xs:string">
+    <xs:enumeration value="Map"/><xs:enumeration value="AcceptDefault"/>
+    <xs:enumeration value="AcceptMetadata"/><xs:enumeration value="AcceptDerived"/>
+    <xs:enumeration value="Normalize"/><xs:enumeration value="Degrade"/>
+    <xs:enumeration value="Ignore"/>
+  </xs:restriction></xs:simpleType>
+  <xs:simpleType name="Disposition"><xs:restriction base="xs:string">
+    <xs:enumeration value="Ignored"/>
+  </xs:restriction></xs:simpleType>
+  <xs:simpleType name="Scope"><xs:restriction base="xs:string">
+    <xs:enumeration value="Element"/><xs:enumeration value="Owner"/>
+    <xs:enumeration value="Diagram"/><xs:enumeration value="Document"/>
+  </xs:restriction></xs:simpleType>
+  <xs:simpleType name="Kind"><xs:restriction base="xs:string">
+    <xs:enumeration value="Text"/><xs:enumeration value="Boolean"/><xs:enumeration value="WholeNumber"/>
+  </xs:restriction></xs:simpleType>
+  <xs:simpleType name="Context"><xs:restriction base="xs:string">
+    <xs:enumeration value="Any"/><xs:enumeration value="PoolOrLane"/>
+  </xs:restriction></xs:simpleType>
+  <xs:simpleType name="Strategy"><xs:restriction base="xs:string">
+    <xs:enumeration value="None"/><xs:enumeration value="DerivedFromTopology"/>
+  </xs:restriction></xs:simpleType>
+  <xs:simpleType name="QNames"><xs:restriction><xs:simpleType><xs:list itemType="xs:QName"/></xs:simpleType><xs:minLength value="1"/></xs:restriction></xs:simpleType>
+  <xs:complexType name="Report"><xs:simpleContent><xs:extension base="xs:string">
+    <xs:attribute name="disposition" type="p:Disposition" use="required"/>
+    <xs:attribute name="code" type="xs:NCName" use="required"/>
+    <xs:attribute name="scope" type="p:Scope" default="Element"/>
+  </xs:extension></xs:simpleContent></xs:complexType>
+  <xs:complexType name="Rule">
+    <xs:sequence><xs:element name="Report" type="p:Report" minOccurs="0"/></xs:sequence>
+    <xs:attribute name="action" type="p:Action" use="required"/>
+    <xs:attribute name="targetValue" type="xs:string"/>
+    <xs:attribute name="strategy" type="p:Strategy" default="None"/>
+  </xs:complexType>
+  <xs:complexType name="Value"><xs:complexContent><xs:extension base="p:Rule">
+    <xs:attribute name="value" type="xs:string" use="required"/>
+  </xs:extension></xs:complexContent></xs:complexType>
+  <xs:complexType name="Attribute">
+    <xs:sequence>
+      <xs:element name="Missing" type="p:Rule" minOccurs="0"/>
+      <xs:element name="Value" type="p:Value" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="Any" type="p:Rule" minOccurs="0"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:NCName" use="required"/>
+    <xs:attribute name="valueKind" type="p:Kind" default="Text"/>
+    <xs:attribute name="context" type="p:Context" default="Any"/>
+  </xs:complexType>
+  <xs:complexType name="Element">
+    <xs:sequence>
+      <xs:element name="Behavior" type="p:Rule" minOccurs="0"/>
+      <xs:element name="Attribute" type="p:Attribute" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attribute name="qnames" type="p:QNames" use="required"/>
+  </xs:complexType>
+  <xs:complexType name="Transformation"><xs:complexContent><xs:extension base="p:Rule">
+    <xs:attribute name="id" use="required"><xs:simpleType><xs:restriction base="xs:string">
+      <xs:enumeration value="PoolLocalCoordinates"/>
+      <xs:enumeration value="DiagramOrigin"/><xs:enumeration value="BoundaryPosition"/>
+      <xs:enumeration value="ConnectorEndpoint"/><xs:enumeration value="ConnectorPath"/>
+    </xs:restriction></xs:simpleType></xs:attribute>
+  </xs:extension></xs:complexContent></xs:complexType>
+  <xs:element name="BpmnImportProfile"><xs:complexType>
+    <xs:sequence>
+      <xs:element name="Fallback"><xs:complexType><xs:sequence>
+        <xs:element name="Element" type="p:Rule"/><xs:element name="Attribute" type="p:Rule"/>
+      </xs:sequence></xs:complexType></xs:element>
+      <xs:element name="Element" type="p:Element" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="Transformation" type="p:Transformation" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+
+    <xs:attribute name="version" use="required" fixed="1"/>
+    <xs:attribute name="standard" use="required" fixed="BPMN"/>
+    <xs:attribute name="standardVersion" use="required" fixed="2.0.2"/>
+  </xs:complexType></xs:element>
+</xs:schema>

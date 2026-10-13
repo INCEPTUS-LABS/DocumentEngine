@@ -28,27 +28,6 @@ internal sealed partial class DocumentCanvasHost
             : ReportModelerOperationFailureUnderGateAsync(
                 operation, ModelerStatus(result.Status), result.Diagnostics);
 
-    private ValueTask ReportModelerOperationFailureUnderGateAsync(
-        NativeDocumentHostExportResult? result) =>
-        result is null
-            ? ValueTask.CompletedTask
-            : ReportModelerOperationFailureUnderGateAsync(
-                BpmnModelerOperation.Export, ModelerStatus(result.Status), result.Diagnostics);
-
-    private ValueTask ReportModelerOperationFailureUnderGateAsync(
-        PublishedProcessHostResult? result) =>
-        result is null
-            ? ValueTask.CompletedTask
-            : ReportModelerOperationFailureUnderGateAsync(
-                BpmnModelerOperation.Publish, ModelerStatus(result.Status), result.Diagnostics);
-
-    private ValueTask ReportModelerOperationFailureUnderGateAsync(
-        PublicationDialogHostResult? result) =>
-        result is null
-            ? ValueTask.CompletedTask
-            : ReportModelerOperationFailureUnderGateAsync(
-                BpmnModelerOperation.Publish, ModelerStatus(result.Status), result.Diagnostics);
-
     private async ValueTask ReportModelerOperationFailureUnderGateAsync(
         BpmnModelerOperation operation,
         BpmnModelerOperationStatus status,
@@ -62,8 +41,7 @@ internal sealed partial class DocumentCanvasHost
 
         try
         {
-            // A toolbar publication edit may have committed before package generation failed.
-            // Deliver that mutation before reporting the subsequent operation failure.
+            // Deliver any committed mutation before reporting a subsequent operation failure.
             await CollectModelerNotificationsUnderGateAsync().ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (_lifetimeToken.IsCancellationRequested)
@@ -82,22 +60,14 @@ internal sealed partial class DocumentCanvasHost
     }
 
     private static BpmnModelerOperationStatus ModelerStatus(
-        NativeDocumentHostOperationStatus status) => status switch
+        BpmnModelerOperationStatus status) => status switch
         {
-            NativeDocumentHostOperationStatus.Succeeded => BpmnModelerOperationStatus.Succeeded,
-            NativeDocumentHostOperationStatus.Rejected => BpmnModelerOperationStatus.Rejected,
-            NativeDocumentHostOperationStatus.Unavailable => BpmnModelerOperationStatus.Unavailable,
-            NativeDocumentHostOperationStatus.Cancelled => BpmnModelerOperationStatus.Cancelled,
+            BpmnModelerOperationStatus.Succeeded => BpmnModelerOperationStatus.Succeeded,
+            BpmnModelerOperationStatus.Rejected => BpmnModelerOperationStatus.Rejected,
+            BpmnModelerOperationStatus.Unavailable => BpmnModelerOperationStatus.Unavailable,
+            BpmnModelerOperationStatus.Cancelled => BpmnModelerOperationStatus.Cancelled,
             _ => BpmnModelerOperationStatus.Failed,
         };
 
-    private static BpmnModelerOperationStatus ModelerStatus(
-        PublishedProcessHostOperationStatus status) => status switch
-        {
-            PublishedProcessHostOperationStatus.Succeeded => BpmnModelerOperationStatus.Succeeded,
-            PublishedProcessHostOperationStatus.Rejected => BpmnModelerOperationStatus.Rejected,
-            PublishedProcessHostOperationStatus.Unavailable => BpmnModelerOperationStatus.Unavailable,
-            PublishedProcessHostOperationStatus.Cancelled => BpmnModelerOperationStatus.Cancelled,
-            _ => BpmnModelerOperationStatus.Failed,
-        };
+
 }

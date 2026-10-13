@@ -46,7 +46,7 @@ public sealed partial class DocumentCanvasHostTests
         var export = await host.ExportNativeDocumentAsync();
 
         Assert.True(export.Succeeded);
-        Assert.Equal(NativeDocumentHostOperationStatus.Succeeded, export.Status);
+        Assert.Equal(BpmnModelerOperationStatus.Succeeded, export.Status);
         Assert.Empty(export.Diagnostics);
         Assert.True(NativeDocumentSerializer.Export(document).AsSpan().SequenceEqual(
             export.Payload.AsSpan()));
@@ -92,7 +92,7 @@ public sealed partial class DocumentCanvasHostTests
         var result = await host.ImportNativeDocumentAsync(payload);
 
         Assert.False(result.Succeeded);
-        Assert.Equal(NativeDocumentHostOperationStatus.Rejected, result.Status);
+        Assert.Equal(BpmnModelerOperationStatus.Rejected, result.Status);
         Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Code == expectedCode);
         Assert.Same(session, Session(host));
         var afterState = session.CaptureState();
@@ -126,7 +126,7 @@ public sealed partial class DocumentCanvasHostTests
                 39)).AsMemory(),
             cancellation.Token);
 
-        Assert.Equal(NativeDocumentHostOperationStatus.Cancelled, result.Status);
+        Assert.Equal(BpmnModelerOperationStatus.Cancelled, result.Status);
         Assert.Same(session, Session(host));
         var after = session.CaptureState();
         Assert.Equal(before.DocumentRevision, after.DocumentRevision);
@@ -154,14 +154,14 @@ public sealed partial class DocumentCanvasHostTests
         var payload = NativeDocumentSerializer.Export(importedDocument).ToArray();
         var file = new RecordingBrowserFile(payload, payload.LongLength);
 
-        var result = await DocumentCanvas.ReadAndImportNativeDocumentFileAsync(
+        var result = await BpmnDemoHost.ReadAndImportNativeDocumentFileAsync(
             file,
             host.ImportNativeDocumentAsync);
 
         Assert.False(result.FileTooLarge);
         Assert.True(result.ImportResult?.Succeeded == true);
         Assert.Equal(1, file.OpenReadCount);
-        Assert.Equal(DocumentCanvas.MaximumNativeDocumentFileSize, file.MaximumAllowedSize);
+        Assert.Equal(BpmnDemoHost.MaximumNativeDocumentFileSize, file.MaximumAllowedSize);
         Assert.Equal("standby-canvas", host.CaptureState().ActiveCanvasElementId);
         var session = Session(host);
         Assert.Equal(importedDocument.DocumentId, session.CaptureState().DocumentId);
@@ -194,9 +194,9 @@ public sealed partial class DocumentCanvasHostTests
         var importCount = 0;
         var file = new RecordingBrowserFile(
             [],
-            DocumentCanvas.MaximumNativeDocumentFileSize + 1L);
+            BpmnDemoHost.MaximumNativeDocumentFileSize + 1L);
 
-        var result = await DocumentCanvas.ReadAndImportNativeDocumentFileAsync(
+        var result = await BpmnDemoHost.ReadAndImportNativeDocumentFileAsync(
             file,
             (payload, cancellationToken) =>
             {
@@ -210,10 +210,10 @@ public sealed partial class DocumentCanvasHostTests
         Assert.Equal(0, importCount);
         Assert.Equal(
             "CANVAS_NATIVE_DOCUMENT_FILE_TOO_LARGE",
-            DocumentCanvas.NativeDocumentFileTooLargeCode);
+            BpmnDemoHost.NativeDocumentFileTooLargeCode);
         Assert.Equal(
             "Error_FileTooLarge",
-            DocumentCanvas.NativeDocumentFileTooLargeMessage);
+            BpmnDemoHost.NativeDocumentFileTooLargeMessage);
         Assert.Same(session, Session(host));
         var after = session.CaptureState();
         Assert.Equal(EditingSessionStatus.Ready, after.Status);
@@ -282,13 +282,13 @@ public sealed partial class DocumentCanvasHostTests
         var result = await host.ImportNativeDocumentAsync(payload.AsMemory());
 
         Assert.False(result.Succeeded);
-        Assert.Equal(NativeDocumentHostOperationStatus.Failed, result.Status);
+        Assert.Equal(BpmnModelerOperationStatus.Failed, result.Status);
         Assert.Contains(result.Diagnostics, diagnostic =>
             diagnostic.Code == "CANVAS_NATIVE_DOCUMENT_REPLACEMENT_FAILED");
         Assert.Equal(
             ("CANVAS_NATIVE_DOCUMENT_REPLACEMENT_FAILED",
                 "Error_ImportSession"),
-            DocumentCanvas.NativeDocumentImportMessage(result));
+            BpmnDemoHost.NativeDocumentImportMessage(result));
         Assert.Same(session, Session(host));
         var after = session.CaptureState();
         Assert.Equal(EditingSessionStatus.Ready, after.Status);
@@ -353,7 +353,7 @@ public sealed partial class DocumentCanvasHostTests
         Assert.True((await initialSession.UpdateEditorStateAsync(oldTransient)).Succeeded);
         await initialSession.WaitForIdleAsync();
         Assert.NotNull(await host.ValidateAsync());
-        Assert.NotNull(host.CaptureState().ValidationSnapshot);
+        Assert.NotNull(host.Operations().ValidationSnapshot);
         var documentA = await CreatePreparedImportedDocumentAsync("test:n10.3:document-a", 41);
         var bytesA = NativeDocumentSerializer.Export(documentA);
 
@@ -379,7 +379,7 @@ public sealed partial class DocumentCanvasHostTests
             stateA.ModelProfileElementViewState);
         Assert.Equal(EditingSessionStatus.Ready, stateA.Status);
         Assert.NotNull(stateA.CurrentScene);
-        Assert.Null(host.CaptureState().ValidationSnapshot);
+        Assert.Null(host.Operations().ValidationSnapshot);
         Assert.Equal(1, initialExecution.DisposeCount);
         Assert.Equal("standby-canvas", host.CaptureState().ActiveCanvasElementId);
         Assert.Contains("initialize:standby-canvas", firstImportExecution.Calls);

@@ -234,7 +234,7 @@ public sealed partial class DocumentCanvasHostTests
                 composition.PropertiesSchemaCatalog, composition.Counters,
                 composition.ToolboxPlacementCatalog, composition.AnchorConnectionCreationCatalog,
                 composition.DocumentCreationIdentityProvider, composition.EndpointReconnectionCatalog,
-                composition.DeletionCatalog, composition.ModelValidationCatalog,
+                composition.DeletionCatalog,
                 composition.ScopeNavigationCatalog, composition.BackgroundActionCatalog);
         }
     }

@@ -135,13 +135,13 @@ public sealed class PhaseN5ModelValidationArchitectureTests
     public void IssueMessagesUseNormalEncodingAndCanWrapLongCanonicalIds()
     {
         var component = ReadProductionFile(
-            "Inceptus.DocumentEngine.Bpmn.Blazor",
-            "Components",
-            "DocumentCanvas.razor");
+            "Inceptus.DocumentEngine.Blazor",
+            "Demo",
+            "BpmnDemoHost.razor") + ReadProductionFile("Inceptus.DocumentEngine.Blazor", "Demo", "BpmnDemoHost.razor.cs");
         var styles = ReadProductionFile(
-            "Inceptus.DocumentEngine.Bpmn.Blazor",
-            "Components",
-            "DocumentCanvas.razor.css");
+            "Inceptus.DocumentEngine.Blazor",
+            "Demo",
+            "BpmnDemoHost.razor.css");
 
         Assert.Contains("@ModelerDiagnosticLabels.Message(Text, issue.Code, issue.Message)", component, StringComparison.Ordinal);
         Assert.DoesNotContain("MarkupString", component, StringComparison.Ordinal);

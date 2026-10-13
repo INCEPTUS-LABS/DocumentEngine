@@ -1,0 +1,355 @@
+@namespace Inceptus.DocumentEngine.Blazor.Demo
+@using Inceptus.DocumentEngine.Bpmn.Blazor
+@using Inceptus.DocumentEngine.Bpmn.Blazor.Components
+@using Inceptus.DocumentEngine.Contracts.Diagnostics
+@using Inceptus.Bpmn.Integration
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components.Web
+@using Microsoft.Extensions.Localization
+@inject IStringLocalizer<ModelerStrings> Text
+@inject Microsoft.JSInterop.IJSRuntime JavaScript
+@implements IAsyncDisposable
+<div class="demo-host" @onkeydown="HandleHostKeyDown" @onclick="CloseDocumentMenu" data-native-document-operation="@_nativeDocumentOperationStatus"
+     data-native-document-error-code="@(_nativeDocumentOperationErrorCode ?? string.Empty)"
+     data-publish-operation="@_publishOperationStatus" data-publish-error-code="@(_publishOperationErrorCode ?? string.Empty)"
+     data-publication-dialog="@(_publicationDialogOpen ? "open" : "closed")"
+     data-publication-draft-valid="@(PublicationDraftIsValid ? "true" : "false")"
+     data-validation-state="@ValidationStateValue" data-validation-issue-count="@ValidationIssueCount"
+     data-validation-error-count="@ValidationErrorCount" data-validation-warning-count="@ValidationWarningCount"
+     data-validation-info-count="@ValidationInfoCount" data-can-validate="@CanValidateValue" data-issues-panel-open="@IssuesPanelOpenValue">
+    <div class="editor-toolbar host-toolbar" role="toolbar" aria-label="Document operations" @onclick:stopPropagation>
+        <div class="document-format-control">
+            <button type="button" aria-expanded="@(_documentMenu == "import" ? "true" : "false")" aria-controls="@DomId("import-formats")"
+                    disabled="@(!CanUseNativeDocumentTransfer)" @onclick='() => ToggleDocumentMenu("import")'>Import <span aria-hidden="true">▾</span></button>
+            <div id="@DomId("import-formats")" class="document-format-menu" hidden="@(_documentMenu != "import")">
+                <label id="@DomId("import")"
+                       class="native-document-import-action format-choice"
+                       for="@DomId("import-file")"
+                       aria-disabled="@(!CanUseNativeDocumentTransfer)"
+                       title="@Text["Toolbar_ImportHint"]">
+                    Inceptus JSON <small>Full fidelity</small>
+                    <InputFile @key="_nativeDocumentInputKey"
+                               id="@DomId("import-file")"
+                               class="native-document-file-input"
+                               aria-label="Import Inceptus JSON"
+                               disabled="@(!CanUseNativeDocumentTransfer)"
+                               accept=".inceptus.json,application/json"
+                               OnChange="ImportNativeDocumentAsync" />
+                </label>
+                <label class="native-document-import-action format-choice" for="@DomId("import-bpmn-file")"
+                       aria-disabled="@(!CanUseNativeDocumentTransfer)">
+                    BPMN 2.0.2 <small>Interchange · may omit information</small>
+                    <InputFile @key="_standardInputKey" id="@DomId("import-bpmn-file")" class="native-document-file-input"
+                               aria-label="Import BPMN 2.0.2" disabled="@(!CanUseNativeDocumentTransfer)"
+                               accept=".xml,.bpmn,application/xml,text/xml" OnChange="ImportStandardDocumentAsync" />
+                </label>
+            </div>
+        </div>
+        <div class="document-format-control">
+            <button type="button" aria-expanded="@(_documentMenu == "export" ? "true" : "false")" aria-controls="@DomId("export-formats")"
+                    disabled="@(!CanUseNativeDocumentTransfer)" @onclick='() => ToggleDocumentMenu("export")'>Export <span aria-hidden="true">▾</span></button>
+            <div id="@DomId("export-formats")" class="document-format-menu" hidden="@(_documentMenu != "export")">
+                <button id="@DomId("export")"
+                        class="format-choice"
+                        type="button"
+                        disabled="@(!CanUseNativeDocumentTransfer)"
+                        aria-label="Export Inceptus JSON"
+                        title="@Text["Toolbar_Export"]"
+                        @onclick="ExportNativeDocumentAsync">
+                    Inceptus JSON <small>Full fidelity</small>
+                </button>
+                <button type="button" class="format-choice" aria-label="Export BPMN 2.0.2"
+                        disabled="@(!CanUseNativeDocumentTransfer)" @onclick="ExportStandardDocumentAsync">
+                    BPMN 2.0.2 <small>Interchange · may omit information</small>
+                </button>
+            </div>
+        </div>
+                <button id="@DomId("publish")"
+                        class="native-document-action publish-action"
+                        type="button"
+                        disabled="@(!CanPublish)"
+                        aria-label="@Text["Toolbar_Publish"]"
+                        title="@Text["Toolbar_Publish"]"
+                        @onclick="OpenPublicationDialog">
+                    <span class="native-document-action-icon" aria-hidden="true">◈</span>
+                </button>
+                <button id="@DomId("validate")" aria-label="@Text["Accessibility_ModelValidation"]"
+                        type="button"
+                        disabled="@(!CanValidate)"
+                        title="@Text["Toolbar_ValidateHint"]"
+                        @onclick="ValidateAsync">@Text["Toolbar_Validate"]</button>
+        <div class="host-validation-summary">
+            @if (CurrentValidation is null)
+            {
+                <span class="validation-currency status-issue-counts">@Text["Status_NotValidated"]</span>
+            }
+            else
+            {
+                <button id="@DomId("issues-toggle")" type="button"
+                        class="issues-toggle issues-counts status-issue-counts"
+                        aria-label="@Text["Accessibility_IssueCounts"]"
+                        aria-controls="@DomId("issues-panel")"
+                        aria-expanded="@IssuesPanelOpenValue"
+                        @onclick="ToggleIssuesPanel">
+                    <span data-severity="error">@Text["Status_Errors"] @ValidationErrorCount</span>
+                    <span data-severity="warning">@Text["Status_Warnings"] @ValidationWarningCount</span>
+                    <span data-severity="info">@Text["Status_Info"] @ValidationInfoCount</span>
+                    <span class="issues-disclosure" aria-hidden="true">@IssuesDisclosure</span>
+                </button>
+            }
+        </div>
+    </div>
+    <canvas id="@DomId("import-measurement")" class="import-measurement" aria-hidden="true" width="1" height="1"></canvas>
+    @if (Editor is null)
+    {
+        <InceptusBpmnModeler @ref="_modeler" Ready="OnReady" DocumentChanged="OnDocumentChanged" ViewChanged="OnViewChanged" />
+    }
+            @if (_issuesPanel.IsOpen)
+            {
+                <aside id="@DomId("issues-panel")"
+                       class="issues-floating-panel"
+                       aria-label="@Text["Accessibility_ValidationIssues"]"
+                       aria-live="polite"
+                       style="@IssuesPanelStyle"
+                       @onclick:stopPropagation
+                       @onpointerdown:stopPropagation
+                       @onpointermove:stopPropagation
+                       @onpointerup:stopPropagation
+                       @onpointercancel:stopPropagation
+                       @onwheel:stopPropagation
+                       @oncontextmenu:preventDefault
+                       @oncontextmenu:stopPropagation
+                       @onauxclick:preventDefault
+                       @onauxclick:stopPropagation>
+                    <header id="@DomId("issues-panel-header")"
+                            class="issues-panel-header"
+                            @onpointerdown="StartIssuesPanelMove"
+                            @onpointerdown:preventDefault
+                            @onpointermove="MoveIssuesPanel"
+                            @onpointerup="EndIssuesPanelMove"
+                            @onpointercancel="EndIssuesPanelMove"
+                            @onlostpointercapture="CancelIssuesPanelMove">
+                        <h2>@Text["Status_Issues"]</h2>
+                    </header>
+                    <button id="@DomId("issues-close")"
+                            class="issues-close"
+                            type="button"
+                            aria-label="@Text["Status_CloseIssues"]"
+                            title="@Text["Status_CloseIssues"]"
+                            @onclick="CloseIssuesPanel">×</button>
+                    @if (CurrentValidation is not null)
+                    {
+                        <div class="issues-panel-summary issues-counts"
+                             aria-label="@Text["Accessibility_IssueCounts"]">
+                            <span data-severity="error">@Text["Status_Errors"] @ValidationErrorCount</span>
+                            <span data-severity="warning">@Text["Status_Warnings"] @ValidationWarningCount</span>
+                            <span data-severity="info">@Text["Status_Info"] @ValidationInfoCount</span>
+                        </div>
+                    }
+                    <div class="issues-panel-body">
+                        @if (CurrentValidation is null)
+                        {
+                            <p class="issues-empty">@Text["Status_NotValidatedSentence"]</p>
+                        }
+                        else if (CurrentValidation.Issues.IsEmpty)
+                        {
+                            <p class="issues-empty">@Text["Status_NoIssues"]</p>
+                        }
+                        else
+                        {
+                            <ul class="issues-list">
+                                @foreach (var issue in CurrentValidation.Issues)
+                                {
+                                    <li>
+                                        <button type="button"
+                                                class="issue-row"
+                                                data-issue-id="@issue.Id.Value"
+                                                data-issue-code="@issue.Code"
+                                                data-issue-severity="@issue.Severity.ToString().ToLowerInvariant()"
+                                                disabled="@(issue.Target.VisualStateId is null)"
+                                                @onclick="() => SelectValidationIssueAsync(issue.Id)">
+                                            <span class="issue-severity" aria-hidden="true"></span>
+                                            <span class="issue-content">
+                                                <strong>@issue.Code</strong>
+                                                <span>@ModelerDiagnosticLabels.Message(Text, issue.Code, issue.Message)</span>
+                                                <small>@ValidationTargetLabel(issue.Target)</small>
+                                            </span>
+                                        </button>
+                                    </li>
+                                }
+                            </ul>
+                        }
+                    </div>
+                </aside>
+            }
+
+
+    @if (HasOperationFeedback)
+    {
+        <aside id="@DomId("operation-feedback")" class="operation-feedback-panel"
+               aria-label="Document operation messages" @onclick:stopPropagation>
+            <div class="operation-feedback-header">
+                <button type="button" @onclick="DismissOperationFeedback">@Text["Action_Dismiss"]</button>
+            </div>
+            <div class="operation-feedback-body">
+        @if (_standardFeedbackHeading is not null)
+        {
+            <section class="conversion-feedback" data-conversion-succeeded="@(_standardSucceeded ? "true" : "false")" role="status">
+                <h2>@_standardFeedbackHeading</h2>
+                @if (!_standardDiagnostics.IsEmpty)
+                {
+                    <section aria-label="Host operation feedback" data-operation-feedback>
+                        <h3>Operation feedback</h3>
+                        <ul>
+                            @foreach (var diagnostic in _standardDiagnostics)
+                            {
+                                <li data-operation-code="@diagnostic.Code" data-disposition="@diagnostic.Severity"><strong>@diagnostic.Severity</strong>: @diagnostic.Message</li>
+                            }
+                        </ul>
+                    </section>
+                }
+                @if (!_conversionLog.IsEmpty)
+                {
+                    <section aria-label="BPMN conversion losses" data-conversion-losses>
+                        <h3>Conversion losses</h3>
+                        <div class="conversion-counts">
+                            <span data-conversion-disposition="Omitted">Omitted @ConversionCount(BpmnConversionDisposition.Omitted)</span>
+                            <span data-conversion-disposition="Ignored">Ignored @ConversionCount(BpmnConversionDisposition.Ignored)</span>
+                        </div>
+                        <ul>
+                            @foreach (var group in _conversionLog.GroupBy(entry => (entry.Disposition, entry.Code, entry.Message)))
+                            {
+                                var entry = group.First();
+                                <li data-conversion-code="@entry.Code" data-disposition="@entry.Disposition">
+                                    <strong>@entry.Disposition</strong>: @entry.Message
+                                    @if (group.Count() > 1)
+                                    {
+                                        <details class="conversion-loss-details">
+                                            <summary>@group.Count() affected entries</summary>
+                                            <ul>
+                                                @foreach (var affected in group)
+                                                {
+                                                    <li><small>@affected.SourceIdentity @affected.Property
+                                                        @if (affected.TargetIdentity is not null) { <text> → @affected.TargetIdentity</text> }
+                                                    </small></li>
+                                                }
+                                            </ul>
+                                        </details>
+                                    }
+                                    else if (entry.SourceIdentity is not null || entry.Property is not null || entry.TargetIdentity is not null)
+                                    {
+                                        <small>@entry.SourceIdentity @entry.Property
+                                            @if (entry.TargetIdentity is not null) { <text> → @entry.TargetIdentity</text> }
+                                        </small>
+                                    }
+                                </li>
+                            }
+                        </ul>
+                    </section>
+                }
+            </section>
+        }
+        @if (_operations is { } operations)
+        {
+            @foreach (var diagnostic in operations.Diagnostics)
+            {
+                <p class="presentation-error" role="alert" data-validation-diagnostic-code="@diagnostic.Code">
+                    @ModelerDiagnosticLabels.Message(Text, diagnostic.Code, diagnostic.Message)
+                </p>
+            }
+        }
+        @if (_nativeDocumentOperationErrorMessage is not null)
+        {
+            <p id="@DomId("native-document-error")"
+               class="presentation-error native-document-error"
+               role="alert">@Text[_nativeDocumentOperationErrorMessage]</p>
+        }
+        @if (_publishOperationErrorMessage is not null)
+        {
+            <section id="@DomId("publish-error")"
+                     class="presentation-error publish-error"
+                     role="alert"
+                     aria-labelledby="@DomId("publish-error-title")">
+                <div class="publish-error-header">
+                    <h2 id="@DomId("publish-error-title")">@Text[_publishOperationErrorHeading]</h2>
+                </div>
+                <ul>
+                    @foreach (var diagnostic in _publishOperationDiagnostics)
+                    {
+                        <li data-publish-diagnostic-code="@diagnostic.Code">
+                            @if (PublishDiagnosticTarget(diagnostic) is { } target)
+                            {
+                                <strong>@target</strong>
+                            }
+                            <p>@ModelerDiagnosticLabels.Message(Text, diagnostic.Code, diagnostic.Message)</p>
+                            @if (diagnostic.Context.TryGetValue("SuggestedAction", out var hint))
+                            {
+                                <p>@hint</p>
+                            }
+                            <small>@diagnostic.Code</small>
+                        </li>
+                    }
+                </ul>
+            </section>
+        }
+            </div>
+        </aside>
+    }
+    @if (_publicationDialogOpen)
+    {
+        <div class="publication-dialog-backdrop"
+             @onclick="CancelPublicationDialog">
+            <section id="@DomId("publication-dialog")"
+                     class="publication-dialog"
+                     role="dialog"
+                     aria-modal="true"
+                     aria-labelledby="@DomId("publication-title")"
+                     @onclick:stopPropagation>
+                <h2 id="@DomId("publication-title")">@Text["Publication_Title"]</h2>
+                <div class="publication-fields">
+                    <label for="@DomId("publication-code")">@Text["Field_Code"]</label>
+                    <input id="@DomId("publication-code")"
+                           @ref="_publicationCodeInput"
+                           type="text"
+                           autocomplete="off"
+                           spellcheck="false"
+                           aria-describedby="@DomId("publication-code-help")"
+                           aria-invalid="@(!PublicationCodeIsValid)"
+                           @bind="_publicationCodeDraft"
+                           @bind:event="oninput" />
+                    <span id="@DomId("publication-code-help")" class="publication-field-help">
+                        @Text["Publication_CodeHelp"]
+                    </span>
+
+                    <label for="@DomId("publication-title-input")">@Text["Field_Title"]</label>
+                    <input id="@DomId("publication-title-input")"
+                           type="text"
+                           aria-invalid="@(!PublicationTitleIsValid)"
+                           @bind="_publicationTitleDraft"
+                           @bind:event="oninput" />
+
+                    <label for="@DomId("publication-description")">@Text["Field_Description"]</label>
+                    <textarea id="@DomId("publication-description")"
+                              rows="4"
+                              @bind="_publicationDescriptionDraft"
+                              @bind:event="oninput"></textarea>
+                </div>
+                <div class="publication-dialog-actions">
+                    <button id="@DomId("publication-cancel")"
+                            type="button"
+                            disabled="@_publishInProgress"
+                            @onclick="CancelPublicationDialog">@Text["Action_Cancel"]</button>
+                    <button id="@DomId("publication-save")"
+                            type="button"
+                            disabled="@(!CanAcceptPublicationDraft)"
+                            @onclick="SavePublicationDraftAsync">@Text["Action_Save"]</button>
+                    <button id="@DomId("publication-publish")"
+                            class="primary"
+                            type="button"
+                            disabled="@(!CanAcceptPublicationDraft)"
+                            @onclick="PublishPublicationDraftAsync">@Text["Toolbar_Publish"]</button>
+                </div>
+            </section>
+        </div>
+    }
+</div>

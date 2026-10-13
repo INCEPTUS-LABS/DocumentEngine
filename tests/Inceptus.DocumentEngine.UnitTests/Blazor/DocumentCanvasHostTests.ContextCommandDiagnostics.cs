@@ -84,7 +84,11 @@ public sealed partial class DocumentCanvasHostTests
         Assert.Contains(diagnostic.Message, markup, StringComparison.Ordinal);
         Assert.Contains("data-interaction-diagnostic-code=\"CMD_REVISION_PREPARATION_FAILURE\"",
             markup, StringComparison.Ordinal);
-        Assert.Equal(1, markup.Split(diagnostic.Message, StringSplitOptions.None).Length - 1);
+        var alert = Assert.Single(System.Text.RegularExpressions.Regex.Matches(
+            markup, "<p[^>]*role=\"alert\"[^>]*>(.*?)</p>",
+            System.Text.RegularExpressions.RegexOptions.Singleline | System.Text.RegularExpressions.RegexOptions.CultureInvariant));
+        Assert.Equal(diagnostic.Message, alert.Groups[1].Value);
+        Assert.Contains($"title=\"{diagnostic.Message}\"", alert.Value, StringComparison.Ordinal);
         Assert.Same(before, host.CaptureDocumentSnapshot().Snapshot);
         Assert.Equal(snapshot.SemanticModel, before.SemanticModel);
         Assert.Equal(snapshot.VisualModel.VisualStates.AsEnumerable(), before.VisualModel.VisualStates.AsEnumerable());
@@ -96,7 +100,7 @@ public sealed partial class DocumentCanvasHostTests
         Assert.Empty(log.OfType<BpmnModelerOperationFailedEventArgs>());
         Assert.Single(log.OfType<BpmnModelerReadyEventArgs>());
         Assert.Empty(host.CaptureState().HostDiagnostics);
-        Assert.Null(host.CaptureState().ValidationSnapshot);
+        Assert.Null(host.Operations().ValidationSnapshot);
         Assert.Null(host.CaptureState().ContextMenu);
 
         // The consumed menu is a legitimate no-op and cannot duplicate feedback.

@@ -27,7 +27,7 @@ public sealed partial class DocumentCanvasHostTests
         execution.BlockMeasureText = true;
         var command = session.ExecuteAsync(new UpdateSemanticElementNameCommand(document.DocumentId,
             document.Revision, task.Id, BpmnSemanticProperties.Name, "Name awaiting accepted browser text preparation")).AsTask();
-        Task<NativeDocumentHostExportResult> saving;
+        Task<BpmnModelerFileResult> saving;
         try
         {
             await execution.TextMeasurementStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
@@ -66,7 +66,7 @@ public sealed partial class DocumentCanvasHostTests
         var savedBefore = host.CaptureNativeSaveStatus();
         var gate = Assert.IsType<SemaphoreSlim>(typeof(EditingSession)
             .GetField("_commandGate", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(session));
-        Task<NativeDocumentHostExportResult> waiting;
+        Task<BpmnModelerFileResult> waiting;
         await gate.WaitAsync();
         try
         {
@@ -75,7 +75,7 @@ public sealed partial class DocumentCanvasHostTests
             var cancelled = host.ExportNativeDocumentAsync(cancellation.Token).AsTask();
             Assert.False(cancelled.IsCompleted);
             cancellation.Cancel();
-            Assert.Equal(NativeDocumentHostOperationStatus.Cancelled,
+            Assert.Equal(BpmnModelerOperationStatus.Cancelled,
                 (await cancelled.WaitAsync(TimeSpan.FromSeconds(10))).Status);
             waiting = host.ExportNativeDocumentAsync().AsTask();
             Assert.False(waiting.IsCompleted);
@@ -165,7 +165,7 @@ public sealed partial class DocumentCanvasHostTests
         var incompatible = Encoding.UTF8.GetBytes(root.ToJsonString());
 
         var rejected = await host.ImportNativeDocumentAsync(incompatible);
-        Assert.Equal(NativeDocumentHostOperationStatus.Rejected, rejected.Status);
+        Assert.Equal(BpmnModelerOperationStatus.Rejected, rejected.Status);
         Assert.Contains(rejected.Diagnostics, static diagnostic =>
             diagnostic.Code == "INCEPTUS.ROUTING.SAVED_STATE.INCOMPATIBLE");
         Assert.Same(before, Session(host));
@@ -202,7 +202,7 @@ public sealed partial class DocumentCanvasHostTests
         var rejected = await host.ImportNativeDocumentAsync(Encoding.UTF8.GetBytes(root.ToJsonString()),
             new BpmnModelerNativeImportOptions(reprepareIncompatibleV2: true));
 
-        Assert.Equal(NativeDocumentHostOperationStatus.Rejected, rejected.Status);
+        Assert.Equal(BpmnModelerOperationStatus.Rejected, rejected.Status);
         Assert.Contains(rejected.Diagnostics, diagnostic => diagnostic.Code ==
             (legacy ? "NATIVE_DOCUMENT_VERSION_UNSUPPORTED" : "NATIVE_DOCUMENT_STRUCTURE_INVALID"));
         Assert.Equal(0, replacements);

@@ -67,7 +67,7 @@ public sealed partial class PhaseN101OrganizationalPoolIntegrationTests
             Assert.Same(original.ProjectedGraph, current.ProjectedGraph);
             Assert.Same(original.LayoutResult, current.LayoutResult);
             Assert.Same(original.RoutingResult, current.RoutingResult);
-            Assert.Same(validation, fixture.Harness.Host.CaptureState().ValidationSnapshot);
+            Assert.Same(validation, fixture.Harness.Host.Operations().ValidationSnapshot);
             Assert.NotNull(current.CurrentScene!.SpatialPresentationPlan);
             AssertSpatialGeometryUnchanged(plan!, current.CurrentScene.SpatialPresentationPlan!);
             Assert.Equal(visible, !current.CurrentScene.SpatialPresentationPlan!.ResizeTargets.IsEmpty);

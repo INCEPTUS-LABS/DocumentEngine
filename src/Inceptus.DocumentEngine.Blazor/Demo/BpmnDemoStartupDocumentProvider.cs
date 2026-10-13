@@ -1,3 +1,4 @@
+using Inceptus.Bpmn.Integration;
 using Inceptus.DocumentEngine.Bpmn.Blazor;
 using Inceptus.DocumentEngine.Runtime.Documents;
 
@@ -28,8 +29,12 @@ internal sealed class BpmnDemoStartupDocumentProvider : IBpmnModelerStartupDocum
         using var payload = new MemoryStream();
         await resource.CopyToAsync(payload, cancellationToken).ConfigureAwait(false);
 
-        var import = NativeDocumentSerializer.Import(payload.ToArray());
-        return import.Document ?? throw new InvalidOperationException(
+        var read = BpmnDocumentSerializer.Deserialize(payload.ToArray());
+        if (!read.Succeeded) throw new InvalidOperationException("The embedded BPMN demo Document could not be read.");
+        var migrated = BpmnDocumentMigrator.Migrate(read.Document!, read.NativeVersion!.Value);
+        if (!migrated.Succeeded || !new BpmnDocumentValidator().Validate(migrated.Document!).IsStructurallyValid)
+            throw new InvalidOperationException("The embedded BPMN demo Document is incompatible.");
+        return DocumentReconstructor.Reconstruct(migrated.Document!).Document ?? throw new InvalidOperationException(
             "The embedded BPMN demo Document could not be reconstructed.");
     }
 }

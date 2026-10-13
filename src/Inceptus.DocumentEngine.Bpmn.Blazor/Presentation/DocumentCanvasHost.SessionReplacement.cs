@@ -21,7 +21,7 @@ internal sealed partial class DocumentCanvasHost
         Document candidateDocument,
         DocumentSessionReplacementMessages messages,
         CancellationToken cancellationToken,
-        BpmnModelerNativeImportOptions? nativeOptions = null)
+        BpmnModelerDocumentLoadOptions? nativeOptions = null)
     {
         ArgumentNullException.ThrowIfNull(candidateDocument);
         ArgumentNullException.ThrowIfNull(messages);
@@ -101,14 +101,14 @@ internal sealed partial class DocumentCanvasHost
                 return FailDocumentReplacement(messages, messages.CanvasInitializationMessage);
             }
 
-            if (nativeOptions is not null)
+            if (nativeOptions?.VerifySavedRouting == true)
             {
                 var preparer = new ConnectorRoutingStatePreparer(sourceConfiguration, candidateRenderer);
                 var candidateSnapshot = candidateDocument.CaptureSnapshot();
                 var prepared = await preparer.PrepareAsync(new ConnectorRoutingStatePreparationRequest(
                     candidateSnapshot, candidateSnapshot, [], [], null, false,
                     ConnectorRoutingPreparationPurpose.ValidateSavedState), cancellationToken).ConfigureAwait(false);
-                if (!prepared.Succeeded && nativeOptions.ReprepareIncompatibleV2 &&
+                if (!prepared.Succeeded && nativeOptions.ReprepareIncompatibleRouting &&
                     prepared.Diagnostics.Any(static diagnostic => diagnostic.Code == "INCEPTUS.ROUTING.SAVED_STATE.INCOMPATIBLE"))
                 {
                     prepared = await preparer.PrepareAsync(new ConnectorRoutingStatePreparationRequest(
@@ -233,8 +233,6 @@ internal sealed partial class DocumentCanvasHost
                 _observedActiveGestureCaptureGeneration = 0;
                 _observedDocumentRevision = candidateState.DocumentRevision;
                 _cssCursor = "default";
-                _validationSnapshot = null;
-                _validationInFlight = false;
                 _hostDiagnostics = [];
                 _ = ReplaceInteractionDiagnosticsUnderLock([]);
                 _activePointerInputKind = null;

@@ -17,10 +17,8 @@
 @using Inceptus.DocumentEngine.Contracts.Properties
 @using Inceptus.DocumentEngine.Contracts.Profiles
 @using Inceptus.DocumentEngine.Contracts.Toolbox
-@using Inceptus.DocumentEngine.Contracts.Validation
 @using Inceptus.DocumentEngine.Contracts.Visuals
 @using System.Collections.Immutable
-@using Microsoft.AspNetCore.Components.Forms
 @using Microsoft.AspNetCore.Components.Web
 @using Microsoft.Extensions.DependencyInjection
 @using Microsoft.JSInterop
@@ -42,15 +40,9 @@
              data-history-entry-count="@HistoryEntryCount"
              data-can-undo="@CanUndoValue"
              data-can-redo="@CanRedoValue"
-             data-native-document-operation="@_nativeDocumentOperationStatus"
-             data-native-document-error-code="@(_nativeDocumentOperationErrorCode ?? string.Empty)"
              data-new-diagram-operation="@_newDiagramOperationStatus"
              data-new-diagram-error-code="@(_newDiagramOperationErrorCode ?? string.Empty)"
              data-new-diagram-confirmation="@(_newDiagramConfirmationOpen ? "open" : "closed")"
-             data-publish-operation="@_publishOperationStatus"
-             data-publish-error-code="@(_publishOperationErrorCode ?? string.Empty)"
-             data-publication-dialog="@(_publicationDialogOpen ? "open" : "closed")"
-             data-publication-draft-valid="@(PublicationDraftIsValid ? "true" : "false")"
              data-active-canvas-id="@ActiveCanvasElementId"
              data-viewport-zoom="@ViewportZoom"
              data-viewport-pan-x="@ViewportPanX"
@@ -102,15 +94,6 @@
              data-canvas-css-width="@CssWidth"
              data-canvas-css-height="@CssHeight"
              data-device-pixel-ratio="@DevicePixelRatio"
-             data-validation-state="@ValidationStateValue"
-             data-validation-issue-count="@ValidationIssueCount"
-             data-validation-error-count="@ValidationErrorCount"
-             data-validation-warning-count="@ValidationWarningCount"
-             data-validation-info-count="@ValidationInfoCount"
-             data-can-validate="@CanValidateValue"
-             data-issues-panel-open="@IssuesPanelOpenValue"
-             data-issues-panel-left="@IssuesPanelLeft"
-             data-issues-panel-top="@IssuesPanelTop"
              aria-label="@Text["Accessibility_DocumentPresentation"]">
         <div class="document-editor-layout">
             <ToolboxPanel Catalog="@ToolboxCatalog"
@@ -166,38 +149,6 @@
                         @onclick="OpenNewDiagramConfirmation">
                     <span class="native-document-action-icon" aria-hidden="true">▧</span>
                 </button>
-                <label id="@DomId("import")"
-                       class="native-document-action native-document-import-action"
-                       for="@DomId("import-file")"
-                       aria-disabled="@(!CanUseNativeDocumentTransfer)"
-                       title="@Text["Toolbar_ImportHint"]">
-                    <span class="native-document-action-icon" aria-hidden="true">⇩</span>
-                    <InputFile @key="_nativeDocumentInputKey"
-                               id="@DomId("import-file")"
-                               class="native-document-file-input"
-                               aria-label="@Text["Toolbar_Import"]"
-                               disabled="@(!CanUseNativeDocumentTransfer)"
-                               accept=".inceptus.json,application/json"
-                               OnChange="ImportNativeDocumentAsync" />
-                </label>
-                <button id="@DomId("export")"
-                        class="native-document-action"
-                        type="button"
-                        disabled="@(!CanUseNativeDocumentTransfer)"
-                        aria-label="@Text["Toolbar_Export"]"
-                        title="@Text["Toolbar_Export"]"
-                        @onclick="ExportNativeDocumentAsync">
-                    <span class="native-document-action-icon" aria-hidden="true">⇧</span>
-                </button>
-                <button id="@DomId("publish")"
-                        class="native-document-action publish-action"
-                        type="button"
-                        disabled="@(!CanPublish)"
-                        aria-label="@Text["Toolbar_Publish"]"
-                        title="@Text["Toolbar_Publish"]"
-                        @onclick="OpenPublicationDialog">
-                    <span class="native-document-action-icon" aria-hidden="true">◈</span>
-                </button>
             </div>
             <div class="toolbar-group history-controls" role="group" aria-label="@Text["Accessibility_History"]">
                 <button id="@DomId("undo")"
@@ -236,23 +187,18 @@
                         title="@Text["Toolbar_ZoomIn"]"
                         @onclick="ZoomInAsync">+</button>
             </div>
-            <div class="toolbar-group validation-controls" role="group" aria-label="@Text["Accessibility_ModelValidation"]">
+            <div class="toolbar-group layout-controls" role="group" aria-label="@Text["Toolbar_AutoArrange"]">
                 <button id="@DomId("auto-arrange")"
                         type="button"
                         disabled="@(!CanAutoArrange)"
                         title="@Text["Toolbar_AutoArrange"]"
                         aria-label="@Text["Toolbar_AutoArrange"]"
                         @onclick="AutoArrangeAsync">@Text["Toolbar_AutoArrange"]</button>
-                <button id="@DomId("validate")"
-                        type="button"
-                        disabled="@(!CanValidate)"
-                        title="@Text["Toolbar_ValidateHint"]"
-                        @onclick="ValidateAsync">@Text["Toolbar_Validate"]</button>
             </div>
         </div>
 
         <div id="@ContainerElementId" class="document-canvas-surface">
-            <ElementToolbox @key="_state?.SmartEditEnabled" State="@(_newDiagramConfirmationOpen || _publicationDialogOpen ? null : _state?.ElementToolbox)"
+            <ElementToolbox @key="_state?.SmartEditEnabled" State="@(_newDiagramConfirmationOpen ? null : _state?.ElementToolbox)"
                             Properties="OpenElementToolboxPropertiesAsync" AutoPoints="AutoPointsAsync"
                             Delete="DeleteToolboxElementAsync" Create="SmartCreateAsync" Dismiss="DismissElementToolbox" />
             <canvas id="@CanvasElementId"
@@ -641,158 +587,24 @@
                 </form>
             }
 
-            @if (_issuesPanel.IsOpen)
-            {
-                <aside id="@DomId("issues-panel")"
-                       class="issues-floating-panel"
-                       aria-label="@Text["Accessibility_ValidationIssues"]"
-                       aria-live="polite"
-                       style="@IssuesPanelStyle"
-                       @onclick:stopPropagation
-                       @onpointerdown:stopPropagation
-                       @onpointermove:stopPropagation
-                       @onpointerup:stopPropagation
-                       @onpointercancel:stopPropagation
-                       @onwheel:stopPropagation
-                       @oncontextmenu:preventDefault
-                       @oncontextmenu:stopPropagation
-                       @onauxclick:preventDefault
-                       @onauxclick:stopPropagation>
-                    <header id="@DomId("issues-panel-header")"
-                            class="issues-panel-header"
-                            @onpointerdown="StartIssuesPanelMove"
-                            @onpointerdown:preventDefault
-                            @onpointermove="MoveIssuesPanel"
-                            @onpointerup="EndIssuesPanelMove"
-                            @onpointercancel="EndIssuesPanelMove"
-                            @onlostpointercapture="CancelIssuesPanelMove">
-                        <h2>@Text["Status_Issues"]</h2>
-                    </header>
-                    <button id="@DomId("issues-close")"
-                            class="issues-close"
-                            type="button"
-                            aria-label="@Text["Status_CloseIssues"]"
-                            title="@Text["Status_CloseIssues"]"
-                            @onclick="CloseIssuesPanel">×</button>
-                    <div class="issues-panel-summary issues-counts"
-                         aria-label="@Text["Accessibility_IssueCounts"]">
-                        <span data-severity="error">@Text["Status_Errors"] @ValidationErrorCount</span>
-                        <span data-severity="warning">@Text["Status_Warnings"] @ValidationWarningCount</span>
-                        <span data-severity="info">@Text["Status_Info"] @ValidationInfoCount</span>
-                    </div>
-                    <div class="issues-panel-body">
-                        @if (CurrentValidation is null)
-                        {
-                            <p class="issues-empty">@Text["Status_NotValidatedSentence"]</p>
-                        }
-                        else if (CurrentValidation.Issues.IsEmpty)
-                        {
-                            <p class="issues-empty">@Text["Status_NoIssues"]</p>
-                        }
-                        else
-                        {
-                            <ul class="issues-list">
-                                @foreach (var issue in CurrentValidation.Issues)
-                                {
-                                    <li>
-                                        <button type="button"
-                                                class="issue-row"
-                                                data-issue-id="@issue.Id.Value"
-                                                data-issue-code="@issue.Code"
-                                                data-issue-severity="@issue.Severity.ToString().ToLowerInvariant()"
-                                                disabled="@(issue.Target.VisualStateId is null)"
-                                                @onclick="() => SelectValidationIssueAsync(issue.Id)">
-                                            <span class="issue-severity" aria-hidden="true"></span>
-                                            <span class="issue-content">
-                                                <strong>@issue.Code</strong>
-                                                <span>@ModelerDiagnosticLabels.Message(Text, issue.Code, issue.Message)</span>
-                                                <small>@ValidationTargetLabel(issue.Target)</small>
-                                            </span>
-                                        </button>
-                                    </li>
-                                }
-                            </ul>
-                        }
-                    </div>
-                </aside>
-            }
         </div>
 
         <footer id="@DomId("editor-status")" class="editor-status-row">
-            <button id="@DomId("issues-toggle")"
-                    class="issues-toggle"
-                    type="button"
-                    aria-controls="@DomId("issues-panel")"
-                    aria-expanded="@IssuesPanelOpenValue"
-                    @onclick="ToggleIssuesPanel">
-                <span>@Text["Status_Issues"]</span>
-                <span class="issues-disclosure" aria-hidden="true">@IssuesDisclosure</span>
-            </button>
             <div class="canvas-presentation-status" role="status" aria-live="polite">
                 <span class="status-indicator" aria-hidden="true"></span>
-                <span>@StatusMessage</span>
+                <span title="@StatusMessage">@StatusMessage</span>
             </div>
-            @if (CurrentValidation is null)
-            {
-                <span class="validation-currency">@Text["Status_NotValidated"]</span>
-            }
-            <div class="issues-counts status-issue-counts"
-                 aria-label="@Text["Accessibility_IssueCounts"]">
-                <span data-severity="error">@Text["Status_Errors"] @ValidationErrorCount</span>
-                <span data-severity="warning">@Text["Status_Warnings"] @ValidationWarningCount</span>
-                <span data-severity="info">@Text["Status_Info"] @ValidationInfoCount</span>
-            </div>
-        </footer>
-
-        <div class="canvas-diagnostics">
             @if (ErrorMessage is not null)
             {
-                <p class="presentation-error" role="alert">@ErrorMessage</p>
+                <p class="presentation-error" role="alert" tabindex="0" title="@ErrorMessage">@ErrorMessage</p>
             }
-        </div>
-        @if (_nativeDocumentOperationErrorMessage is not null)
-        {
-            <p id="@DomId("native-document-error")"
-               class="presentation-error native-document-error"
-               role="alert">@Text[_nativeDocumentOperationErrorMessage]</p>
-        }
-        @if (_newDiagramOperationErrorMessage is not null)
-        {
-            <p id="@DomId("new-diagram-error")"
-               class="presentation-error new-diagram-error"
-               role="alert">@Text[_newDiagramOperationErrorMessage]</p>
-        }
-        @if (_publishOperationErrorMessage is not null)
-        {
-            <section id="@DomId("publish-error")"
-                     class="presentation-error publish-error"
-                     role="alert"
-                     aria-labelledby="@DomId("publish-error-title")">
-                <div class="publish-error-header">
-                    <h2 id="@DomId("publish-error-title")">@Text[_publishOperationErrorHeading]</h2>
-                    <button type="button"
-                            aria-label="@Text["Publication_DismissFeedback"]"
-                            @onclick="DismissPublishOperationError">@Text["Action_Dismiss"]</button>
-                </div>
-                <ul>
-                    @foreach (var diagnostic in _publishOperationDiagnostics)
-                    {
-                        <li data-publish-diagnostic-code="@diagnostic.Code">
-                            @if (PublishDiagnosticTarget(diagnostic) is { } target)
-                            {
-                                <strong>@target</strong>
-                            }
-                            <p>@ModelerDiagnosticLabels.Message(Text, diagnostic.Code, diagnostic.Message)</p>
-                            @if (diagnostic.Context.TryGetValue("SuggestedAction", out var hint))
-                            {
-                                <p>@hint</p>
-                            }
-                            <small>@diagnostic.Code</small>
-                        </li>
-                    }
-                </ul>
-            </section>
-        }
+            @if (_newDiagramOperationErrorMessage is not null)
+            {
+                <p id="@DomId("new-diagram-error")"
+                   class="presentation-error new-diagram-error"
+                   role="alert" tabindex="0" title="@Text[_newDiagramOperationErrorMessage]">@Text[_newDiagramOperationErrorMessage]</p>
+            }
+        </footer>
             </div>
         </div>
     </section>
@@ -827,63 +639,6 @@
             </section>
         </div>
     }
-    @if (_publicationDialogOpen)
-    {
-        <div class="publication-dialog-backdrop"
-             @onclick="CancelPublicationDialog">
-            <section id="@DomId("publication-dialog")"
-                     class="publication-dialog"
-                     role="dialog"
-                     aria-modal="true"
-                     aria-labelledby="@DomId("publication-title")"
-                     @onclick:stopPropagation>
-                <h2 id="@DomId("publication-title")">@Text["Publication_Title"]</h2>
-                <div class="publication-fields">
-                    <label for="@DomId("publication-code")">@Text["Field_Code"]</label>
-                    <input id="@DomId("publication-code")"
-                           @ref="_publicationCodeInput"
-                           type="text"
-                           autocomplete="off"
-                           spellcheck="false"
-                           aria-describedby="@DomId("publication-code-help")"
-                           aria-invalid="@(!PublicationCodeIsValid)"
-                           @bind="_publicationCodeDraft"
-                           @bind:event="oninput" />
-                    <span id="@DomId("publication-code-help")" class="publication-field-help">
-                        @Text["Publication_CodeHelp"]
-                    </span>
-
-                    <label for="@DomId("publication-title-input")">@Text["Field_Title"]</label>
-                    <input id="@DomId("publication-title-input")"
-                           type="text"
-                           aria-invalid="@(!PublicationTitleIsValid)"
-                           @bind="_publicationTitleDraft"
-                           @bind:event="oninput" />
-
-                    <label for="@DomId("publication-description")">@Text["Field_Description"]</label>
-                    <textarea id="@DomId("publication-description")"
-                              rows="4"
-                              @bind="_publicationDescriptionDraft"
-                              @bind:event="oninput"></textarea>
-                </div>
-                <div class="publication-dialog-actions">
-                    <button id="@DomId("publication-cancel")"
-                            type="button"
-                            disabled="@_publishInProgress"
-                            @onclick="CancelPublicationDialog">@Text["Action_Cancel"]</button>
-                    <button id="@DomId("publication-save")"
-                            type="button"
-                            disabled="@(!CanAcceptPublicationDraft)"
-                            @onclick="SavePublicationDraftAsync">@Text["Action_Save"]</button>
-                    <button id="@DomId("publication-publish")"
-                            class="primary"
-                            type="button"
-                            disabled="@(!CanAcceptPublicationDraft)"
-                            @onclick="PublishPublicationDraftAsync">@Text["Toolbar_Publish"]</button>
-                </div>
-            </section>
-        </div>
-    }
 </main>
 
 @code {
@@ -906,18 +661,8 @@
     private string StandbyCanvasElementId => DomId("document-canvas-standby");
     private string ContainerElementId => DomId("document-canvas-container");
     private string DomId(string suffix) => $"{_domIdPrefix}-{suffix}";
-    internal const string NativeDocumentContentType = "application/json";
-    internal const string NativeDocumentFileName = "document.inceptus.json";
-    internal const string PublishContentType = "application/zip";
-    internal const string PublishFileName = "published-process.zip";
-    internal const long MaximumNativeDocumentFileSize = 16L * 1024L * 1024L;
-    internal const string NativeDocumentFileTooLargeCode =
-        "CANVAS_NATIVE_DOCUMENT_FILE_TOO_LARGE";
-    internal const string NativeDocumentFileTooLargeMessage =
-        "Error_FileTooLarge";
     private readonly CancellationTokenSource _componentLifetime = new();
     private readonly ToolboxSelectionState _toolboxSelection = new();
-    private readonly FloatingIssuesPanelState _issuesPanel = new();
     private DocumentCanvasHost? _host;
     private DocumentCanvasHostState? _state;
 
@@ -929,19 +674,11 @@
     }
     private DocumentCanvasPropertiesDraft? _propertiesDraft;
     private DocumentCanvasModelViewPropertiesDraft? _modelViewPropertiesDraft;
-    private IJSObjectReference? _issuesPanelModule;
-    private IJSObjectReference? _issuesPanelPointerCapture;
     private bool _propertiesApplying;
     private string _propertiesApplyStatus = "idle";
     private bool _modelViewPropertiesApplying;
     private string _modelViewPropertiesApplyStatus = "idle";
     private bool _disposed;
-    private bool _nativeDocumentImportInProgress;
-    private bool _nativeDocumentExportInProgress;
-    private int _nativeDocumentInputKey;
-    private string _nativeDocumentOperationStatus = "idle";
-    private string? _nativeDocumentOperationErrorCode;
-    private string? _nativeDocumentOperationErrorMessage;
     private bool _newDiagramConfirmationOpen;
     private bool _newDiagramConfirmationFocusPending;
     private bool _newDiagramInProgress;
@@ -949,23 +686,6 @@
     private string _newDiagramOperationStatus = "idle";
     private string? _newDiagramOperationErrorCode;
     private string? _newDiagramOperationErrorMessage;
-    private bool _publishInProgress;
-    private string _publishOperationStatus = "idle";
-    private string? _publishOperationErrorCode;
-    private string? _publishOperationErrorMessage;
-    private string _publishOperationErrorHeading = "Publication_PublishFailed";
-    private ImmutableArray<Diagnostic> _publishOperationDiagnostics = [];
-    private long? _publishOperationSessionVersion;
-    private CancellationTokenSource? _publishOperationCancellation;
-    private bool _publicationDialogOpen;
-    private bool _publicationDialogFocusPending;
-    private long _publicationSourceSessionVersion;
-    private DocumentId? _publicationSourceDocumentId;
-    private DocumentRevision? _publicationSourceRevision;
-    private string _publicationCodeDraft = string.Empty;
-    private string _publicationTitleDraft = string.Empty;
-    private string _publicationDescriptionDraft = string.Empty;
-    private ElementReference _publicationCodeInput;
     private readonly object _lifecycleSync = new();
 
     private string ActiveCanvasElementId =>
@@ -1026,7 +746,7 @@
             IsClosed: false,
             Status: EditingSessionStatus.Ready,
             EditorState.ActiveGesture: null,
-        } && !_publicationDialogOpen &&
+        } &&
         _propertiesDraft is null && _modelViewPropertiesDraft is null &&
         _state?.PropertiesFormOpen != true &&
         _state?.ModelViewPropertiesFormOpen != true;
@@ -1039,7 +759,6 @@
         _state?.Session is { IsClosed: false } session &&
         session.EditorState.ActiveGesture is null &&
         session.Status is EditingSessionStatus.Ready or EditingSessionStatus.RuntimeFaulted &&
-        !_publicationDialogOpen &&
         !AnyPropertiesDirty &&
         !AnyPropertiesApplying &&
         session.HistoryStatus.CanUndo;
@@ -1048,7 +767,6 @@
         _state?.Session is { IsClosed: false } session &&
         session.EditorState.ActiveGesture is null &&
         session.Status is EditingSessionStatus.Ready or EditingSessionStatus.RuntimeFaulted &&
-        !_publicationDialogOpen &&
         !AnyPropertiesDirty &&
         !AnyPropertiesApplying &&
         session.HistoryStatus.CanRedo;
@@ -1057,13 +775,9 @@
 
     private string CanRedoValue => CanRedo ? "true" : "false";
 
-    private bool CanUseNativeDocumentTransfer =>
-        !_nativeDocumentImportInProgress &&
-        !_nativeDocumentExportInProgress &&
+    private bool CanUseDocumentReplacement =>
         !_newDiagramInProgress &&
         !_newDiagramConfirmationOpen &&
-        !_publicationDialogOpen &&
-        !_publishInProgress &&
         _state is
         {
             IsInitialized: true,
@@ -1078,25 +792,7 @@
         _state.PropertiesFormOpen == false &&
         _state.ModelViewPropertiesFormOpen == false;
 
-    private bool CanPublish => CanUseNativeDocumentTransfer;
-
-    private bool PublicationCodeIsValid =>
-        DocumentPublicationSnapshot.IsValidCode(_publicationCodeDraft);
-
-    private bool PublicationTitleIsValid =>
-        !string.IsNullOrWhiteSpace(_publicationTitleDraft);
-
-    private bool PublicationDraftIsValid =>
-        DocumentPublicationSnapshot.TryCreate(
-            _publicationCodeDraft,
-            _publicationTitleDraft,
-            _publicationDescriptionDraft,
-            out _);
-
-    private bool CanAcceptPublicationDraft =>
-        _publicationDialogOpen && !_publishInProgress && PublicationDraftIsValid;
-
-    private bool CanCreateNewDiagram => CanUseNativeDocumentTransfer;
+    private bool CanCreateNewDiagram => CanUseDocumentReplacement;
 
     private bool CanUseZoom =>
         _state is
@@ -1111,7 +807,7 @@
                 CurrentScene: not null,
                 EditorState.ActiveGesture: null,
             },
-        } && !_publicationDialogOpen &&
+        } &&
         _propertiesDraft is null && _modelViewPropertiesDraft is null &&
         _state?.PropertiesFormOpen != true &&
         _state?.ModelViewPropertiesFormOpen != true;
@@ -1323,63 +1019,6 @@
     private string DevicePixelRatio => Format(
         _state?.SurfaceSize?.DevicePixelRatio);
 
-    private ValidationSnapshot? CurrentValidation =>
-        _state is { ValidationSnapshot: { } validation, Session: { } session } &&
-        validation.DocumentId == session.DocumentId &&
-        validation.SourceRevision == session.DocumentRevision &&
-        validation.PresentationContext == session.PresentationContext
-            ? validation
-            : null;
-
-    private bool CanValidate =>
-        _state is
-        {
-            IsInitialized: true,
-            IsDisposed: false,
-            ValidationInFlight: false,
-            Session:
-            {
-                IsClosed: false,
-                Status: EditingSessionStatus.Ready,
-                CurrentScene: not null,
-                ProjectedGraph: not null,
-                LayoutResult: not null,
-                RoutingResult: not null,
-                EditorState.ActiveGesture: null,
-            },
-        } && _propertiesDraft is null && _modelViewPropertiesDraft is null &&
-        _state?.PropertiesFormOpen != true &&
-        _state?.ModelViewPropertiesFormOpen != true;
-
-    private string CanValidateValue => CanValidate ? "true" : "false";
-
-    private string ValidationStateValue => CurrentValidation is null
-        ? "not-validated"
-        : "current";
-
-    private int ValidationIssueCount => CurrentValidation?.Issues.Length ?? 0;
-
-    private int ValidationErrorCount => CurrentValidation?.ErrorCount ?? 0;
-
-    private int ValidationWarningCount => CurrentValidation?.WarningCount ?? 0;
-
-    private int ValidationInfoCount => CurrentValidation?.InfoCount ?? 0;
-
-    private string IssuesPanelOpenValue => _issuesPanel.IsOpen ? "true" : "false";
-
-    private string IssuesPanelLeft => Format(_issuesPanel.Left);
-
-    private string IssuesPanelTop => Format(_issuesPanel.Top);
-
-    private string IssuesDisclosure => _issuesPanel.IsOpen ? "▾" : "▸";
-
-    private string IssuesPanelStyle => string.Join(
-        " ",
-        $"left: {Format(_issuesPanel.Left)}px;",
-        $"top: {Format(_issuesPanel.Top)}px;",
-        $"width: {Format(_issuesPanel.Width)}px;",
-        $"height: {Format(_issuesPanel.Height)}px;");
-
     private string? ConnectionGuidance
     {
         get
@@ -1466,14 +1105,12 @@
                     _state = host.CaptureState();
                 }
 
-                SynchronizeIssuesPanelSurface();
                 StateHasChanged();
             });
         }
 
-        await SynchronizeIssuesPanelPointerCaptureAsync();
         await FocusNewDiagramConfirmationAsync();
-        await FocusPublicationDialogAsync();
+
     }
 
     public async ValueTask DisposeAsync()
@@ -1492,8 +1129,7 @@
             _modelViewPropertiesDraft = null;
             _newDiagramConfirmationOpen = false;
             _newDiagramConfirmationFocusPending = false;
-            DiscardPublicationDialogDraft();
-            _issuesPanel.CancelMove();
+
             host = _host;
             _host = null;
             if (host is not null)
@@ -1505,19 +1141,6 @@
         if (host is not null)
         {
             await host.DisposeAsync();
-        }
-
-        if (_issuesPanelPointerCapture is { } issuesPanelPointerCapture)
-        {
-            await issuesPanelPointerCapture.InvokeVoidAsync("dispose");
-            await issuesPanelPointerCapture.DisposeAsync();
-            _issuesPanelPointerCapture = null;
-        }
-
-        if (_issuesPanelModule is { } issuesPanelModule)
-        {
-            await issuesPanelModule.DisposeAsync();
-            _issuesPanelModule = null;
         }
 
         _componentLifetime.Dispose();
@@ -1535,11 +1158,9 @@
             _state = _host.CaptureState();
         }
 
-        SynchronizeIssuesPanelSurface();
         ReconcilePropertiesForm();
         ReconcileModelViewPropertiesForm();
-        ReconcilePublicationDialog();
-        ReconcilePublishOperation();
+
 
         // Captures and reconciliation remain unconditional. A delayed callback must not
         // suppress a newer generation, completion, failure, or a local editor operation.
@@ -1547,10 +1168,8 @@
             _state?.Session is not { IsPanPresentationPending: true } session ||
             session.Generation != generation ||
             _propertiesDraft is not null || _modelViewPropertiesDraft is not null ||
-            _issuesPanel.IsOpen || _toolboxSelection.SelectedItemId is not null ||
-            _publicationDialogOpen || _publishInProgress ||
-            _newDiagramConfirmationOpen || _newDiagramInProgress ||
-            _nativeDocumentImportInProgress || _nativeDocumentExportInProgress)
+            _toolboxSelection.SelectedItemId is not null ||
+            _newDiagramConfirmationOpen || _newDiagramInProgress)
         {
             StateHasChanged();
         }
@@ -1644,12 +1263,7 @@
                 _propertiesApplyStatus = "idle";
                 _modelViewPropertiesApplying = false;
                 _modelViewPropertiesApplyStatus = "idle";
-                _issuesPanel.Close();
-                _nativeDocumentInputKey++;
-                ClearNativeDocumentOperationError();
-                _nativeDocumentOperationStatus = "idle";
-                ClearPublishOperationError();
-                _publishOperationStatus = "idle";
+
                 ClearNewDiagramOperationError();
                 _newDiagramOperationStatus = "idle";
             }
@@ -1659,7 +1273,7 @@
             // Component disposal cancels replacement without surfacing a stale message.
         }
 #pragma warning disable CA1031 // Browser host failures become bounded operation messages.
-        catch (Exception exception) when (IsNonFatalNativeDocumentException(exception))
+        catch (Exception exception) when (IsNonFatalEditorException(exception))
         {
             CompleteNewDiagramOperation(
                 "CANVAS_NEW_DIAGRAM_FAILED",
@@ -1718,612 +1332,15 @@
         {
             await _newDiagramCancelButton.FocusAsync(preventScroll: true);
         }
-        catch (Exception exception) when (IsNonFatalNativeDocumentException(exception))
+        catch (Exception exception) when (IsNonFatalEditorException(exception))
         {
             // The native dialog controls remain keyboard-operable even if focus transfer fails.
         }
 #pragma warning restore CA1031
     }
 
-    private async Task ExportNativeDocumentAsync()
-    {
-        DocumentCanvasHost? host;
-        lock (_lifecycleSync)
-        {
-            if (_disposed || !CanUseNativeDocumentTransfer)
-            {
-                return;
-            }
-
-            host = _host;
-            _nativeDocumentExportInProgress = true;
-            ClearNativeDocumentOperationError();
-            _nativeDocumentOperationStatus = "exporting";
-        }
-
-        try
-        {
-            if (host is null)
-            {
-                CompleteNativeDocumentOperation(
-                    "CANVAS_NATIVE_DOCUMENT_EXPORT_UNAVAILABLE",
-                    "Error_ExportUnavailable");
-                return;
-            }
-
-            await InvokeAsync(StateHasChanged);
-            var export = await host.ExportNativeDocumentAsync(_componentLifetime.Token);
-            if (export.Status == NativeDocumentHostOperationStatus.Cancelled)
-            {
-                return;
-            }
-            if (!export.Succeeded)
-            {
-                var diagnostic = export.Diagnostics.FirstOrDefault();
-                CompleteNativeDocumentOperation(
-                    diagnostic?.Code ?? "CANVAS_NATIVE_DOCUMENT_EXPORT_FAILED",
-                    "Error_ExportFailed");
-                return;
-            }
-
-            await BrowserFileDownload.DownloadAsync(
-                JavaScript,
-                export.Payload.AsMemory(),
-                NativeDocumentContentType,
-                NativeDocumentFileName,
-                _componentLifetime.Token);
-            // Browser handoff succeeded; the browser does not expose the eventual disk-write outcome.
-            if (export.SaveCheckpoint is { } checkpoint)
-            {
-                host.AcknowledgeNativeSave(checkpoint);
-            }
-            lock (_lifecycleSync)
-            {
-                if (!_disposed)
-                {
-                    _state = host.CaptureState();
-                    _nativeDocumentOperationStatus = "idle";
-                }
-            }
-        }
-        catch (OperationCanceledException) when (_componentLifetime.IsCancellationRequested)
-        {
-            // Component disposal cancels the browser operation without surfacing a stale error.
-        }
-#pragma warning disable CA1031 // Browser failures become bounded user-facing operation messages.
-        catch (Exception exception) when (IsNonFatalNativeDocumentException(exception))
-        {
-            CompleteNativeDocumentOperation(
-                "CANVAS_NATIVE_DOCUMENT_DOWNLOAD_FAILED",
-                "Error_DownloadFailed");
-        }
-#pragma warning restore CA1031
-        finally
-        {
-            lock (_lifecycleSync)
-            {
-                _nativeDocumentExportInProgress = false;
-                if (!_disposed && _nativeDocumentOperationStatus == "exporting")
-                {
-                    _nativeDocumentOperationStatus = "idle";
-                }
-            }
-        }
-    }
-
-    private void OpenPublicationDialog()
-    {
-        lock (_lifecycleSync)
-        {
-            if (_disposed || !CanPublish || _state?.Session is not { } session)
-            {
-                return;
-            }
-
-            InitializePublicationDialogDraft(_state, session);
-        }
-    }
-
-    private void InitializePublicationDialogDraft(
-        DocumentCanvasHostState state,
-        EditingSessionState session)
-    {
-        var publication = state.Publication;
-        _publicationSourceSessionVersion = state.DocumentSessionVersion;
-        _publicationSourceDocumentId = session.DocumentId;
-        _publicationSourceRevision = session.DocumentRevision;
-        _publicationCodeDraft = publication?.Code ?? string.Empty;
-        _publicationTitleDraft = publication?.Title ?? string.Empty;
-        _publicationDescriptionDraft = publication?.Description ?? string.Empty;
-        _publicationDialogOpen = true;
-        _publicationDialogFocusPending = true;
-        _publishOperationStatus = _publishOperationDiagnostics.IsEmpty ? "editing" : "failed";
-    }
-
-    private void CancelPublicationDialog()
-    {
-        lock (_lifecycleSync)
-        {
-            if (_disposed || !_publicationDialogOpen || _publishInProgress)
-            {
-                return;
-            }
-
-            DiscardPublicationDialogDraft();
-            _publishOperationStatus = _publishOperationDiagnostics.IsEmpty ? "idle" : "failed";
-        }
-    }
-
-    private Task SavePublicationDraftAsync() =>
-        ExecutePublicationDialogActionAsync(publish: false);
-
-    private Task PublishPublicationDraftAsync() =>
-        ExecutePublicationDialogActionAsync(publish: true);
-
-    private async Task ExecutePublicationDialogActionAsync(bool publish)
-    {
-        DocumentCanvasHost? host;
-        long sourceSessionVersion;
-        DocumentId sourceDocumentId;
-        DocumentRevision sourceRevision;
-        DocumentPublicationSnapshot publication;
-        CancellationTokenSource operation;
-        lock (_lifecycleSync)
-        {
-            if (_disposed || !CanAcceptPublicationDraft ||
-                _publicationSourceDocumentId is not { } documentId ||
-                _publicationSourceRevision is not { } revision ||
-                !DocumentPublicationSnapshot.TryCreate(
-                    _publicationCodeDraft,
-                    _publicationTitleDraft,
-                    _publicationDescriptionDraft,
-                    out var normalizedPublication))
-            {
-                return;
-            }
-
-            host = _host;
-            publication = normalizedPublication;
-            sourceSessionVersion = _publicationSourceSessionVersion;
-            sourceDocumentId = documentId;
-            sourceRevision = revision;
-            DiscardPublicationDialogDraft();
-            operation = CancellationTokenSource.CreateLinkedTokenSource(_componentLifetime.Token);
-            _publishOperationCancellation = operation;
-            _publishOperationSessionVersion = sourceSessionVersion;
-            _publishInProgress = true;
-            _publishOperationStatus = publish ? "publishing" : "saving";
-        }
-
-        using var operationLifetime = operation;
-        var downloading = false;
-        try
-        {
-            if (host is null)
-            {
-                CompletePublishOperation(
-                    host, sourceSessionVersion, operation, publish,
-                    [new Diagnostic("CANVAS_PUBLICATION_UNAVAILABLE", DiagnosticSeverity.Error,
-                        "Publication is unavailable while the editor is not ready.")]);
-                return;
-            }
-
-            await InvokeAsync(StateHasChanged);
-            var result = publish
-                ? await host.PublishPublicationAsync(
-                    sourceSessionVersion,
-                    sourceDocumentId,
-                    sourceRevision,
-                    publication,
-                    operation.Token)
-                : await host.SavePublicationAsync(
-                    sourceSessionVersion,
-                    sourceDocumentId,
-                    sourceRevision,
-                    publication,
-                    operation.Token);
-            if (result.Status == PublishedProcessHostOperationStatus.Cancelled)
-            {
-                return;
-            }
-
-            if (!result.Succeeded)
-            {
-                CompletePublishOperation(
-                    host, sourceSessionVersion, operation, publish, result.Diagnostics);
-                return;
-            }
-
-            lock (_lifecycleSync)
-            {
-                if (!IsCurrentPublishOperation(host, sourceSessionVersion, operation))
-                {
-                    return;
-                }
-            }
-
-            if (publish)
-            {
-                downloading = true;
-                await BrowserFileDownload.DownloadAsync(
-                    JavaScript,
-                    result.Payload.AsMemory(),
-                    PublishContentType,
-                    PublishFileName,
-                    operation.Token);
-            }
-
-            lock (_lifecycleSync)
-            {
-                if (IsCurrentPublishOperation(host, sourceSessionVersion, operation))
-                {
-                    _state = host.CaptureState();
-                    ClearPublishOperationError();
-                    _publishOperationStatus = "idle";
-                }
-            }
-        }
-        catch (OperationCanceledException) when (operation.IsCancellationRequested)
-        {
-            // Disposal or a replacement session cancels delivery without a stale failure.
-        }
-#pragma warning disable CA1031 // Browser failures become bounded user-facing operation messages.
-        catch (Exception exception) when (IsNonFatalNativeDocumentException(exception))
-        {
-            CompletePublishOperation(
-                host, sourceSessionVersion, operation, publish,
-                [new Diagnostic(
-                    downloading
-                        ? "CANVAS_PUBLISH_DOWNLOAD_FAILED"
-                        : publish ? "CANVAS_PUBLISH_FAILED" : "CANVAS_PUBLICATION_PERSISTENCE_FAILED",
-                    DiagnosticSeverity.Error,
-                    downloading
-                        ? "The published process download could not be started by the browser."
-                        : publish
-                            ? "The publication package could not be generated."
-                            : "Publication metadata could not be saved.")]);
-        }
-#pragma warning restore CA1031
-        finally
-        {
-            lock (_lifecycleSync)
-            {
-                if (ReferenceEquals(_publishOperationCancellation, operation))
-                {
-                    _publishOperationCancellation = null;
-                    _publishInProgress = false;
-                    if (!_disposed && _publishOperationStatus is "publishing" or "saving")
-                    {
-                        _publishOperationStatus = _publishOperationDiagnostics.IsEmpty
-                            ? "idle"
-                            : "failed";
-                    }
-                }
-            }
-        }
-    }
-
-    private void ReconcilePublicationDialog()
-    {
-        if (!_publicationDialogOpen || _state?.Session is not { } session)
-        {
-            return;
-        }
-
-        if (_state.DocumentSessionVersion != _publicationSourceSessionVersion ||
-            session.DocumentId != _publicationSourceDocumentId ||
-            session.DocumentRevision != _publicationSourceRevision)
-        {
-            DiscardPublicationDialogDraft();
-            _publishOperationStatus = _publishOperationDiagnostics.IsEmpty ? "idle" : "failed";
-        }
-    }
-
-    private async Task FocusPublicationDialogAsync()
-    {
-        lock (_lifecycleSync)
-        {
-            if (_disposed || !_publicationDialogOpen || !_publicationDialogFocusPending)
-            {
-                return;
-            }
-
-            _publicationDialogFocusPending = false;
-        }
-
-#pragma warning disable CA1031 // Focus failure must not break the editor lifecycle.
-        try
-        {
-            await _publicationCodeInput.FocusAsync(preventScroll: true);
-        }
-        catch (Exception exception) when (IsNonFatalNativeDocumentException(exception))
-        {
-            // The dialog remains keyboard-operable if focus transfer is unavailable.
-        }
-#pragma warning restore CA1031
-    }
-
-    private void DiscardPublicationDialogDraft()
-    {
-        _publicationDialogOpen = false;
-        _publicationDialogFocusPending = false;
-        _publicationSourceSessionVersion = 0;
-        _publicationSourceDocumentId = null;
-        _publicationSourceRevision = null;
-        _publicationCodeDraft = string.Empty;
-        _publicationTitleDraft = string.Empty;
-        _publicationDescriptionDraft = string.Empty;
-    }
-
-    private bool IsCurrentPublishOperation(
-        DocumentCanvasHost? host,
-        long sourceSessionVersion,
-        CancellationTokenSource operation) =>
-        !_disposed &&
-        !operation.IsCancellationRequested &&
-        ReferenceEquals(_host, host) &&
-        ReferenceEquals(_publishOperationCancellation, operation) &&
-        (host is null || host.CaptureState().DocumentSessionVersion == sourceSessionVersion);
-
-    private void CompletePublishOperation(
-        DocumentCanvasHost? host,
-        long sourceSessionVersion,
-        CancellationTokenSource operation,
-        bool publish,
-        ImmutableArray<Diagnostic> diagnostics)
-    {
-        lock (_lifecycleSync)
-        {
-            if (!IsCurrentPublishOperation(host, sourceSessionVersion, operation))
-            {
-                return;
-            }
-
-            _publishOperationDiagnostics = diagnostics.IsDefaultOrEmpty
-                ? [new Diagnostic("CANVAS_PUBLISH_FAILED", DiagnosticSeverity.Error,
-                    "The Publication operation could not be completed. Please retry.")]
-                : diagnostics;
-            _publishOperationErrorCode = _publishOperationDiagnostics[0].Code;
-            _publishOperationErrorMessage = _publishOperationDiagnostics[0].Message;
-            _publishOperationErrorHeading = publish ? "Publication_PublishFailed" : "Publication_SaveFailed";
-            _publishOperationStatus = "failed";
-        }
-    }
-
-    private void ClearPublishOperationError()
-    {
-        _publishOperationDiagnostics = [];
-        _publishOperationErrorCode = null;
-        _publishOperationErrorMessage = null;
-    }
-
-    private void DismissPublishOperationError()
-    {
-        lock (_lifecycleSync)
-        {
-            ClearPublishOperationError();
-            if (_publishOperationStatus == "failed")
-            {
-                _publishOperationStatus = "idle";
-            }
-        }
-    }
-
-    private void ReconcilePublishOperation()
-    {
-        lock (_lifecycleSync)
-        {
-            if (_publishOperationSessionVersion is not { } sourceVersion ||
-                _state?.DocumentSessionVersion == sourceVersion)
-            {
-                return;
-            }
-
-            var operation = _publishOperationCancellation;
-            _publishOperationCancellation = null;
-            _publishOperationSessionVersion = null;
-            _publishInProgress = false;
-            ClearPublishOperationError();
-            _publishOperationStatus = "idle";
-            operation?.Cancel();
-        }
-    }
-
-    private string? PublishDiagnosticTarget(Diagnostic diagnostic)
-    {
-        var context = diagnostic.Context;
-        if (context.TryGetValue("ElementId", out var elementId))
-        {
-            return context.TryGetValue("ElementName", out var name) && !string.IsNullOrWhiteSpace(name)
-                ? Text["Target_NamedElement", name, elementId]
-                : context.TryGetValue("ElementType", out var type)
-                    ? Text["Target_TypedElement", type, elementId]
-                    : Text["Target_Element", elementId];
-        }
-
-        if (context.TryGetValue("ConnectorId", out var connectorId))
-        {
-            return context.TryGetValue("SourceElementId", out var source) &&
-                context.TryGetValue("TargetElementId", out var target)
-                    ? Text["Target_ConnectedConnector", connectorId, source, target]
-                    : Text["Target_Connector", connectorId];
-        }
-
-        return diagnostic.SourceIdentity is { } identity ? Text["Target_Source", identity].Value : null;
-    }
-
-    private async Task ImportNativeDocumentAsync(InputFileChangeEventArgs args)
-    {
-        ArgumentNullException.ThrowIfNull(args);
-        DocumentCanvasHost? host;
-        lock (_lifecycleSync)
-        {
-            if (_disposed || !CanUseNativeDocumentTransfer)
-            {
-                return;
-            }
-
-            host = _host;
-            _nativeDocumentImportInProgress = true;
-            ClearNativeDocumentOperationError();
-            _nativeDocumentOperationStatus = "importing";
-        }
-
-        await InvokeAsync(StateHasChanged);
-        try
-        {
-            if (host is null)
-            {
-                CompleteNativeDocumentOperation(
-                    "CANVAS_NATIVE_DOCUMENT_IMPORT_UNAVAILABLE",
-                    "Error_ImportUnavailable");
-                return;
-            }
-
-            var browserImport = await ReadAndImportNativeDocumentFileAsync(
-                args.File,
-                host.ImportNativeDocumentAsync,
-                _componentLifetime.Token);
-            if (browserImport.FileTooLarge)
-            {
-                CompleteNativeDocumentOperation(
-                    NativeDocumentFileTooLargeCode,
-                    NativeDocumentFileTooLargeMessage);
-                return;
-            }
-
-            var import = browserImport.ImportResult!;
-            if (import.Status == NativeDocumentHostOperationStatus.Cancelled)
-            {
-                return;
-            }
-            if (!import.Succeeded)
-            {
-                var (code, message) = NativeDocumentImportMessage(import);
-                CompleteNativeDocumentOperation(code, message);
-                return;
-            }
-
-            lock (_lifecycleSync)
-            {
-                if (_disposed || !ReferenceEquals(_host, host))
-                {
-                    return;
-                }
-
-                _state = host.CaptureState();
-                _propertiesDraft = null;
-                _modelViewPropertiesDraft = null;
-                _propertiesApplying = false;
-                _propertiesApplyStatus = "idle";
-                _modelViewPropertiesApplying = false;
-                _modelViewPropertiesApplyStatus = "idle";
-                _issuesPanel.Close();
-                ClearNativeDocumentOperationError();
-                _nativeDocumentOperationStatus = "idle";
-            }
-        }
-        catch (OperationCanceledException) when (_componentLifetime.IsCancellationRequested)
-        {
-            // Component disposal cancels the file operation without surfacing a stale error.
-        }
-#pragma warning disable CA1031 // Browser file failures become bounded user-facing operation messages.
-        catch (Exception exception) when (IsNonFatalNativeDocumentException(exception))
-        {
-            CompleteNativeDocumentOperation(
-                "CANVAS_NATIVE_DOCUMENT_FILE_READ_FAILED",
-                "Error_ImportReadFailed");
-        }
-#pragma warning restore CA1031
-        finally
-        {
-            lock (_lifecycleSync)
-            {
-                _nativeDocumentImportInProgress = false;
-                _nativeDocumentInputKey++;
-                if (!_disposed && _nativeDocumentOperationStatus == "importing")
-                {
-                    _nativeDocumentOperationStatus = "idle";
-                }
-            }
-        }
-    }
-
-    internal static async ValueTask<(
-        bool FileTooLarge,
-        NativeDocumentHostImportResult? ImportResult)> ReadAndImportNativeDocumentFileAsync(
-        IBrowserFile file,
-        Func<ReadOnlyMemory<byte>, CancellationToken, ValueTask<NativeDocumentHostImportResult>>
-            importer,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(file);
-        ArgumentNullException.ThrowIfNull(importer);
-        if (file.Size > MaximumNativeDocumentFileSize)
-        {
-            return (true, null);
-        }
-
-        byte[] payload;
-        await using (var stream = file.OpenReadStream(
-            MaximumNativeDocumentFileSize,
-            cancellationToken))
-        {
-            using var buffer = new MemoryStream(checked((int)file.Size));
-            await stream.CopyToAsync(buffer, cancellationToken);
-            payload = buffer.ToArray();
-        }
-
-        return (false, await importer(payload, cancellationToken));
-    }
-
-    internal static (string Code, string Message) NativeDocumentImportMessage(
-        NativeDocumentHostImportResult result)
-    {
-        var code = result.Diagnostics.FirstOrDefault()?.Code ??
-            "CANVAS_NATIVE_DOCUMENT_IMPORT_FAILED";
-        var message = code switch
-        {
-            "NATIVE_DOCUMENT_JSON_MALFORMED" =>
-                "Error_ImportMalformed",
-            "NATIVE_DOCUMENT_FORMAT_INVALID" =>
-                "Error_ImportFormat",
-            "NATIVE_DOCUMENT_VERSION_UNSUPPORTED" =>
-                "Error_ImportVersion",
-            "CANVAS_NATIVE_DOCUMENT_IMPORT_UNAVAILABLE" =>
-                "Error_ImportUnavailable",
-            "CANVAS_NATIVE_DOCUMENT_REPLACEMENT_FAILED" =>
-                "Error_ImportSession",
-            _ => "Error_ImportStructure",
-        };
-        return (code, message);
-    }
-
-    private void CompleteNativeDocumentOperation(string code, string message)
-    {
-        lock (_lifecycleSync)
-        {
-            if (_disposed)
-            {
-                return;
-            }
-
-            _nativeDocumentOperationErrorCode = code;
-            _nativeDocumentOperationErrorMessage = message;
-            _nativeDocumentOperationStatus = "error";
-        }
-    }
-
-    private void ClearNativeDocumentOperationError()
-    {
-        _nativeDocumentOperationErrorCode = null;
-        _nativeDocumentOperationErrorMessage = null;
-    }
-
-    private static bool IsNonFatalNativeDocumentException(Exception exception) =>
-        exception is not OutOfMemoryException and
-        not StackOverflowException and
-        not AccessViolationException;
+    private static bool IsNonFatalEditorException(Exception exception) =>
+        exception is not OutOfMemoryException and not StackOverflowException and not AccessViolationException;
 
     private async Task OpenPropertiesAsync()
         => await OpenPropertiesForTargetAsync(null);
@@ -2524,79 +1541,6 @@
         RefreshHostState(host);
     }
 
-    private void ToggleIssuesPanel()
-    {
-        var (width, height) = CurrentIssuesPanelSurface();
-        _issuesPanel.Toggle(width, height);
-    }
-
-    private void CloseIssuesPanel() => _issuesPanel.Close();
-
-    private void StartIssuesPanelMove(PointerEventArgs args)
-    {
-        ArgumentNullException.ThrowIfNull(args);
-        if (!_issuesPanel.IsOpen || args.Button != 0 || !args.IsPrimary ||
-            _issuesPanel.ActivePointerId is not null)
-        {
-            return;
-        }
-
-        _ = _issuesPanel.TryBeginMove(args.PointerId, args.ClientX, args.ClientY);
-    }
-
-    private void MoveIssuesPanel(PointerEventArgs args)
-    {
-        ArgumentNullException.ThrowIfNull(args);
-        _ = _issuesPanel.Move(args.PointerId, args.ClientX, args.ClientY);
-    }
-
-    private void EndIssuesPanelMove(PointerEventArgs args)
-    {
-        ArgumentNullException.ThrowIfNull(args);
-        _ = _issuesPanel.EndMove(args.PointerId);
-    }
-
-    private void CancelIssuesPanelMove(PointerEventArgs args)
-    {
-        ArgumentNullException.ThrowIfNull(args);
-        _ = _issuesPanel.EndMove(args.PointerId);
-    }
-
-    private async Task ValidateAsync()
-    {
-        DocumentCanvasHost? host;
-        lock (_lifecycleSync)
-        {
-            host = _disposed ? null : _host;
-        }
-
-        if (host is null)
-        {
-            return;
-        }
-
-        _ = await host.ValidateAsync(_componentLifetime.Token);
-        RefreshHostState(host);
-    }
-
-    private async Task SelectValidationIssueAsync(ModelValidationIssueId issueId)
-    {
-        ArgumentNullException.ThrowIfNull(issueId);
-        DocumentCanvasHost? host;
-        lock (_lifecycleSync)
-        {
-            host = _disposed ? null : _host;
-        }
-
-        if (host is null)
-        {
-            return;
-        }
-
-        _ = await host.SelectValidationIssueAsync(issueId, _componentLifetime.Token);
-        RefreshHostState(host);
-    }
-
     private async Task SelectToolboxItemAsync(ToolboxItemId itemId)
     {
         ArgumentNullException.ThrowIfNull(itemId);
@@ -2638,12 +1582,6 @@
                 return;
             }
 
-            if (_publicationDialogOpen && !_publishInProgress)
-            {
-                DiscardPublicationDialogDraft();
-                _publishOperationStatus = _publishOperationDiagnostics.IsEmpty ? "idle" : "failed";
-                return;
-            }
 
             host = _disposed ? null : _host;
         }
@@ -3360,60 +2298,7 @@
             }
         }
 
-        SynchronizeIssuesPanelSurface();
     }
-
-    private void SynchronizeIssuesPanelSurface()
-    {
-        if (_state?.SurfaceSize is { } surfaceSize)
-        {
-            _issuesPanel.ResizeSurface(surfaceSize.CssWidth, surfaceSize.CssHeight);
-        }
-    }
-
-    private async ValueTask SynchronizeIssuesPanelPointerCaptureAsync()
-    {
-        if (_disposed)
-        {
-            return;
-        }
-
-        if (_issuesPanel.IsOpen)
-        {
-            if (_issuesPanelPointerCapture is not null)
-            {
-                return;
-            }
-
-            _issuesPanelModule ??= await JavaScript.InvokeAsync<IJSObjectReference>(
-                "import",
-                _componentLifetime.Token,
-                "./_content/Inceptus.DocumentEngine.Bpmn.Blazor/inceptus.presentation.js");
-            var pointerCapture = await _issuesPanelModule.InvokeAsync<IJSObjectReference>(
-                "createDomPointerCaptureObserver",
-                _componentLifetime.Token,
-                DomId("issues-panel-header"));
-            await pointerCapture.InvokeVoidAsync("start", _componentLifetime.Token);
-            _issuesPanelPointerCapture = pointerCapture;
-            return;
-        }
-
-        if (_issuesPanelPointerCapture is { } existing)
-        {
-            _issuesPanelPointerCapture = null;
-            await existing.InvokeVoidAsync("dispose", _componentLifetime.Token);
-            await existing.DisposeAsync();
-        }
-    }
-
-    private (double Width, double Height) CurrentIssuesPanelSurface() =>
-        _state?.SurfaceSize is { } surfaceSize
-            ? (surfaceSize.CssWidth, surfaceSize.CssHeight)
-            : (
-                FloatingIssuesPanelState.PreferredWidth +
-                    (FloatingIssuesPanelState.DefaultMargin * 2d),
-                FloatingIssuesPanelState.PreferredHeight +
-                    (FloatingIssuesPanelState.DefaultMargin * 2d));
 
     private static bool IsCurrentPropertiesTarget(
         DocumentCanvasHostState state,
@@ -3557,24 +2442,6 @@
         Format(bounds.Y),
         Format(bounds.Width),
         Format(bounds.Height));
-
-    private string ValidationTargetLabel(ModelValidationTarget target)
-    {
-        ArgumentNullException.ThrowIfNull(target);
-        if (_host?.GetValidationTargetName(target) is { } name)
-        {
-            return name;
-        }
-
-        if (target.VisualStateId is { } visualStateId)
-        {
-            return Text["Target_VisualSemantic", visualStateId.Value, target.SemanticElementId!.Value];
-        }
-
-        return target.SemanticElementId is { } semanticElementId
-            ? Text["Target_Semantic", semanticElementId.Value]
-            : Text["Target_Document"];
-    }
 
     private enum PropertiesVisualDraftField
     {

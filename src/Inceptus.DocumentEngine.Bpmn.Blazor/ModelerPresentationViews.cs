@@ -17,6 +17,10 @@ internal static class ModelerPresentationViews
         var choices = ImmutableArray.CreateBuilder<ModelerPresentationViewChoice>();
         choices.Add(new(new ProcessScopePresentationContext(document.SemanticModel.RootScopeId),
             string.Empty, "Navigation_MainProcess"));
+        // Ordinary BPMN imports have one root. Breadcrumbs own SubProcess navigation;
+        // retain this selector only for native documents with historical peer roots.
+        if (!document.SemanticModel.NestedScopes.Any(static scope => scope.ParentScopeId is null))
+            return choices.ToImmutable();
         foreach (var scope in document.SemanticModel.NestedScopes.Where(scope =>
                      scope.ParentScopeId is null ||
                      currentContext == new ProcessScopePresentationContext(scope.Id))
@@ -28,15 +32,6 @@ internal static class ModelerPresentationViews
                 name.Kind == PropertyValueKind.Text && !string.IsNullOrWhiteSpace(name.TextValue)
                 ? name.TextValue : scope.Id.Value;
             choices.Add(new(new ProcessScopePresentationContext(scope.Id), label));
-        }
-        foreach (var collaboration in document.SemanticModel.Elements
-                     .Where(static element => element.TypeId == BpmnSemanticTypes.Collaboration)
-                     .OrderBy(static element => element.Id.Value, StringComparer.Ordinal))
-        {
-            var label = collaboration.Properties.TryGetValue(BpmnSemanticProperties.Name, out var name) &&
-                name.Kind == PropertyValueKind.Text && !string.IsNullOrWhiteSpace(name.TextValue)
-                ? name.TextValue : collaboration.Id.Value;
-            choices.Add(new(new DocumentPresentationContext(collaboration.Id), label));
         }
         return choices.ToImmutable();
     }

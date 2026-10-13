@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>Inceptus.Bpmn.Integration</PackageId>
+    <IsPackable>true</IsPackable>
+    <Description>Document serialization, compatibility, validation and publication integration for Inceptus BPMN hosts.</Description>
+    <PackageTags>inceptus;bpmn;integration</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Schemas/*.xsd" />
+    <EmbeddedResource Include="Bpmn202ImportProfile.xml" />
+    <EmbeddedResource Include="Bpmn202ImportProfile.xsd" />
+    <ProjectReference Include="../Inceptus.DocumentEngine.Bpmn/Inceptus.DocumentEngine.Bpmn.csproj" />
+    <ProjectReference Include="../Inceptus.DocumentEngine.Organizational/Inceptus.DocumentEngine.Organizational.csproj" />
+    <ProjectReference Include="../Inceptus.DocumentEngine.Runtime/Inceptus.DocumentEngine.Runtime.csproj" />
+    <ProjectReference Include="../Inceptus.DocumentEngine.Canvas2D/Inceptus.DocumentEngine.Canvas2D.csproj" />
+    <ProjectReference Include="../Inceptus.DocumentEngine.Contracts/Inceptus.DocumentEngine.Contracts.csproj" />
+    <None Include="../../branding/inceptus-nuget-icon.png" Pack="true" PackagePath="inceptus-nuget-icon.png" />
+  </ItemGroup>
+</Project>

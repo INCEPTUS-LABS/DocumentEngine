@@ -102,7 +102,7 @@ public sealed partial class DocumentCanvasHostTests
             state.EditorState.Viewport.Pan);
         Assert.Equal(ModelProfileElementViewStateSnapshot.Empty,
             state.ModelProfileElementViewState);
-        Assert.Null(host.CaptureState().ValidationSnapshot);
+        Assert.Null(host.Operations().ValidationSnapshot);
         Assert.Equal(beforeGeneration + 1, host.CaptureState().DocumentSessionVersion);
         Assert.Equal("standby-canvas", host.CaptureState().ActiveCanvasElementId);
         Assert.Equal(1, initialExecution.DisposeCount);
@@ -145,7 +145,7 @@ public sealed partial class DocumentCanvasHostTests
 
         var result = await host.LoadDocumentAsync(nullInput ? null : invalid);
 
-        Assert.Equal(NativeDocumentHostOperationStatus.Rejected, result.Status);
+        Assert.Equal(BpmnModelerOperationStatus.Rejected, result.Status);
         Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Code ==
             (nullInput ? "CANVAS_DOCUMENT_LOAD_REQUIRED" : "DOC_RELATIONSHIP_SOURCE_MISSING"));
         Assert.Same(session, Session(host));
@@ -182,7 +182,7 @@ public sealed partial class DocumentCanvasHostTests
         var result = await host.LoadDocumentAsync(
             CreateImportedDocument("test:p1.3:failed-load", 17).CaptureSnapshot());
 
-        Assert.Equal(NativeDocumentHostOperationStatus.Failed, result.Status);
+        Assert.Equal(BpmnModelerOperationStatus.Failed, result.Status);
         Assert.Equal("CANVAS_DOCUMENT_LOAD_REPLACEMENT_FAILED",
             Assert.Single(result.Diagnostics).Code);
         Assert.Same(session, Session(host));
@@ -241,7 +241,7 @@ public sealed partial class DocumentCanvasHostTests
             await disposal.WaitAsync(TimeSpan.FromSeconds(10));
         }
 
-        Assert.Equal(NativeDocumentHostOperationStatus.Cancelled, result.Status);
+        Assert.Equal(BpmnModelerOperationStatus.Cancelled, result.Status);
         Assert.Same(session, Session(host));
         Assert.Same(snapshot, document.CaptureSnapshot());
         Assert.Equal(generation, host.CaptureState().DocumentSessionVersion);
@@ -269,11 +269,11 @@ public sealed partial class DocumentCanvasHostTests
         var snapshot = CreateImportedDocument("test:p1.3:not-ready-load", 3).CaptureSnapshot();
 
         var before = await host.LoadDocumentAsync(snapshot);
-        Assert.Equal(NativeDocumentHostOperationStatus.Unavailable, before.Status);
+        Assert.Equal(BpmnModelerOperationStatus.Unavailable, before.Status);
         Assert.Equal("CANVAS_DOCUMENT_LOAD_UNAVAILABLE", Assert.Single(before.Diagnostics).Code);
         await host.DisposeAsync();
         var after = await host.LoadDocumentAsync(snapshot);
-        Assert.Equal(NativeDocumentHostOperationStatus.Cancelled, after.Status);
+        Assert.Equal(BpmnModelerOperationStatus.Cancelled, after.Status);
     }
 
     private sealed class LoadingPointerObserverFactory : ICanvasPresentationPointerObserverFactory

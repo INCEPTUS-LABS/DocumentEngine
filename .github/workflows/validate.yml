@@ -68,12 +68,12 @@ jobs:
           git diff --check
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           if (git status --porcelain=v1 --untracked-files=all) { throw 'Verification changed the checkout.' }
-      - name: Pack six package and symbol pairs
+      - name: Pack seven package and symbol pairs
         run: |
           $output = Join-Path $env:RUNNER_TEMP 'release-packages'
           if (Test-Path $output) { throw 'Package output must be fresh.' }
-          foreach ($name in @('Contracts', 'Runtime', 'Bpmn', 'Organizational', 'Canvas2D', 'Bpmn.Blazor')) {
-            dotnet pack "src/Inceptus.DocumentEngine.$name/Inceptus.DocumentEngine.$name.csproj" -c Release --no-build --no-restore --output $output
+          foreach ($id in @('Inceptus.DocumentEngine.Contracts', 'Inceptus.DocumentEngine.Runtime', 'Inceptus.DocumentEngine.Bpmn', 'Inceptus.DocumentEngine.Organizational', 'Inceptus.DocumentEngine.Canvas2D', 'Inceptus.DocumentEngine.Bpmn.Blazor', 'Inceptus.Bpmn.Integration')) {
+            dotnet pack "src/$id/$id.csproj" -c Release --no-build --no-restore --output $output
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
       - name: Package and public source provenance

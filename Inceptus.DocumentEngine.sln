@@ -21,6 +21,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inceptus.DocumentEngine.Uni
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inceptus.DocumentEngine.IntegrationTests", "tests\Inceptus.DocumentEngine.IntegrationTests\Inceptus.DocumentEngine.IntegrationTests.csproj", "{D6FDA564-780A-4E66-852F-93A105ED2A47}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inceptus.Bpmn.Integration", "src\Inceptus.Bpmn.Integration\Inceptus.Bpmn.Integration.csproj", "{E332E3BC-6E4B-4D07-9113-25D9B2883155}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -63,6 +65,10 @@ Global
 		{D6FDA564-780A-4E66-852F-93A105ED2A47}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D6FDA564-780A-4E66-852F-93A105ED2A47}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D6FDA564-780A-4E66-852F-93A105ED2A47}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E332E3BC-6E4B-4D07-9113-25D9B2883155}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E332E3BC-6E4B-4D07-9113-25D9B2883155}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E332E3BC-6E4B-4D07-9113-25D9B2883155}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E332E3BC-6E4B-4D07-9113-25D9B2883155}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

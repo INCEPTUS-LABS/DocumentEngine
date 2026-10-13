@@ -7,10 +7,10 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Inceptus.DocumentEngine.Bpmn.Blazor.Components;
 
 /// <summary>
-/// A component-owned BPMN editor. Hosts exchange immutable snapshots and generated files,
+/// A component-owned BPMN editor. Hosts exchange immutable snapshots,
 /// never its live Document, session, History, or renderer.
 /// </summary>
-public partial class InceptusBpmnModeler : IDisposable
+public partial class InceptusBpmnModeler : IDisposable, IBpmnDocumentEditor
 {
     private BpmnModelerFacade? _facade;
     private bool _disposed;
@@ -77,25 +77,6 @@ public partial class InceptusBpmnModeler : IDisposable
         DocumentSnapshot? document,
         CancellationToken cancellationToken = default) => Facade.LoadDocumentAsync(document, cancellationToken);
 
-    /// <summary>Imports native bytes through the canonical serializer, without a browser file picker.</summary>
-    public ValueTask<BpmnModelerDocumentResult> ImportNativeDocumentAsync(
-        ReadOnlyMemory<byte> utf8Json,
-        CancellationToken cancellationToken = default) => Facade.ImportNativeDocumentAsync(utf8Json, cancellationToken);
-
-    /// <summary>Imports supported v2 with an explicit opt-in for incompatible saved-state recovery.</summary>
-    public ValueTask<BpmnModelerDocumentResult> ImportNativeDocumentAsync(
-        ReadOnlyMemory<byte> utf8Json,
-        BpmnModelerNativeImportOptions options,
-        CancellationToken cancellationToken = default) => Facade.ImportNativeDocumentAsync(utf8Json, options, cancellationToken);
-
-    /// <summary>Returns native Document bytes without initiating a browser download.</summary>
-    public ValueTask<BpmnModelerFileResult> ExportNativeDocumentAsync(
-        CancellationToken cancellationToken = default) => Facade.ExportNativeDocumentAsync(cancellationToken);
-
-    /// <summary>Returns the standalone Publish ZIP without changing publication metadata or downloading.</summary>
-    public ValueTask<BpmnModelerFileResult> PublishAsync(
-        CancellationToken cancellationToken = default) => Facade.PublishAsync(cancellationToken);
-
     protected override void OnInitialized()
     {
         // The snapshot value is captured here, not read again on later parameter updates.
@@ -103,6 +84,7 @@ public partial class InceptusBpmnModeler : IDisposable
             new BpmnModelerCompositionFactory(() => Services.GetServices<IBpmnModelerStartupDocumentProvider>());
         _facade?.Dispose();
         _facade = new BpmnModelerFacade(factory.WithInitialDocument(InitialDocument), InvokeNotificationAsync);
+        _facade.ViewChanged += HandleViewChanged;
     }
 
     public void Dispose()

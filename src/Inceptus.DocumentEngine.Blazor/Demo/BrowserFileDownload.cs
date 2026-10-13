@@ -1,13 +1,13 @@
 using Microsoft.JSInterop;
 
-namespace Inceptus.DocumentEngine.Bpmn.Blazor.Presentation;
+namespace Inceptus.DocumentEngine.Blazor.Demo;
 
 /// <summary>
 /// Browser-only boundary for downloading caller-provided bytes.
 /// </summary>
 internal static class BrowserFileDownload
 {
-    private const string ModulePath = "./_content/Inceptus.DocumentEngine.Bpmn.Blazor/inceptus.presentation.js";
+    private const string ModulePath = "./inceptus.documents.js";
 
     internal static async ValueTask DownloadAsync(
         IJSRuntime jsRuntime,
@@ -39,3 +39,4 @@ internal static class BrowserFileDownload
         }
     }
 }
+

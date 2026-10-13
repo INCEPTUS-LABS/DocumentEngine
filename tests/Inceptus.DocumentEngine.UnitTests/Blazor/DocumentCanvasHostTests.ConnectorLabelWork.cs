@@ -55,7 +55,7 @@ public sealed partial class DocumentCanvasHostTests
         Assert.Equal(100, states.Count);
         Assert.Equal(100, hostNotifications);
         Assert.Equal(100, test.Activator.Canvas.BuildCount);
-        Assert.Equal(100, test.Activator.Input.BuildCount);
+        Assert.Equal(0, test.Activator.Input.BuildCount); // Host file input is independent of editor movement.
         Assert.Equal(100, test.Execution.Calls.Count(call => call == "render") - frames);
         Assert.Equal(test.FullUploadsBefore, test.Execution.FullUploadCount);
         return JsonSerializer.Serialize(new

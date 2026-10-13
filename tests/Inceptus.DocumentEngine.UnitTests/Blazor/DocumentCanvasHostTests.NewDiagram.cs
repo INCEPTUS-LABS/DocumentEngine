@@ -117,7 +117,7 @@ public sealed partial class DocumentCanvasHostTests
         Assert.True(oldState.ModelProfileElementViewState.IsCollapsed(
             BpmnModelProfiles.OrganizationalId,
             firstPool));
-        Assert.NotNull(host.CaptureState().ValidationSnapshot);
+        Assert.NotNull(host.Operations().ValidationSnapshot);
 
         var result = await host.NewDiagramAsync();
 
@@ -167,7 +167,7 @@ public sealed partial class DocumentCanvasHostTests
         Assert.Empty(newState.ProjectedGraph.Edges);
         Assert.Empty(newState.RuntimeDiagnostics);
         Assert.Empty(newState.PresentationDiagnostics);
-        Assert.Null(host.CaptureState().ValidationSnapshot);
+        Assert.Null(host.Operations().ValidationSnapshot);
         Assert.Null(toolboxSelection.SelectedItemId);
         Assert.Equal("standby-canvas", host.CaptureState().ActiveCanvasElementId);
         Assert.Equal(1, initialExecution.DisposeCount);
@@ -425,7 +425,7 @@ public sealed partial class DocumentCanvasHostTests
             source.DocumentCreationIdentityProvider,
             source.EndpointReconnectionCatalog,
             source.DeletionCatalog,
-            source.ModelValidationCatalog,
+
             source.ScopeNavigationCatalog,
             source.BackgroundActionCatalog,
             source.SemanticSceneViewActionCatalog,

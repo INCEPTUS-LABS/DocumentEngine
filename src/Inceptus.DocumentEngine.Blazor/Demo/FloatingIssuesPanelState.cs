@@ -1,4 +1,4 @@
-namespace Inceptus.DocumentEngine.Bpmn.Blazor.Presentation;
+namespace Inceptus.DocumentEngine.Blazor.Demo;
 
 internal sealed class FloatingIssuesPanelState
 {

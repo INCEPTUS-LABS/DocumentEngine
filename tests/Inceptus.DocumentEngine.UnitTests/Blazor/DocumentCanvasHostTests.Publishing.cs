@@ -68,7 +68,7 @@ public sealed partial class DocumentCanvasHostTests
         }
         var before = AttachedDocument(Session(host)).CaptureSnapshot();
         var beforeHistory = host.CaptureState().Session!.HistoryStatus;
-        var activator = new PublishComponentActivator(host);
+        var activator = new DemoPublishComponentActivator(host);
         using var services = new ServiceCollection()
             .AddLogging().AddInceptusBpmnModeler()
             .AddSingleton<IJSRuntime>(new PublishDownloadRuntime())
@@ -76,7 +76,7 @@ public sealed partial class DocumentCanvasHostTests
             .BuildServiceProvider();
         await using var renderer = new HtmlRenderer(services, NullLoggerFactory.Instance);
         var rendered = await renderer.Dispatcher.InvokeAsync(
-            () => renderer.RenderComponentAsync<DocumentCanvas>());
+            () => renderer.RenderComponentAsync<BpmnDemoHost>(ParameterView.FromDictionary(new Dictionary<string, object?> { [nameof(BpmnDemoHost.Editor)] = host })));
 
         await renderer.Dispatcher.InvokeAsync(async () =>
         {
@@ -119,12 +119,12 @@ public sealed partial class DocumentCanvasHostTests
         await SaveDefaultPublicationAsync(Session(host));
         var before = AttachedDocument(Session(host)).CaptureSnapshot();
         var beforeHistory = host.CaptureState().Session!.HistoryStatus;
-        var activator = new PublishComponentActivator(host);
+        var activator = new DemoPublishComponentActivator(host);
         var browser = new PublishDownloadRuntime();
         using var services = PublishComponentServices(activator, browser);
         await using var renderer = new HtmlRenderer(services, NullLoggerFactory.Instance);
         var rendered = await renderer.Dispatcher.InvokeAsync(
-            () => renderer.RenderComponentAsync<DocumentCanvas>());
+            () => renderer.RenderComponentAsync<BpmnDemoHost>(ParameterView.FromDictionary(new Dictionary<string, object?> { [nameof(BpmnDemoHost.Editor)] = host })));
         await renderer.Dispatcher.InvokeAsync(async () =>
         {
             InitializePublishDialog(activator.Component, host);
@@ -135,14 +135,16 @@ public sealed partial class DocumentCanvasHostTests
         });
         var retained = await renderer.Dispatcher.InvokeAsync(rendered.ToHtmlString);
         Assert.Contains("Publish failed", retained, StringComparison.Ordinal);
+        Assert.Contains("class=\"operation-feedback-panel\"", retained, StringComparison.Ordinal);
         Assert.Contains("data-publication-dialog=\"closed\"", retained, StringComparison.Ordinal);
         await renderer.Dispatcher.InvokeAsync(async () =>
         {
-            InvokePublishComponent(activator.Component, "DismissPublishOperationError");
+            InvokePublishComponent(activator.Component, "DismissOperationFeedback");
             await activator.Component.RefreshAsync();
         });
         var dismissed = await renderer.Dispatcher.InvokeAsync(rendered.ToHtmlString);
         Assert.DoesNotContain("Publish failed", dismissed, StringComparison.Ordinal);
+        Assert.DoesNotContain("class=\"operation-feedback-panel\"", dismissed, StringComparison.Ordinal);
         Assert.Same(before, AttachedDocument(Session(host)).CaptureSnapshot());
         Assert.Equal(beforeHistory, host.CaptureState().Session!.HistoryStatus);
         Assert.Equal(0, browser.DownloadCount);
@@ -163,7 +165,7 @@ public sealed partial class DocumentCanvasHostTests
 
         var result = await host.PublishProcessAsync();
 
-        Assert.Equal(PublishedProcessHostOperationStatus.Failed, result.Status);
+        Assert.Equal(BpmnModelerOperationStatus.Failed, result.Status);
         Assert.Empty(result.Payload);
         Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Code == "PUBLISH_PACKAGE_BUILD_FAILED");
         Assert.DoesNotContain("private implementation detail", PublishDiagnostics(result.Diagnostics),
@@ -193,7 +195,7 @@ public sealed partial class DocumentCanvasHostTests
             // alter the authoritative snapshot or add an engine-specific failure hook.
             artifactsField.SetValue(session, null);
             var result = await host.PublishProcessAsync();
-            Assert.Equal(PublishedProcessHostOperationStatus.Unavailable, result.Status);
+            Assert.Equal(BpmnModelerOperationStatus.Unavailable, result.Status);
             Assert.Empty(result.Payload);
             Assert.Contains(result.Diagnostics, diagnostic =>
                 diagnostic.Code == "EDITING_SESSION_PRESENTATION_CAPTURE_UNAVAILABLE" ||
@@ -237,7 +239,7 @@ public sealed partial class DocumentCanvasHostTests
             // Reuse the canonical controlled pipeline to isolate the detached capture stage.
             pipelineField.SetValue(session, controlled);
             var result = await host.PublishProcessAsync();
-            Assert.Equal(PublishedProcessHostOperationStatus.Failed, result.Status);
+            Assert.Equal(BpmnModelerOperationStatus.Failed, result.Status);
             Assert.Empty(result.Payload);
             Assert.Contains(result.Diagnostics, diagnostic =>
                 diagnostic.Code == "CANVAS_PUBLISH_PREPARATION_FAILED");
@@ -278,7 +280,7 @@ public sealed partial class DocumentCanvasHostTests
             new DocumentPublicationSnapshot("cancelled", "Cancelled draft", "Unsaved"),
             cancellation.Token);
 
-        Assert.Equal(PublishedProcessHostOperationStatus.Cancelled, result.Status);
+        Assert.Equal(BpmnModelerOperationStatus.Cancelled, result.Status);
         Assert.False(result.PublicationChanged);
         Assert.Empty(result.Diagnostics);
         Assert.Empty(result.Payload);
@@ -297,7 +299,7 @@ public sealed partial class DocumentCanvasHostTests
         await SaveDefaultPublicationAsync(Session(host));
         var before = AttachedDocument(Session(host)).CaptureSnapshot();
         var history = host.CaptureState().Session!.HistoryStatus;
-        var activator = new PublishComponentActivator(host);
+        var activator = new DemoPublishComponentActivator(host);
         var browser = new PublishDownloadRuntime
         {
             Failure = new JSException("private implementation detail " + HostilePublishedText),
@@ -305,7 +307,7 @@ public sealed partial class DocumentCanvasHostTests
         using var services = PublishComponentServices(activator, browser);
         await using var renderer = new HtmlRenderer(services, NullLoggerFactory.Instance);
         var rendered = await renderer.Dispatcher.InvokeAsync(
-            () => renderer.RenderComponentAsync<DocumentCanvas>());
+            () => renderer.RenderComponentAsync<BpmnDemoHost>(ParameterView.FromDictionary(new Dictionary<string, object?> { [nameof(BpmnDemoHost.Editor)] = host })));
         await renderer.Dispatcher.InvokeAsync(async () =>
         {
             InitializePublishDialog(activator.Component, host);
@@ -353,7 +355,7 @@ public sealed partial class DocumentCanvasHostTests
         var native = await host.ExportNativeDocumentAsync();
         Assert.True(native.Succeeded);
         var oldVersion = host.CaptureState().DocumentSessionVersion;
-        var activator = new PublishComponentActivator(host);
+        var activator = new DemoPublishComponentActivator(host);
         var browser = new PublishDownloadRuntime
         {
             DelayDownload = delayed,
@@ -362,7 +364,7 @@ public sealed partial class DocumentCanvasHostTests
         using var services = PublishComponentServices(activator, browser);
         await using var renderer = new HtmlRenderer(services, NullLoggerFactory.Instance);
         var rendered = await renderer.Dispatcher.InvokeAsync(
-            () => renderer.RenderComponentAsync<DocumentCanvas>());
+            () => renderer.RenderComponentAsync<BpmnDemoHost>(ParameterView.FromDictionary(new Dictionary<string, object?> { [nameof(BpmnDemoHost.Editor)] = host })));
         var publishing = renderer.Dispatcher.InvokeAsync(async () =>
         {
             InitializePublishDialog(activator.Component, host);
@@ -391,8 +393,8 @@ public sealed partial class DocumentCanvasHostTests
             Assert.NotEqual(oldVersion, host.CaptureState().DocumentSessionVersion);
             await renderer.Dispatcher.InvokeAsync(async () =>
             {
-                typeof(DocumentCanvas).GetField("_state", BindingFlags.NonPublic | BindingFlags.Instance)!
-                    .SetValue(activator.Component, host.CaptureState());
+                typeof(BpmnDemoHost).GetField("_state", BindingFlags.NonPublic | BindingFlags.Instance)!
+                    .SetValue(activator.Component, DemoState(host));
                 InvokePublishComponent(activator.Component, "ReconcilePublishOperation");
                 await activator.Component.RefreshAsync();
             });
@@ -812,7 +814,7 @@ public sealed partial class DocumentCanvasHostTests
             item.Origin.SemanticElementId == poolAElement);
 
         var rejected = await host.PublishProcessAsync();
-        Assert.Equal(PublishedProcessHostOperationStatus.Rejected, rejected.Status);
+        Assert.Equal(BpmnModelerOperationStatus.Rejected, rejected.Status);
         Assert.Empty(rejected.Payload);
         Assert.Contains(rejected.Diagnostics, diagnostic => diagnostic.Code == "PUBLISH_CONNECTOR_ROUTE_MISSING");
         Assert.Same(beforeDocument, document.CaptureSnapshot());
@@ -946,7 +948,7 @@ public sealed partial class DocumentCanvasHostTests
         var result = await host.PublishProcessAsync();
 
         Assert.False(result.Succeeded);
-        Assert.Equal(PublishedProcessHostOperationStatus.Rejected, result.Status);
+        Assert.Equal(BpmnModelerOperationStatus.Rejected, result.Status);
         Assert.Empty(result.Payload);
         Assert.Contains(result.Diagnostics, diagnostic =>
             diagnostic.Code == "PUBLISH_TOKEN_NODE_UNSUPPORTED" ||
@@ -1050,26 +1052,26 @@ public sealed partial class DocumentCanvasHostTests
         Assert.Equal("PUBLISH_TOKEN_GATEWAY_AMBIGUOUS", result.DiagnosticCode);
     }
 
-    private static void InitializePublishDialog(DocumentCanvas component, DocumentCanvasHost host)
+    private static void InitializePublishDialog(BpmnDemoHost component, DocumentCanvasHost host)
     {
-        var state = host.CaptureState();
-        typeof(DocumentCanvas).GetField("_state", BindingFlags.NonPublic | BindingFlags.Instance)!
+        var state = DemoState(host);
+        typeof(BpmnDemoHost).GetField("_state", BindingFlags.NonPublic | BindingFlags.Instance)!
             .SetValue(component, state);
-        typeof(DocumentCanvas).GetMethod(
+        typeof(BpmnDemoHost).GetMethod(
             "InitializePublicationDialogDraft", BindingFlags.NonPublic | BindingFlags.Instance)!
             .Invoke(component, [state, state.Session]);
     }
 
-    private static Task InvokePublishComponentAsync(DocumentCanvas component, string methodName) =>
-        Assert.IsAssignableFrom<Task>(typeof(DocumentCanvas).GetMethod(
+    private static Task InvokePublishComponentAsync(BpmnDemoHost component, string methodName) =>
+        Assert.IsAssignableFrom<Task>(typeof(BpmnDemoHost).GetMethod(
             methodName, BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(component, null));
 
-    private static void InvokePublishComponent(DocumentCanvas component, string methodName) =>
-        typeof(DocumentCanvas).GetMethod(methodName, BindingFlags.NonPublic | BindingFlags.Instance)!
+    private static void InvokePublishComponent(BpmnDemoHost component, string methodName) =>
+        typeof(BpmnDemoHost).GetMethod(methodName, BindingFlags.NonPublic | BindingFlags.Instance)!
             .Invoke(component, null);
 
     private static ServiceProvider PublishComponentServices(
-        PublishComponentActivator activator, PublishDownloadRuntime browser) =>
+        IComponentActivator activator, PublishDownloadRuntime browser) =>
         new ServiceCollection()
             .AddLogging().AddInceptusBpmnModeler()
             .AddSingleton<IJSRuntime>(browser)
@@ -1092,6 +1094,28 @@ public sealed partial class DocumentCanvasHostTests
         public PublishedNodeData Map(
             Inceptus.DocumentEngine.Contracts.Semantics.SemanticElementSnapshot semanticElement) =>
             throw new InvalidOperationException("private implementation detail " + HostilePublishedText);
+    }
+
+    private sealed class DemoPublishComponentActivator(DocumentCanvasHost host) : IComponentActivator
+    {
+        internal PublishTestDemoHost Component { get; private set; } = null!;
+
+        public IComponent CreateInstance(Type componentType)
+        {
+            if (componentType != typeof(BpmnDemoHost))
+            {
+                return (IComponent)Activator.CreateInstance(componentType)!;
+            }
+
+            Component = new PublishTestDemoHost();
+            Component.AttachEditor(host, host.Operations());
+            return Component;
+        }
+    }
+
+    private sealed class PublishTestDemoHost : BpmnDemoHost
+    {
+        internal Task RefreshAsync() => InvokeAsync(StateHasChanged);
     }
 
     private sealed class PublishComponentActivator(DocumentCanvasHost host) : IComponentActivator
@@ -1118,6 +1142,17 @@ public sealed partial class DocumentCanvasHostTests
     {
         internal Task RefreshAsync() => InvokeAsync(StateHasChanged);
     }
+
+    private static DemoHostEditorState DemoState(DocumentCanvasHost host)
+    {
+        var context = host.CaptureEditorContext();
+        return new(context?.Presentation, context is not null, context?.AttachmentVersion ?? 0,
+            context?.Document.Publication, host.Operations().ValidationSnapshot, host.Operations().ValidationInFlight,
+            context?.CanReplaceDocument != true, context?.SurfaceSize);
+    }
+
+    private static void InvokePublishComponent(DocumentCanvas component, string methodName) =>
+        typeof(DocumentCanvas).GetMethod(methodName, BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(component, null);
 
     private sealed class PublishDownloadRuntime : IJSRuntime
     {

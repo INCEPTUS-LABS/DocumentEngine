@@ -61,17 +61,16 @@ public sealed class BpmnModelerFacadeArchitectureTests
             typeof(CancellationToken));
         AssertMethod(nameof(InceptusBpmnModeler.LoadDocumentAsync), typeof(ValueTask<BpmnModelerDocumentResult>),
             typeof(DocumentSnapshot), typeof(CancellationToken));
-        AssertMethod(nameof(InceptusBpmnModeler.ImportNativeDocumentAsync),
-            typeof(ValueTask<BpmnModelerDocumentResult>), typeof(ReadOnlyMemory<byte>), typeof(CancellationToken));
-        AssertMethod(nameof(InceptusBpmnModeler.ImportNativeDocumentAsync),
-            typeof(ValueTask<BpmnModelerDocumentResult>), typeof(ReadOnlyMemory<byte>), typeof(BpmnModelerNativeImportOptions), typeof(CancellationToken));
+        AssertMethod(nameof(InceptusBpmnModeler.GetDocument), typeof(BpmnModelerDocumentResult));
+        AssertMethod(nameof(InceptusBpmnModeler.GetDocumentAsync), typeof(ValueTask<BpmnModelerDocumentResult>), typeof(CancellationToken));
+        AssertMethod(nameof(InceptusBpmnModeler.SetDocumentAsync), typeof(ValueTask<BpmnModelerDocumentResult>), typeof(DocumentSnapshot), typeof(CancellationToken));
+        AssertMethod(nameof(InceptusBpmnModeler.SetDocumentAsync), typeof(ValueTask<BpmnModelerDocumentResult>), typeof(DocumentSnapshot), typeof(BpmnModelerDocumentLoadOptions), typeof(CancellationToken));
         AssertMethod(nameof(InceptusBpmnModeler.AcknowledgeNativeSave), typeof(bool), typeof(BpmnModelerSaveCheckpoint));
         Assert.Equal(typeof(BpmnModelerNativeSaveStatus), typeof(InceptusBpmnModeler)
             .GetProperty(nameof(InceptusBpmnModeler.NativeSaveStatus))!.PropertyType);
-        AssertMethod(nameof(InceptusBpmnModeler.ExportNativeDocumentAsync), typeof(ValueTask<BpmnModelerFileResult>),
-            typeof(CancellationToken));
-        AssertMethod(nameof(InceptusBpmnModeler.PublishAsync), typeof(ValueTask<BpmnModelerFileResult>),
-            typeof(CancellationToken));
+        Assert.Null(typeof(InceptusBpmnModeler).GetMethod("ImportNativeDocumentAsync"));
+        Assert.Null(typeof(InceptusBpmnModeler).GetMethod("ExportNativeDocumentAsync"));
+        Assert.Null(typeof(InceptusBpmnModeler).GetMethod("PublishAsync"));
     }
 
     [Fact]
@@ -179,7 +178,11 @@ public sealed class BpmnModelerFacadeArchitectureTests
         var typeNamespace = type.Namespace ?? string.Empty;
         Assert.False(typeNamespace.StartsWith("Inceptus.DocumentEngine.Runtime", StringComparison.Ordinal),
             $"The ordinary facade exposes runtime type {type.FullName}.");
-        Assert.False(typeNamespace.StartsWith("Inceptus.DocumentEngine.Canvas2D", StringComparison.Ordinal),
+        Type[] immutablePresentationData =
+        [typeof(Inceptus.DocumentEngine.Canvas2D.Publishing.EditingSessionPresentationCaptureResult),
+         typeof(Inceptus.DocumentEngine.Canvas2D.Interaction.Canvas2DInteractionResult)];
+        Assert.False(typeNamespace.StartsWith("Inceptus.DocumentEngine.Canvas2D", StringComparison.Ordinal) &&
+            !immutablePresentationData.Contains(type),
             $"The ordinary facade exposes Canvas2D runtime type {type.FullName}.");
         Assert.False(typeNamespace.StartsWith("Inceptus.DocumentEngine.Bpmn.Blazor.Presentation", StringComparison.Ordinal),
             $"The ordinary facade exposes presentation implementation type {type.FullName}.");

@@ -6,9 +6,9 @@ public sealed class PhaseN104StaticPublishArchitectureTests
     public void PublishControlUsesCompactNativeDownloadBoundaryAndTransientState()
     {
         var component = ReadProductionFile(
-            "Inceptus.DocumentEngine.Bpmn.Blazor",
-            "Components",
-            "DocumentCanvas.razor");
+            "Inceptus.DocumentEngine.Blazor",
+            "Demo",
+            "BpmnDemoHost.razor") + ReadProductionFile("Inceptus.DocumentEngine.Blazor", "Demo", "BpmnDemoHost.razor.cs");
 
         Assert.Contains("id=\"@DomId(\"publish\")\"", component,
             StringComparison.Ordinal);
@@ -113,7 +113,7 @@ public sealed class PhaseN104StaticPublishArchitectureTests
         var host = ReadProductionFile(
             "Inceptus.DocumentEngine.Bpmn.Blazor",
             "Presentation",
-            "DocumentCanvasHost.Publishing.cs");
+            "DocumentCanvasHost.DocumentApi.cs");
         var policy = ReadProductionFile(
             "Inceptus.DocumentEngine.Bpmn",
             "Publishing",
@@ -133,11 +133,11 @@ public sealed class PhaseN104StaticPublishArchitectureTests
         Assert.DoesNotContain("UpdateModelProfileElementViewStateAsync", capture,
             StringComparison.Ordinal);
 
-        Assert.Contains("editorState.ModelProfileViewState", host, StringComparison.Ordinal);
-        Assert.Contains("editorState.ModelProfileElementViewState", host, StringComparison.Ordinal);
+        Assert.Contains("context.Presentation.ModelProfileViewState", host, StringComparison.Ordinal);
+        Assert.Contains("context.Presentation.ModelProfileElementViewState", host, StringComparison.Ordinal);
         Assert.DoesNotContain("WithPreferredVisibility", host, StringComparison.Ordinal);
         Assert.DoesNotContain("CollapsedElements.Where", host, StringComparison.Ordinal);
-        Assert.Contains("BpmnPublishedTokenRoleClassifier", host, StringComparison.Ordinal);
+        Assert.Contains("BpmnPublishedTokenRoleClassifier", ReadProductionFile("Inceptus.Bpmn.Integration", "PublishingPackageGenerator.cs"), StringComparison.Ordinal);
         Assert.Contains("BpmnSemanticTypes", policy, StringComparison.Ordinal);
         Assert.Contains("BpmnSemanticTypes.ParallelGateway", policy, StringComparison.Ordinal);
         Assert.Contains("PublishedTokenRole.ParallelSynchronize", policy,

@@ -105,23 +105,24 @@ public sealed class ModelerLocalizationTests
     }
 
     [Theory]
-    [InlineData("en-GB", "Undo", "Validate", "Issues", "Start Event")]
-    [InlineData("pl-PL", "Cofnij", "Waliduj", "Problemy", "Zdarzenie początkowe")]
-    [InlineData("fr-FR", "Annuler", "Valider", "Problèmes", "Événement de début")]
-    [InlineData("de-DE", "Rückgängig", "Validieren", "Probleme", "Startereignis")]
-    [InlineData("es-ES", "Deshacer", "Validar", "Problemas", "Evento de inicio")]
+    [InlineData("en-GB", "Undo", "Validate", "Not validated", "Start Event")]
+    [InlineData("pl-PL", "Cofnij", "Waliduj", "Nie przeprowadzono walidacji", "Zdarzenie początkowe")]
+    [InlineData("fr-FR", "Annuler", "Valider", "Non validé", "Événement de début")]
+    [InlineData("de-DE", "Rückgängig", "Validieren", "Nicht validiert", "Startereignis")]
+    [InlineData("es-ES", "Deshacer", "Validar", "Sin validar", "Evento de inicio")]
     public async Task LocalizationRendersToolboxToolbarAndStatusInEveryLanguage(
-        string culture, string undo, string validate, string issues, string start)
+        string culture, string undo, string validate, string notValidated, string start)
     {
         using var scope = new ModelerCultureScope(culture);
         using var services = new ServiceCollection().AddLogging().AddInceptusBpmnModeler()
             .AddSingleton<IJSRuntime>(new NoBrowserRuntime()).BuildServiceProvider();
         await using var renderer = new HtmlRenderer(services, NullLoggerFactory.Instance);
-        var root = await renderer.Dispatcher.InvokeAsync(() => renderer.RenderComponentAsync<InceptusBpmnModeler>());
+        var root = await renderer.Dispatcher.InvokeAsync(() => renderer.RenderComponentAsync<BpmnDemoHost>());
         var markup = WebUtility.HtmlDecode(await renderer.Dispatcher.InvokeAsync(root.ToHtmlString));
         Assert.Contains($">{undo}</button>", markup, StringComparison.Ordinal);
         Assert.Contains($">{validate}</button>", markup, StringComparison.Ordinal);
-        Assert.Contains($">{issues}</span>", markup, StringComparison.Ordinal);
+        Assert.Contains($">{notValidated}</span>", markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("issues-toggle", markup, StringComparison.Ordinal);
         Assert.Contains($"title=\"{start}\"", markup, StringComparison.Ordinal);
         var text = services.GetRequiredService<IStringLocalizer<ModelerStrings>>();
         foreach (var group in BpmnModelerCompositionFactory.ToolboxCatalog.Groups)
@@ -163,7 +164,7 @@ public sealed class ModelerLocalizationTests
         Assert.Equal("Cofnij", provider.GetRequiredService<IStringLocalizer<ModelerStrings>>()["Toolbar_Undo"].Value);
         Assert.DoesNotContain(typeof(InceptusBpmnModeler).GetProperties(), property =>
             property.Name is "Language" or "Culture" or "CurrentCulture" or "CurrentUICulture");
-        Assert.False(typeof(ModelerStrings).IsPublic);
+        Assert.True(typeof(ModelerStrings).IsPublic);
     }
 
     internal static void AssertNoResourceKeys(string markup)

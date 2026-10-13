@@ -1,5 +1,68 @@
 # Release notes
 
+## 0.1.10
+
+- Prepares the aligned seven-package family locally after the accepted A3,
+  A3.1 and A3.2 changes. Local preparation does not establish public NuGet
+  availability; public source provenance and publication remain separate steps.
+- Adds `Inceptus.Bpmn.Integration`, depending on Contracts, Runtime, Bpmn,
+  Organizational and Canvas2D without a dependency on editor UI or either Demo.
+  It exposes `BpmnDocumentSerializer`, `BpmnDocumentMigrator`,
+  `BpmnDocumentValidator`, `BpmnStandardConverter` and `PublishingPackageGenerator`.
+- **Public API migration:** the reusable editor exchanges canonical immutable
+  `DocumentSnapshot` through `GetDocument`, `GetDocumentAsync` and atomic
+  `SetDocumentAsync`. Editor-level `ImportNativeDocumentAsync`,
+  `ExportNativeDocumentAsync` and `PublishAsync` are removed. File operations,
+  validation reports/UI and publishing orchestration now belong to the host.
+  Hosts needing these operations reference Integration alongside Bpmn.Blazor.
+  `CaptureDocumentSnapshot` and `LoadDocumentAsync` remain compatibility aliases.
+- Retains native Inceptus.Document formatVersion 2 as the full-fidelity format.
+  The migrator accepts native v2 unchanged and rejects unsupported versions;
+  no native v1 or other legacy migration is introduced. Saved-routing recovery
+  remains an explicit editor attachment option, separate from schema migration.
+- Separates document transfer from model-quality validation. Native JSON and
+  BPMN XML Import/Export do not invoke `BpmnDocumentValidator`; explicit Validate
+  remains independent. Technical parsing, compatibility, reference, geometry
+  and atomic installation failures can still reject a transfer.
+- Adds tolerant BPMN 2.0.2 XML conversion for the supported Process, Event,
+  Activity, Gateway, SubProcess, Sequence Flow, Message Flow, Participant,
+  Pool/Lane, documentation and DI subset. Unsupported non-critical content can
+  be omitted/ignored with structured conversion-loss entries. Technical failures
+  remain separate diagnostics. No full interoperability, executable-process
+  conformance, byte equality or lossless round-trip preservation is claimed.
+- Embeds import-only `Bpmn202ImportProfile.xml` / `.xsd` and the five normative
+  OMG BPMN schemas. `BpmnImportProfile.Default` and `Load(string)` / `Load(Stream)`
+  provide validated import policy. Treatment and optional loss reporting are
+  independent: defaults, metadata and derivable information can be silent;
+  configured real losses produce `Ignored`. Export is code-defined and has no
+  profile parameter; unsupported native information produces `Omitted` entries.
+- Imports supported file content into one main Inceptus diagram, preserving
+  nested SubProcess navigation. At most one effective Collaboration and one
+  unassigned top-level Process are supported; ambiguous excess structures fail
+  explicitly before replacing the active document. A2 effective Participant,
+  Pool/Lane and Sequence/Message Flow ownership remain authoritative. Export
+  may represent that main diagram as several standard BPMN processes.
+- Retains existing History and routing preparation. Graphical hosts use
+  `BpmnStandardConverter.ImportAsync` with the established geometry/routing
+  preparer. DI geometry and connector waypoints are retained where representable
+  and may be normalized; no second routing engine or arbitrary DI preservation
+  guarantee is introduced.
+- The internal reference host offers compact Import/Export format menus,
+  independent Validate and Publish actions, combined validation status/Issues,
+  and dismissible feedback. Repeated conversion losses are grouped with affected
+  source details. BPMN Export downloads `document.xml` as
+  `application/xml;charset=utf-8`; `.bpmn` remains an import alias. Successful
+  BPMN interchange export does not mark the native document saved.
+- Publishing uses a document and matching immutable presentation capture in
+  `PublishingPackageGenerator`, retaining the standalone PublishedProcess ZIP
+  formatVersion 1 and existing publication eligibility restrictions.
+- Extends the strict release inspector and existing workflows to all seven
+  package/symbol pairs, including Integration's embedded resources. Retains
+  net10.0, existing external dependency versions, minimum family dependency
+  ranges, exact Canvas2D-to-Runtime constraint, MIT metadata, documentation,
+  third-party notices and portable symbols. NuGet package version, native
+  document version and BPMN standard version remain distinct.
+
 ## 0.1.9
 
 - Prepares the aligned package family locally after the accepted A2 changes.

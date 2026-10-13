@@ -138,9 +138,8 @@ public sealed class InceptusBpmnModelerFacadeComponentTests
                 BpmnModelerOperation.Capture,
                 BpmnModelerOperation.New,
                 BpmnModelerOperation.Load,
-                BpmnModelerOperation.Import,
-                BpmnModelerOperation.Export,
-                BpmnModelerOperation.Publish,
+                BpmnModelerOperation.Capture,
+                BpmnModelerOperation.Capture,
             },
             notifications.Select(notification =>
             {

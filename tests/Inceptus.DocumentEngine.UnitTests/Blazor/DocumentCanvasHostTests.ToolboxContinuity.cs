@@ -43,7 +43,7 @@ public sealed partial class DocumentCanvasHostTests
         await test.Host.RefreshToolboxPlacementAsync();
         await test.DrainAsync();
         var initialMarkup = await test.MarkupAsync();
-        Assert.Contains("class=\"canvas-diagnostics\"", initialMarkup, StringComparison.Ordinal);
+        Assert.Contains("class=\"editor-status-row\"", initialMarkup, StringComparison.Ordinal);
         Assert.DoesNotContain("role=\"alert\"", DiagnosticSlot(initialMarkup), StringComparison.Ordinal);
         var uploads = test.Execution.FullUploadCount;
 
@@ -83,7 +83,7 @@ public sealed partial class DocumentCanvasHostTests
 
     private static string DiagnosticSlot(string markup)
     {
-        var match = Regex.Match(markup, "<div class=\"canvas-diagnostics\"[^>]*>(.*?)</div>",
+        var match = Regex.Match(markup, "<footer[^>]*class=\"editor-status-row\"[^>]*>(.*?)</footer>",
             RegexOptions.Singleline | RegexOptions.CultureInvariant);
         Assert.True(match.Success);
         return match.Groups[1].Value;

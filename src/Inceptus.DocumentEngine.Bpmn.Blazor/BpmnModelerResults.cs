@@ -125,6 +125,8 @@ public sealed class BpmnModelerFileResult
 
     public BpmnModelerFileArtifact? Artifact { get; }
 
+    public ImmutableArray<byte> Payload => Artifact?.Content ?? [];
+
     /// <summary>Exact native capture; acknowledge only after the consumer successfully stores its bytes.</summary>
     public BpmnModelerSaveCheckpoint? SaveCheckpoint { get; }
 

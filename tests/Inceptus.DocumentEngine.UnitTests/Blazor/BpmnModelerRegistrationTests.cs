@@ -48,7 +48,7 @@ public sealed class BpmnModelerRegistrationTests
         Assert.Empty(first.Document.VisualModel.VisualStates);
         Assert.NotNull(first.ToolboxPlacementCatalog);
         Assert.NotNull(first.PropertiesSchemaCatalog);
-        Assert.NotNull(first.ModelValidationCatalog);
+        Assert.Null(first.GetType().GetProperty("ModelValidationCatalog", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance));
         Assert.NotNull(first.BackgroundActionCatalog);
         var policy = first.Configuration.ConnectorAnchorPolicyProvider.Resolve(
             BpmnSemanticTypes.StartEvent);

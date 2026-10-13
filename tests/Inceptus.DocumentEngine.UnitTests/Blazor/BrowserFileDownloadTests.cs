@@ -21,7 +21,7 @@ public sealed class BrowserFileDownloadTests
         var import = Assert.Single(runtime.Invocations);
         Assert.Equal("import", import.Identifier);
         Assert.Equal(
-            "./_content/Inceptus.DocumentEngine.Bpmn.Blazor/inceptus.presentation.js",
+            "./inceptus.documents.js",
             Assert.Single(import.Arguments));
         var download = Assert.Single(module.Invocations);
         Assert.Equal("downloadFile", download.Identifier);

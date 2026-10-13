@@ -213,6 +213,8 @@ public sealed class PhaseL56ConnectorEndpointArchitectureTests
                     !ApprovedOrganizationalProjectChanges.IsApproved(path) &&
                     !ApprovedN104Changes.IsApprovedProjectPath(path) &&
                     !ApprovedP11PackageFoundationChanges.IsApprovedProjectPath(path) &&
+                    // A3.2 embeds its XML compatibility profile and XSD in the existing integration package.
+                    !string.Equals(path, "src/Inceptus.Bpmn.Integration/Inceptus.Bpmn.Integration.csproj", StringComparison.OrdinalIgnoreCase) &&
                     !ApprovedP12ReusableBpmnBlazorChanges.IsApprovedProjectPath(path) ||
                 path.EndsWith("packages.lock.json", StringComparison.OrdinalIgnoreCase) ||
                 path.Contains("Serialization", StringComparison.OrdinalIgnoreCase) &&

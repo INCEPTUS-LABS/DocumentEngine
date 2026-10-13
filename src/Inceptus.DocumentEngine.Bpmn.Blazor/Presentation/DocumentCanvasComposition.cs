@@ -8,7 +8,6 @@ using Inceptus.DocumentEngine.Contracts.EndpointReconnection;
 using Inceptus.DocumentEngine.Contracts.Properties;
 using Inceptus.DocumentEngine.Contracts.ScopeNavigation;
 using Inceptus.DocumentEngine.Contracts.Toolbox;
-using Inceptus.DocumentEngine.Contracts.Validation;
 using Inceptus.DocumentEngine.Runtime.Documents;
 
 namespace Inceptus.DocumentEngine.Bpmn.Blazor.Presentation;
@@ -37,7 +36,6 @@ internal sealed record DocumentCanvasComposition
         IDocumentCreationIdentityProvider? documentCreationIdentityProvider = null,
         ConnectorEndpointReconnectionCatalog? endpointReconnectionCatalog = null,
         DiagramDeletionCatalog? deletionCatalog = null,
-        ModelValidationCatalog? modelValidationCatalog = null,
         ScopeNavigationCatalog? scopeNavigationCatalog = null,
         CanvasBackgroundActionCatalog? backgroundActionCatalog = null,
         SemanticSceneViewActionCatalog? semanticSceneViewActionCatalog = null,
@@ -59,7 +57,6 @@ internal sealed record DocumentCanvasComposition
         EndpointReconnectionCatalog = endpointReconnectionCatalog ??
             ConnectorEndpointReconnectionCatalog.Empty;
         DeletionCatalog = deletionCatalog ?? DiagramDeletionCatalog.Empty;
-        ModelValidationCatalog = modelValidationCatalog ?? ModelValidationCatalog.Empty;
         ScopeNavigationCatalog = scopeNavigationCatalog ?? ScopeNavigationCatalog.Empty;
         BackgroundActionCatalog = backgroundActionCatalog ??
             CanvasBackgroundActionCatalog.Empty;
@@ -88,7 +85,6 @@ internal sealed record DocumentCanvasComposition
 
     internal DiagramDeletionCatalog DeletionCatalog { get; }
 
-    internal ModelValidationCatalog ModelValidationCatalog { get; }
 
     internal ScopeNavigationCatalog ScopeNavigationCatalog { get; }
 

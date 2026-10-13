@@ -12,9 +12,9 @@ namespace Inceptus.DocumentEngine.Bpmn.Blazor;
 
 // Presentation adapters for the modeler's built-in definitions. Definitions and their IDs
 // remain authoritative; translated labels are never written back into a catalog or Document.
-internal static class ModelerLabels
+public static class ModelerLabels
 {
-    internal static string? ValidationTargetName(DocumentSnapshot document, SemanticElementId id)
+    public static string? ValidationTargetName(DocumentSnapshot document, SemanticElementId id)
     {
         if (!document.SemanticModel.TryGetRelationship(id, out var relationship) ||
             relationship?.TypeId != BpmnSemanticTypes.MessageFlow ||

@@ -63,6 +63,7 @@ public sealed partial class DocumentCanvasHostTests
         var document = AttachedDocument(session);
         var snapshot = document.CaptureSnapshot();
         var before = host.CaptureState();
+        var beforeValidation = host.Operations().ValidationSnapshot;
         var native = NativeDocumentSerializer.Export(snapshot);
         await notifications.Pending;
         var eventCount = events.Count;
@@ -102,7 +103,7 @@ public sealed partial class DocumentCanvasHostTests
         Assert.Equal(before.Session.HistoryStatus, after.Session.HistoryStatus);
         Assert.Same(before.Session.EditorState, after.Session.EditorState);
         Assert.Same(before.Session.CurrentScene, after.Session.CurrentScene);
-        Assert.Same(before.ValidationSnapshot, after.ValidationSnapshot);
+        Assert.Same(beforeValidation, host.Operations().ValidationSnapshot);
         Assert.Equal(before.SuccessfulRenderCount, after.SuccessfulRenderCount);
         Assert.Equal(native.ToArray(), NativeDocumentSerializer.Export(snapshot).ToArray());
         await notifications.Pending;

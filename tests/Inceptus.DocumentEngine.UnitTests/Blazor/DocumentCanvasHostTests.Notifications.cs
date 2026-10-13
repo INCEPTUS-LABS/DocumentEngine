@@ -70,7 +70,7 @@ public sealed partial class DocumentCanvasHostTests
         Assert.Equal(BpmnModelerOperationStatus.Failed, failure.Status);
         Assert.Equal("BPMN_MODELER_STARTUP_FAILED", Assert.Single(failure.Diagnostics).Code);
         Assert.Null(host.CaptureState().Session);
-        Assert.Null(host.CaptureState().ValidationSnapshot);
+        Assert.Null(host.Operations().ValidationSnapshot);
     }
 
     [Fact]
@@ -464,7 +464,7 @@ public sealed partial class DocumentCanvasHostTests
             var loadResult = await loadOperation.WaitAsync(TimeSpan.FromSeconds(10));
             var newResult = await newOperation.WaitAsync(TimeSpan.FromSeconds(10));
 
-            Assert.Equal(NativeDocumentHostOperationStatus.Cancelled, loadResult.Status);
+            Assert.Equal(BpmnModelerOperationStatus.Cancelled, loadResult.Status);
             Assert.True(newResult.Succeeded);
             Assert.Equal(installed, newResult.Snapshot);
             Assert.Equal(generation, host.CaptureState().DocumentSessionVersion);

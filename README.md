@@ -1,7 +1,7 @@
 # Inceptus Document Engine
 
 A reusable BPMN modeler with immutable native documents and a standalone process
-presentation export. This README describes the locally prepared **0.1.9** release
+presentation export. This README describes the locally prepared **0.1.10** release
 candidate targeting **net10.0**; public publication is a separate step.
 
 [Open BPMN Editor](https://bpmn-editor.inceptus.online)
@@ -10,26 +10,28 @@ candidate targeting **net10.0**; public publication is a separate step.
 
 | Package | Intended entry point |
 | --- | --- |
-| `Inceptus.DocumentEngine.Bpmn.Blazor` | Ordinary BPMN modeler integration through the component and public facade below. |
+| `Inceptus.DocumentEngine.Bpmn.Blazor` | Reusable BPMN editor and immutable document exchange. |
+| `Inceptus.Bpmn.Integration` | Native serialization, version compatibility, explicit document validation, BPMN 2.0.2 conversion and publishing package generation. |
 | `Inceptus.DocumentEngine.Contracts` | Advanced, notation-neutral immutable models and extension contracts; the snapshot graph is also part of ordinary facade input/output. |
 | `Inceptus.DocumentEngine.Runtime` | Advanced headless document, command, processing and History infrastructure. |
 | `Inceptus.DocumentEngine.Bpmn` | Advanced BPMN semantics, commands, validation and plugin contributions. |
 | `Inceptus.DocumentEngine.Organizational` | Advanced Organizational profile composition, independent of the browser renderer. |
 | `Inceptus.DocumentEngine.Canvas2D` | Advanced browser/session integration, generic Canvas2D rendering and standalone Publish construction. |
 
-Use the six packages as an **aligned version family**. The top-level modeler package brings the lower packages transitively; ordinary hosts need only that explicit Inceptus reference. Independent mixed family versions are unsupported and unverified. Canvas2D requires its matching Runtime version because it consumes Runtime's internal History contract. Other dependency ranges retain their existing minimum-version policy. A direct dependency override can still produce an incompatible graph and a NuGet warning; the constraint is not a runtime compatibility guarantee.
+Use the seven packages as an **aligned version family**. The modeler and Integration are separate entry points: hosts performing document transfer, validation or publishing reference both. Each brings its lower packages transitively. Integration depends on Contracts, Runtime, Bpmn, Organizational and Canvas2D; it does not depend on the editor UI or Demo. Independent mixed family versions are unsupported and unverified. Canvas2D requires its matching Runtime version because it consumes Runtime's internal History contract. Other dependency ranges retain their existing minimum-version policy. A direct dependency override can still produce an incompatible graph and a NuGet warning; the constraint is not a runtime compatibility guarantee.
 
 In 0.1.9, `Inceptus.DocumentEngine.Bpmn` depends on both Contracts and
 Organizational. It uses Organizational's Pool membership, Participant assignment
 and region geometry for BPMN flow rules and editing. These dependencies resolve
-transitively; ordinary modeler hosts still need only the Bpmn.Blazor reference.
+transitively; hosts using only editing still need only the Bpmn.Blazor reference.
 
 ## Embed the modeler
 
 The validated hosting model is a **standalone Blazor WebAssembly application** on .NET 10. Configure a feed containing the reviewed candidate before adding the package:
 
 ```xml
-<PackageReference Include="Inceptus.DocumentEngine.Bpmn.Blazor" Version="0.1.9" />
+<PackageReference Include="Inceptus.DocumentEngine.Bpmn.Blazor" Version="0.1.10" />
+<PackageReference Include="Inceptus.Bpmn.Integration" Version="0.1.10" />
 ```
 
 Register the modeler in the application's `Program.cs`. The extension namespace is `Microsoft.Extensions.DependencyInjection`:
@@ -146,7 +148,7 @@ Document names, property values, diagnostic identities and canonical diagnostic 
 
 The component owns its live Document, editing session, History and browser resources. Hosts exchange immutable `DocumentSnapshot` graphs, immutable diagnostic/result objects and copied file bytes. Do not retain a mutable engine runtime through ordinary integration.
 
-`InitialDocument` is consumed **once**, at initialization. A supplied snapshot takes precedence over the advanced startup provider. Null uses the provider if one is registered, otherwise canonical empty startup. Later parameter changes do not replace the document: call `LoadDocumentAsync` explicitly. Two components reconstruct independent live state even from the same initial snapshot.
+`InitialDocument` is consumed **once**, at initialization. A supplied snapshot takes precedence over the advanced startup provider. Null uses the provider if one is registered, otherwise canonical empty startup. Later parameter changes do not replace the document: call `SetDocumentAsync` explicitly. Two components reconstruct independent live state even from the same initial snapshot.
 
 - `Ready`: `EventCallback<BpmnModelerReadyEventArgs>`, once after successful initial attachment; `Snapshot` is the initial persistent state. Attachment alone does not emit `DocumentChanged`.
 - `DocumentChanged`: `EventCallback<BpmnModelerDocumentChangedEventArgs>`; exposes `Snapshot` and `Kind` (`PersistentMutation` or `DocumentReplacement`). Accepted persistent edits, Undo/Redo and replacements notify; selection, pan/zoom, scope navigation, validation alone and transient visibility do not.
@@ -154,40 +156,254 @@ The component owns its live Document, editing session, History and browser resou
 
 Callback **invocation** is ordered. Arbitrary asynchronous consumer callbacks may complete in a different order and may await subsequent modeler operations. Callback exceptions do not roll back committed changes. Track DocumentId together with revision: replacing a document can legitimately lower the revision number. Disposal and retired sessions suppress stale notifications.
 
-## Public lifecycle and file operations
+## Editor document API and host operations (A3)
 
-The component namespace is `Inceptus.DocumentEngine.Bpmn.Blazor.Components`. Result/event types are in `Inceptus.DocumentEngine.Bpmn.Blazor`; `DocumentSnapshot` is in `Inceptus.DocumentEngine.Contracts.Documents`.
+**Public API migration from 0.1.9:** native Import/Export and Publish facade methods were removed;
+application-level Import/Export/Validate/Publish controls and validation reporting now belong to the host.
+Add the Integration PackageReference above and move file selection, downloads and operation feedback to your host.
+Do not replace removed methods with editor internals or source/DLL references.
+
+| Previous integration | A3 host responsibility |
+| --- | --- |
+| `ImportNativeDocumentAsync` | Deserialize bytes, check native version with the migrator, call `SetDocumentAsync` with saved-routing verification. |
+| `ExportNativeDocumentAsync` | Capture with `GetDocumentAsync`, serialize, download, acknowledge the matching native save checkpoint only after successful storage. |
+| Editor Validate / Issues | Explicitly call `BpmnDocumentValidator` and present its report; no automatic validation during Import/Export. |
+| `PublishAsync` | Capture and validate the document, capture its matching immutable presentation, invoke `PublishingPackageGenerator`, download the ZIP. |
+| BPMN XML exchange | Use `ImportAsync` with the existing routing/geometry preparer and atomic installation; use code-defined `Export` and download `document.xml`. Report conversion losses separately from operation failures. |
+
+`BpmnDocumentSerializer` and `BpmnDocumentMigrator` are static services. Create `BpmnDocumentValidator` and
+`PublishingPackageGenerator` as host-owned services. Native JSON is the full-fidelity persistence format;
+BPMN XML is a potentially lossy interchange format and must not acknowledge a native save checkpoint.
+See the source Demo below for composition, technical rejection handling and validation-state invalidation.
+
+The canonical document remains `DocumentSnapshot` from `Inceptus.DocumentEngine.Contracts.Documents`.
+The reusable editor implements `IBpmnDocumentEditor`. Its document API is:
 
 ```csharp
-BpmnModelerDocumentResult CaptureDocumentSnapshot();
-ValueTask<BpmnModelerDocumentResult> NewDocumentAsync(
-    CancellationToken cancellationToken = default);
-ValueTask<BpmnModelerDocumentResult> LoadDocumentAsync(
+BpmnModelerDocumentResult GetDocument();
+ValueTask<BpmnModelerDocumentResult> GetDocumentAsync(CancellationToken cancellationToken = default);
+ValueTask<BpmnModelerDocumentResult> SetDocumentAsync(
     DocumentSnapshot? document, CancellationToken cancellationToken = default);
-ValueTask<BpmnModelerDocumentResult> ImportNativeDocumentAsync(
-    ReadOnlyMemory<byte> utf8Json, CancellationToken cancellationToken = default);
-ValueTask<BpmnModelerFileResult> ExportNativeDocumentAsync(
-    CancellationToken cancellationToken = default);
-ValueTask<BpmnModelerFileResult> PublishAsync(
-    CancellationToken cancellationToken = default);
 ```
 
-Invoke operations after Ready and inspect `Succeeded`, `Status` and `Diagnostics`. Status is one of `Succeeded`, `Rejected`, `Unavailable`, `Failed`, `Cancelled`. Successful document results have a `Snapshot`; successful file results have an `Artifact`. On other outcomes these payloads are null. `BpmnModelerFileArtifact` exposes `FileName`, `ContentType` and immutable byte `Content`.
+The asynchronous capture waits for accepted mutations. Neither capture method serializes, validates or creates files.
+`SetDocumentAsync` installs a prepared snapshot atomically in a fresh session with fresh History and editor state.
+It preserves supplied identities; failure or cancellation retains the previous usable editor. Editing commands and Undo/Redo
+continue through the existing session. `CaptureDocumentSnapshot` and `LoadDocumentAsync` remain compatibility aliases;
+`NewDocumentAsync` remains an editor lifecycle operation.
 
-Capture and Export do not change persistent state, History, selection or viewport. Programmatic New creates a fresh empty identity without displaying the toolbar confirmation dialog. Load and Import reconstruct the supplied persistent identity, revision and content into a fresh session with fresh History, without mutating caller input. Replacement is not an undoable document-edit command. Failed or cancelled candidate replacement leaves the previous document authoritative and usable.
+Inspect `Succeeded`, `Status`, `Snapshot` and `Diagnostics` on document results. Status is one of
+`Succeeded`, `Rejected`, `Unavailable`, `Failed`, `Cancelled`. The editor no longer offers
+`ImportNativeDocumentAsync`, `ExportNativeDocumentAsync` or `PublishAsync`, or renders Import/Export/Validate/Publish controls.
+Immutable file-result and save-checkpoint contracts remain available to hosts.
 
-Native import/export uses **Inceptus.Document JSON, formatVersion 2**. Version 2 persists routing and spatial geometry for compatible Save/Open reproduction; native v1 documents are intentionally not accepted. Public byte APIs do not open a file picker or initiate a download; the consumer chooses storage/delivery. The toolbar retains its own file and confirmation UI. Export, Import and Load are not persistence or autosave services.
+The internal demo's `BpmnDemoHost` and `DemoDocumentOperations` are the reference host implementation:
+
+- Import: host reads bytes, `BpmnDocumentSerializer.Deserialize`, `BpmnDocumentMigrator.Migrate`,
+  then `SetDocumentAsync` with the existing atomic attachment/integrity checks.
+- Export: `GetDocumentAsync`, serializer, host download, then acknowledge the issued save checkpoint.
+- Validate: capture the document and immutable view context, run the integration validator, and display the report in the host.
+- Publish: capture the document, validate, capture immutable presentation data, generate the package, and download it in the host.
+
+Import and Export do not invoke `BpmnDocumentValidator` or run model-quality rules. Technical format, compatibility,
+reconstruction and routing-integrity failures can still block transfer. A document with model-quality errors or warnings
+can be transferred; the user chooses when to Validate. The package builder retains its existing publication eligibility checks.
+Validation does not change the document.
+Rules remain in the notation packages, composed by the integration validator; the editor holds no document-validation report.
+
+`CaptureEditorContext` and `ViewChanged` let a host track attachment, scope and edit availability without a live runtime handle.
+`SelectVisualAsync` provides guarded issue-target selection. `CapturePresentationAsync` supplies immutable active-view data;
+`UpdatePublicationAsync` edits publication metadata through the existing command/history path. Save checkpoint issuance and
+acknowledgement track externally completed storage without performing it.
+
+Native JSON remains **Inceptus.Document, formatVersion 2**. The migrator accepts v2 unchanged and explicitly rejects
+unsupported versions; no legacy migrations exist. The optional `BpmnModelerDocumentLoadOptions` overload preserves saved-routing
+verification and opt-in incompatible-v2 recovery during attachment. This requires the editor's renderer metrics and routing
+configuration and is an internal attachment precondition, not schema migration. Recovered content remains unsaved.
+
+`BpmnStandardConverter` converts the supported interchange subset of **BPMN 2.0.2**. Native schema version and BPMN
+standard version remain separate concepts. Conversion is deliberately lossy; it is not executable-process certification.
+
+```csharp
+var imported = BpmnStandardConverter.Import(xml);
+// To retain DI paths, supply the host's existing routing/geometry preparer:
+var prepared = await BpmnStandardConverter.ImportAsync(xml, routingPreparer, cancellationToken);
+var exported = BpmnStandardConverter.Export(document);
+// Check Succeeded before using Document / Xml. Display or persist ConversionLog in the host.
+```
+
+Each result contains `Document` or `Xml`, `Diagnostics`, `ConversionLog`, `Succeeded` and `HasLosses`.
+`ConversionLog` contains only conversion losses: `Omitted` native information on export and `Ignored` BPMN information
+on import, with a stable code, message, source identity, property and optional target identity. Successful mappings are
+not logged. `Diagnostics` separately contains technical conversion errors/advisories; it does not duplicate losses or
+include model-validation findings. Failure returns neither a partial Document nor partial XML.
+
+| Mapping | Behavior |
+| --- | --- |
+| Process roots / nested scopes | Top-level processes and collaborations; owned scopes become embedded SubProcesses. No executable behavior is claimed. |
+| Events | None Start/End; intermediate Message/Signal catch/throw and Timer catch; Timer/Message/Signal Boundary Events with attachment and interruption flag. |
+| Tasks / gateways | Task, User, Manual, Service, Send, Receive; Exclusive, Inclusive, Parallel, Event-based gateways. |
+| Flows | Sequence and Message Flows, endpoint IDs, names and documentation; existing A2 endpoint/ownership rules apply. |
+| Participants / Pools / Lanes | Standalone A2 Pool becomes a Participant/process. Pools assigned to one A2 Participant become lanes of its process. Embedded SubProcess Pools become lanes. Explicit membership is authoritative; legacy process references do not infer membership. |
+| IDs / text | Valid XML IDs preserved; other native IDs encoded collision-free with diagnostics. Names and plain descriptions map to name/documentation. |
+| DI | Shape bounds, saved caption bounds, explicit label positions and ordered saved connector waypoints. Existing projection supplies Pool/Participant envelopes. |
+
+Import uses a fresh revision and deterministic native defaults. Unnamed nodes requiring a native display name use their ID,
+with a diagnostic. Script/Business Rule Tasks and Call Activities retain their abstract Task/flow structure while specialized
+behavior is logged as ignored. Transactions and ad-hoc SubProcesses retain their embedded graph as ordinary SubProcesses.
+Triggered Start/End events retain their base event; unsupported definitions are logged. For an Intermediate/Boundary event
+with several definitions, the first supported definition in XML order supplies its native kind; all other definitions are logged.
+Timer text is retained; on export only recognizable ISO date/duration/repeating-interval literals are classified. Untyped custom
+expressions are omitted with diagnostics. No Inceptus XML extensions are emitted.
+
+Unsupported BPMN data objects/stores/associations, execution expressions, resources, messages/signals payload definitions,
+choreography/conversation content, nested lane hierarchy, extra diagram representations, foreign extensions and attributes are
+ignored and logged. Unmapped process information has no native process-object property bag and is logged as ignored; compatible
+defaults and neutral interchange metadata are accepted by the import profile below. Multiple documentation
+blocks become one plain-text description. Black-box Participants use empty A2 Pools; direct Participant endpoints use the existing
+Participant header plus an assigned Pool. The absence of a process/black-box marker is not preserved on subsequent export.
+
+Native Code/ElementNumber, publishing metadata other than the exported definitions name, revision, custom/profile properties,
+unmapped semantic kinds, anchor identities, pinning, routing mode, manual-route editing intent and routing proofs are omitted and
+logged. Their visible geometry is converted where available. No layout, routing, file download or editor mutation runs on export.
+
+Synchronous `Import` retains DI node bounds and endpoint attachment geometry, but explicitly logs omitted connector paths;
+normal editor attachment prepares initial geometry. Use `ImportAsync` for DI path retention and for Message Flow diagrams.
+It uses the supplied existing `IConnectorRoutingStatePreparer`: process layout first, then Message Flows, then supported Pool
+dimension intents. DI paths become Manual routes. Native minimum geometry, boundary attachment, anchor and Pool policies can
+normalize coordinates; changes are logged. Negative diagram origins are translated. Additional visuals use the first source-ordered
+representation. Missing DI uses normal layout; there is no second routing engine. Pool/Lane frame placement and font measurement
+are native presentation policies, so visual equality is not promised for arbitrary third-party layouts.
+
+Import/export validate against the bundled, unmodified [OMG BPMN 2.0.2 schemas](https://www.omg.org/spec/BPMN/2.0.2/About-BPMN)
+offline. Namespace URIs, not prefixes, identify BPMN and DI. Export uses the standard MODEL/BPMNDI/DD namespaces and a document-specific
+`urn:inceptus:bpmn:` target namespace. Local qualified references are supported; external structural documents are not fetched.
+DTD/entity expansion is disabled; XML is limited to 16,777,216 characters and 128 nested levels. Document reconstruction,
+required ownership/reference checks and XML schema checks guard technical conversion integrity. Model validation does not
+run at this boundary; import requires a coherent native result. Conversion does not change the validator's rules.
+
+Blocking cases include malformed/schema-invalid XML, duplicate identities, missing/omitted required endpoints, incompatible attachment,
+unresolved external structural references, ambiguous Participant/process sharing or Lane membership, cross-scope/Participant Sequence
+Flows, nonrepresentable Message Flow ownership, and failed native geometry preparation. Unsupported isolated content is omitted instead.
+The reference import produces **one main Inceptus diagram**, containing the Collaboration's Participants/Pools plus at most
+one top-level process that no Participant references through `processRef`. Embedded SubProcesses retain their nested scopes.
+More than one such unassigned process fails with `BPMN_IMPORT_MULTIPLE_UNASSIGNED_PROCESSES` (including names/IDs);
+more than one Collaboration fails with `BPMN_IMPORT_MULTIPLE_COLLABORATIONS`. These are Inceptus compatibility limits,
+not BPMN validity rules or model-quality validation. No process is selected silently and no artificial Pool is generated for this purpose.
+Independent DI planes use the existing geometry preparation. If an explicitly positioned unassigned node still overlaps a Pool
+from another plane, `BPMN_IMPORT_DI_COMPOSITION_UNSUPPORTED` rejects composition instead of inventing an arrangement.
+Synchronous import checks supplied DI bounds; asynchronous import compares prepared nodes and Pool envelopes in scope coordinates.
+The existing unassigned-region placement can resolve overlapping source planes, so a file rejected by the unprepared synchronous path can succeed through the normal asynchronous host import.
+One Inceptus main diagram can still export as several standard processes: one per effective Participant, plus one for its
+unassigned elements. Export mappings remain code-defined. Ordinary imported documents have no process/view selector;
+SubProcess breadcrumbs remain available, and legacy native documents with peer root scopes retain their scope selector.
+Round-trip tests compare supported types, names/descriptions, containment, membership, topology and representable DI; they do not use
+XML bytes or whole `DocumentSnapshot.Equals()` as the interchange criterion.
+
+The internal demo offers compact **Import** and **Export** format menus: **Inceptus JSON** (full fidelity) and
+**BPMN 2.0.2** (potentially lossy interchange). BPMN import uses `.xml` (`.bpmn` remains an accepted alias), accepts files up to 16 MiB and uses
+`ImportAsync` with the existing routing preparer, notation registrations and bundled browser font measurements.
+The host passes the prepared snapshot to `SetDocumentAsync`; failed conversion or edits made during preparation
+leave the current document intact. BPMN export converts the current snapshot and downloads UTF-8 `document.xml`
+with MIME type `application/xml;charset=utf-8` without acknowledging a native save. Neither workflow invokes diagram validation.
+The dismissible host feedback panel separates **Conversion losses** (Omitted/Ignored) from **Operation feedback**
+(technical conversion/read/download failures and advisories). Explicit **Validate** alone creates the host validation report.
+The host toolbar shows **Not validated** until a current report exists, then replaces it with clickable **Errors / Warnings / Info**
+counts that open the existing dismissible Issues panel (including a zero-issue report). Editing or changing scope invalidates
+the report and hides the counts again; it does not run validation automatically.
+Publish retains its existing validation and publication behavior.
+
+`Bpmn202ImportProfile.xml` is the authoritative declarative policy for interpreting BPMN 2.0.2 during import.
+It lives in `src/Inceptus.Bpmn.Integration`, with namespace `urn:inceptus:bpmn:import-profile:1`, profile version `1`,
+standard `BPMN`, and standard version `2.0.2`. **BPMN export is code-defined and is not configured by the import profile.**
+The adjacent `Bpmn202ImportProfile.xsd` validates the vocabulary; the loader also rejects conflicting rules,
+unresolved/unknown element QNames, unknown attributes and unsupported action/strategy combinations. Both files are embedded
+in the integration assembly. `BpmnImportProfile.Default` loads and validates once into immutable typed `ImportRules`.
+The `BpmnImportProfile` XML root directly contains `Fallback`, `Element` and `Transformation` rules; there are no
+direction wrappers, Export bindings, or reserved Export configuration. Elements match namespace URI plus local name,
+independently of the prefixes in imported XML. DTDs and external entities are prohibited, and profiles are limited to 1,048,576 characters.
+
+The profile distinguishes actual source-information loss from compatible BPMN defaults. `exporter`/`exporterVersion`
+are neutral metadata; non-executable/open processes, `processType=None`, horizontal Pool/Lane shapes, ordinary Activities,
+ordinary SubProcesses and the default Event-Based Gateway properties do not generate losses. Non-default unsupported
+execution properties retain the base structure and report only the lost property. Boolean `0`/`1` and equivalent whole-number
+lexical values are compared by value. Plain documentation text is mapped; other text formats retain text and report formatting
+loss. Gateway direction is accepted when it matches retained Sequence Flow topology (multiple incoming/outgoing flows determine
+Converging/Diverging/Mixed); disagreement is reported. Missing Code/ElementNumber uses the existing deterministic native policy
+without a routine warning. Required native name fallbacks and exceptional preparation advisories remain separate diagnostics.
+
+`action` defines how imported source information is treated. The optional `Report` independently defines whether that
+treatment represents a reportable loss of source information. No `Report` means no loss entry; a
+`Report disposition="Ignored"` produces an import loss. There is no explicit `None` disposition and no `Omit` action.
+The general conversion-result contract retains `Omitted` for code-defined export losses.
+
+| Profile action | Treatment |
+| --- | --- |
+| `Map` | Use an existing converter binding to retain source information. |
+| `AcceptDefault` | Accept the native/default assumption. |
+| `AcceptMetadata` | Accept neutral standard interchange metadata. |
+| `AcceptDerived` | Verify derivability using the code-defined topology strategy; use the optional report on disagreement. |
+| `Normalize` | Use the existing native normalization. |
+| `Degrade` | Use an existing supported base mapping. |
+| `Ignore` | Ignore the unsupported or intentionally irrelevant information. |
+
+Default policy examples:
+
+| Source | Action | Report |
+| --- | --- | --- |
+| Pool/Lane `isHorizontal` missing or `true` | `AcceptDefault` | None |
+| Pool/Lane `isHorizontal=false` | `Normalize` to horizontal | `Ignored`: vertical orientation changed |
+| Process `isExecutable` missing or `false` | `AcceptDefault` | None |
+| Process `isExecutable=true` | `Ignore` execution semantics, retain Process | `Ignored` |
+| `definitions.exporter` / `exporterVersion` | `AcceptMetadata` | None |
+| `dataObject` | `Ignore` | `Ignored`: unsupported data information |
+
+For an alternate policy that deliberately considers a supported ignore binding irrelevant, `<Behavior action="Ignore" />`
+is silent. Adding an `Ignored` Report to that same Behavior changes only loss reporting, not the treatment. Similarly,
+`Normalize` without Report is silent and should be chosen only when the normalization is semantically equivalent from
+the host's perspective. The shipped default still reports unsupported data and meaningful geometry changes.
+
+Each `Element` selects namespace-qualified names via `qnames`; a list shares inherited Activity/Gateway rules without copying
+them. Disjoint blocks for the same QName merge; conflicting duplicate attributes, behaviors or normalized values fail explicitly.
+Attributes use `Missing`, explicit `Value` and `Any` rules. Only finite typed contexts/strategies are supported; the profile contains
+no scripts, expressions or executable method names. Structural relationships and geometry formulas remain in code;
+profiles cannot override required identity/reference bindings. Existing export mappings and geometry algorithms are unchanged.
+
+Reports have stable codes and Element/Owner/Diagram/Document scopes. Pool-local coordinate normalization is reported once per
+owning Pool with its name/identity, not once per child. Deduplication uses code/scope/identity/property, not message text. Other
+contextual rules may aggregate by owner, diagram or document. Catch-all reports stay per element/property; broader aggregation
+without a contextual binding is rejected explicitly. Distinct anonymous XML losses keep their source locations. Other
+unclassified source attributes/elements still use an explicit `Ignore` fallback; XML namespace/schema-location mechanics are
+excluded. Unclassified execution expressions, extension contents, nested lane hierarchy and additional DI semantics still require
+future explicit classification; they are not silently declared compatible. Existing geometry/attachment/path transformations
+are detected by the established converter checks; their optional reports are defined by import `Transformation` rules.
+The refinement moved the existing negative-origin, boundary-position, connector-endpoint and connector-path reports into
+these rules without changing their conditions, codes, messages or geometry algorithms.
+
+Hosts/tests may load an alternate immutable profile without changing converter internals:
+
+```csharp
+var profile = BpmnImportProfile.Load(xmlProfileText); // or Load(stream), leaves stream open
+var result = await BpmnStandardConverter.ImportAsync(xml, routingPreparer, profile, cancellationToken);
+var imported = BpmnStandardConverter.Import(xml, profile); // synchronous, without DI routing preparation
+var exported = BpmnStandardConverter.Export(document); // no profile dependency or overload
+```
+
+Invalid configuration throws `FormatException` before conversion. Alternate profiles can change supported classifications,
+report codes/messages and aggregation; they cannot introduce new semantic construction or geometry algorithms. The profile does
+not perform model validation. Parsing, reference/attachment integrity, A2 ownership, semantic construction and routing preparation
+remain in converter code. `ConversionLog` still contains only `Ignored`/`Omitted` losses; technical failures remain in `Diagnostics`,
+and explicit host **Validate** independently owns model-quality findings.
 
 The 0.1.9 native v2 reader also accepts optional connector-anchor
 `normalizedPosition` and visual-model `documentRoutingStates` fields. They are
 written only when used; absent fields retain the previous defaults. Older v2
 readers reject these new fields, so the unchanged format number does not imply
-backward-reader compatibility for documents using them. No v1 migration or BPMN
-XML conversion is included.
+backward-reader compatibility for documents using them. No v1 migration is included.
 
 ## Publish a standalone presentation
 
-`PublishAsync` captures the current active Process scope into a self-contained ZIP. It does not change Publication metadata, DocumentId, revision, persistent content or History, and does not initiate a download. Inspect the result before delivering its bytes. The toolbar's separate Publication dialog can save changed valid metadata through one persistent command **before** generating the artifact; a later Publish rejection does not undo that save.
+`PublishingPackageGenerator.Generate(document, presentation)` creates the existing self-contained ZIP from a canonical document and matching immutable presentation capture. The capture preserves active scope and transient visibility, which are intentionally absent from the document. The generator does not need an editor instance, perform downloads or edit metadata. The reference host's Publication dialog can save changed valid metadata through one persistent editor command **before** generating the artifact; a later publication rejection does not undo that save.
 
 Document-level Collaboration presentations and Process views containing Message
 Flow are rejected with diagnostics: communication links are not executable
@@ -211,7 +427,7 @@ Publication supports **one or more Start-role nodes** in the active scope. Reach
 
 The marketing/demo viewer retains lightweight token behavior: Activity waits 2000 ms per token; SplitInvariant chooses one outgoing branch; MergeInvariant consumes tokens from two distinct inputs and emits one; ParallelSynchronize waits for every input, consumes one from each and emits on every output; End consumes tokens. This is not a production process execution or Simulation Engine.
 
-Editor Publish failures remain visible outside the closed Publication dialog, with returned reasons and affected identities when available. Successful retry or session replacement clears obsolete feedback. Feedback is transient and does not enter Document History or persistent Issues.
+Host Publish failures remain visible outside the closed Publication dialog, with returned reasons and affected identities when available. Successful retry or session replacement clears obsolete feedback. Feedback is transient and does not enter Document History or persistent Issues.
 
 ## Advanced and implementation-facing surfaces
 

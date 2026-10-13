@@ -730,12 +730,9 @@ public sealed class BpmnDemoPipelineTests
                 .OrderBy(static id => id.Value, StringComparer.Ordinal),
             composition.AnchorConnectionCreationCatalog.Registrations
                 .Select(static registration => registration.CreationId));
-        Assert.Equal(
-            BpmnPluginRegistration.N100.ModelValidationRules
-                .AddRange(OrganizationalRegistration().ModelValidationRules)
-                .Select(static rule => rule.RuleId)
-                .OrderBy(static id => id.Value, StringComparer.Ordinal),
-            composition.ModelValidationCatalog.Rules.Select(static rule => rule.RuleId));
+        // A3 moved model-quality validation composition to the integration package.
+        Assert.Null(composition.GetType().GetProperty("ModelValidationCatalog",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance));
 
         var projectionExecution = configuration.ProjectionEngine.Project(snapshot);
         Assert.True(projectionExecution.IsSuccessful);

@@ -105,7 +105,7 @@ public sealed class PhaseN103NativeDocumentPresentationIntegrationTests
         Assert.True(transient.ModelProfileElementViewState.IsCollapsed(
             OrganizationalModelProfile.Id,
             pool.Id));
-        Assert.NotNull(host.CaptureState().ValidationSnapshot);
+        Assert.NotNull(host.Operations().ValidationSnapshot);
 
         var secondImport = await host.ImportNativeDocumentAsync(payload.AsMemory());
 
@@ -130,7 +130,7 @@ public sealed class PhaseN103NativeDocumentPresentationIntegrationTests
         Assert.Equal(
             ModelProfileElementViewStateSnapshot.Empty,
             fresh.ModelProfileElementViewState);
-        Assert.Null(host.CaptureState().ValidationSnapshot);
+        Assert.Null(host.Operations().ValidationSnapshot);
         Assert.Equal(EditingSessionStatus.Ready, fresh.Status);
         Assert.NotNull(fresh.CurrentScene);
         var reexport = await host.ExportNativeDocumentAsync();

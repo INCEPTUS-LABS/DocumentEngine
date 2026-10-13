@@ -72,7 +72,7 @@ internal static class BpmnModelerTestComposition
     internal static DocumentCanvasComposition WithDocument(DocumentCanvasComposition source, Document document) =>
         new(document, source.Configuration, source.PropertiesSchemaCatalog, source.Counters,
             source.ToolboxPlacementCatalog, source.AnchorConnectionCreationCatalog, source.DocumentCreationIdentityProvider,
-            source.EndpointReconnectionCatalog, source.DeletionCatalog, source.ModelValidationCatalog,
+            source.EndpointReconnectionCatalog, source.DeletionCatalog,
             source.ScopeNavigationCatalog, source.BackgroundActionCatalog, source.SemanticSceneViewActionCatalog,
             source.SemanticSceneCommandActionCatalog, source.SpatialEditPlanners);
 

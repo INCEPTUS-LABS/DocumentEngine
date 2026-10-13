@@ -132,9 +132,9 @@ const modulePath = path.resolve(
 const {
     createCanvasPointerObserver,
     createCanvasSurfaceObserver,
-    createDomPointerCaptureObserver,
-    downloadFile
+    createDomPointerCaptureObserver
 } = await import(pathToFileURL(modulePath));
+const { downloadFile } = await import(pathToFileURL(path.resolve("src/Inceptus.DocumentEngine.Blazor/wwwroot/inceptus.documents.js")));
 
 beforeEach(() => {
     container = new FakeElement(640, 480);
