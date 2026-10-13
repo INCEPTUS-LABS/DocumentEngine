@@ -38,6 +38,8 @@ public sealed partial class DocumentCanvasHostTests
         var exported = await facade.ExportNativeDocumentAsync();
         var published = await facade.PublishAsync();
 
+        await facade.Notifications.Pending;
+
         Assert.All(new[] { capture, created, loaded, imported }, static result =>
         {
             Assert.Equal(BpmnModelerOperationStatus.Unavailable, result.Status);
