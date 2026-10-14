@@ -71,12 +71,16 @@ public sealed partial class DocumentCanvasHostTests
     }
 
     [Theory]
-    [InlineData(ConnectorRoutingType.Automatic)]
-    [InlineData(ConnectorRoutingType.Straight)]
-    [InlineData(ConnectorRoutingType.Manual)]
-    public async Task A23AutoArrangePreservesModesLabelsAndManualDefinitions(ConnectorRoutingType mode)
+    [InlineData(ConnectorRoutingType.Automatic, 0)]
+    [InlineData(ConnectorRoutingType.Straight, 0)]
+    [InlineData(ConnectorRoutingType.Manual, 0)]
+    [InlineData(ConnectorRoutingType.Automatic, 25)]
+    [InlineData(ConnectorRoutingType.Straight, 25)]
+    [InlineData(ConnectorRoutingType.Manual, 25)]
+    public async Task A23AutoArrangePreservesModesLabelsAndManualDefinitions(ConnectorRoutingType mode, double distance)
     {
-        await using var host = A23Host(A23Snapshot(A23Edges("linear")));
+        await using var host = A23Host(A23Snapshot(A23Edges("linear")),
+            distance == 0 ? null : new TestGridSource(new() { PointDistance = distance }));
         await host.InitializeAsync("arrange-modes", "container");
         var session = Session(host);
         var document = AttachedDocument(session);
@@ -153,9 +157,9 @@ public sealed partial class DocumentCanvasHostTests
         _ => [("start", "a"), ("a", "b"), ("b", "end")],
     };
 
-    private static DocumentCanvasHost A23Host(DocumentSnapshot snapshot) =>
+    private static DocumentCanvasHost A23Host(DocumentSnapshot snapshot, Contracts.EditorState.IGridSettingsSource? grid = null) =>
         CreateHost(new RecordingRenderExecution(), new RecordingSurfaceObserver(new(1920, 1080, 1)),
-            compositionFactory: new BpmnModelerCompositionFactory(initialDocument: snapshot));
+            compositionFactory: new BpmnModelerCompositionFactory(initialDocument: snapshot), gridSettings: grid);
 
     private static DocumentSnapshot A23Snapshot((string Source, string Target)[] edges)
     {

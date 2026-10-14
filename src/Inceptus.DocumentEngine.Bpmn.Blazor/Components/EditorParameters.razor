@@ -1,0 +1,76 @@
+@using System.Globalization
+@using Inceptus.DocumentEngine.Contracts.EditorState
+@using Microsoft.AspNetCore.Components.Web
+@using Microsoft.Extensions.Localization
+@inject IStringLocalizer<ModelerStrings> Text
+
+<div class="editor-parameters-backdrop" @onclick:stopPropagation @onkeydown:stopPropagation>
+    <section class="editor-parameters" role="dialog" aria-modal="true" aria-labelledby="@_titleId" @onkeydown="HandleKeyAsync">
+        <span tabindex="0" @onfocus="() => (IsValid ? _last : _cancel).FocusAsync().AsTask()"></span>
+        <h2 id="@_titleId">@Text["Settings_Title"]</h2>
+        <fieldset disabled="@_applying">
+            <legend>@Text["Settings_Grid"]</legend>
+            <label><span>@Text["Settings_ShowGrid"]</span><input @ref="_first" type="checkbox" @bind="_show" /> @Text[_show ? "SmartEdit_On" : "SmartEdit_Off"]</label>
+            <label><span>@Text["Settings_SnapToGrid"]</span><input type="checkbox" @bind="_snap" /> @Text[_snap ? "SmartEdit_On" : "SmartEdit_Off"]</label>
+            <label><span>@Text["Settings_PointDistance"]</span><input type="number" step="any" @bind="_distance" @bind:event="oninput" aria-invalid="@(!IsValid)" /></label>
+            <small>@Text["Settings_DiagramUnits"]</small>
+        </fieldset>
+        @if (!IsValid) { <p role="alert">@Text["Settings_InvalidDistance"]</p> }
+        @if (_saveFailed) { <p role="alert">@Text["Settings_SaveFailed"]</p> }
+        <div class="editor-parameters-actions">
+            <button @ref="_cancel" type="button" disabled="@_applying" @onclick="() => Closed.InvokeAsync()">@Text["Action_Cancel"]</button>
+            <button @ref="_last" type="button" disabled="@(_applying || !IsValid)" @onclick="ApplyAsync">@Text["Action_Apply"]</button>
+        </div>
+        <span tabindex="0" @onfocus="() => _first.FocusAsync().AsTask()"></span>
+    </section>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public BpmnEditorSettingsStore Settings { get; set; } = null!;
+    [Parameter] public EventCallback Closed { get; set; }
+    private readonly string _titleId = $"editor-parameters-{Guid.NewGuid():N}";
+    private bool _show;
+    private bool _snap;
+    private string _distance = string.Empty;
+    private bool _applying;
+    private bool _saveFailed;
+    private ElementReference _first;
+    private ElementReference _last;
+    private ElementReference _cancel;
+    private bool IsValid => double.TryParse(_distance, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) &&
+        double.IsFinite(value) && value > 0;
+
+    protected override void OnInitialized()
+    {
+        var grid = Settings.Grid;
+        _show = grid.ShowGrid;
+        _snap = grid.SnapToGrid;
+        _distance = grid.PointDistance.ToString("R", CultureInfo.InvariantCulture);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) await _first.FocusAsync();
+    }
+
+    private async Task HandleKeyAsync(KeyboardEventArgs args)
+    {
+        if (args.Key == "Escape" && !_applying) await Closed.InvokeAsync();
+    }
+
+    private async Task ApplyAsync()
+    {
+        if (_applying || !IsValid) return;
+        _applying = true;
+        try
+        {
+            _saveFailed = !await Settings.ApplyAsync(new GridSettings
+            {
+                ShowGrid = _show, SnapToGrid = _snap,
+                PointDistance = double.Parse(_distance, CultureInfo.InvariantCulture)
+            });
+            if (!_saveFailed) await Closed.InvokeAsync();
+        }
+        finally { _applying = false; }
+    }
+}

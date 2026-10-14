@@ -111,14 +111,14 @@ public sealed class SolutionArchitectureTests
     {
         var buildProperties = XDocument.Load(Path.Combine(RepositoryRoot, "Directory.Build.props"));
 
-        Assert.Equal("0.1.10", ReadElementValue(buildProperties, "Version"));
+        Assert.Equal("0.1.11", ReadElementValue(buildProperties, "Version"));
         Assert.Equal("Robert Prokopczuk", ReadElementValue(buildProperties, "Authors"));
 
         var releaseTargets = XDocument.Load(Path.Combine(RepositoryRoot, "Directory.Build.targets"));
         Assert.Equal("MIT", ReadElementValue(releaseTargets, "PackageLicenseExpression"));
         Assert.Equal("Copyright (c) 2026 Inceptus Robert Prokopczuk",
             ReadElementValue(releaseTargets, "Copyright"));
-        Assert.Equal("https://inceptus.online/bpmn/", ReadElementValue(releaseTargets, "PackageProjectUrl"));
+        Assert.Equal("https://inceptus.online/bpmn/editor/", ReadElementValue(releaseTargets, "PackageProjectUrl"));
         Assert.Equal("https://github.com/INCEPTUS-LABS/DocumentEngine",
             ReadElementValue(releaseTargets, "RepositoryUrl"));
         Assert.Equal("git", ReadElementValue(releaseTargets, "RepositoryType"));
@@ -127,12 +127,13 @@ public sealed class SolutionArchitectureTests
         Assert.Equal("true", ReadElementValue(releaseTargets, "IncludeSymbols"));
         Assert.Equal("snupkg", ReadElementValue(releaseTargets, "SymbolPackageFormat"));
         Assert.Equal("README.md", ReadElementValue(releaseTargets, "PackageReadmeFile"));
+        Assert.Equal("inceptus-nuget-icon.png", ReadElementValue(releaseTargets, "PackageIcon"));
         Assert.DoesNotContain(releaseTargets.Descendants(), element =>
             element.Name.LocalName is "RepositoryCommit" or "SourceRevisionId" or "PackageLicenseFile");
         Assert.All(releaseTargets.Root!.Elements(), group =>
             Assert.Equal("'$(IsPackable)' == 'true'", (string?)group.Attribute("Condition")));
 
-        string[] releaseDocuments = ["README.md", "LICENSE", "RELEASE-NOTES.md", "THIRD-PARTY-NOTICES.md"];
+        string[] releaseDocuments = ["README.md", "LICENSE", "RELEASE-NOTES.md", "THIRD-PARTY-NOTICES.md", "branding/inceptus-nuget-icon.png"];
         var packedFiles = releaseTargets.Descendants("None").ToArray();
         Assert.Equal(releaseDocuments.Order(StringComparer.Ordinal),
             packedFiles.Select(file => ((string)file.Attribute("Include")!)
@@ -141,7 +142,8 @@ public sealed class SolutionArchitectureTests
         Assert.All(packedFiles, file =>
         {
             Assert.Equal("true", (string?)file.Attribute("Pack"));
-            Assert.Equal("/", (string?)file.Attribute("PackagePath"));
+            var isIcon = ((string)file.Attribute("Include")!).EndsWith("branding/inceptus-nuget-icon.png", StringComparison.Ordinal);
+            Assert.Equal(isIcon ? "inceptus-nuget-icon.png" : "/", (string?)file.Attribute("PackagePath"));
         });
         Assert.All(releaseDocuments, file => Assert.True(File.Exists(Path.Combine(RepositoryRoot, file))));
         Assert.Contains("Copyright (c) 2026 Inceptus Robert Prokopczuk",
@@ -675,6 +677,8 @@ public sealed class SolutionArchitectureTests
             "Inceptus.DocumentEngine.Contracts.EditorState.EditorFeedbackSnapshot",
             "Inceptus.DocumentEngine.Contracts.EditorState.EditorGestureSnapshot",
             "Inceptus.DocumentEngine.Contracts.EditorState.EditorStateSnapshot",
+            "Inceptus.DocumentEngine.Contracts.EditorState.GridSettings",
+            "Inceptus.DocumentEngine.Contracts.EditorState.IGridSettingsSource",
             "Inceptus.DocumentEngine.Contracts.EditorState.ViewportSnapshot",
             "Inceptus.DocumentEngine.Contracts.EndpointReconnection.ConnectorEndpointReconnectionCatalog",
             "Inceptus.DocumentEngine.Contracts.EndpointReconnection.ConnectorEndpointReconnectionId",
@@ -686,6 +690,7 @@ public sealed class SolutionArchitectureTests
             "Inceptus.DocumentEngine.Contracts.EndpointReconnection.IConnectorEndpointReconnectionCommandFactory",
             "Inceptus.DocumentEngine.Contracts.EndpointReconnection.IConnectorEndpointReconnectionCandidateEligibility",
             "Inceptus.DocumentEngine.Contracts.Geometry.DocumentGeometryBoundary",
+            "Inceptus.DocumentEngine.Contracts.Geometry.GridGeometry",
             "Inceptus.DocumentEngine.Contracts.Geometry.Matrix2D",
             "Inceptus.DocumentEngine.Contracts.Geometry.PointD",
             "Inceptus.DocumentEngine.Contracts.Geometry.RectD",
@@ -1038,6 +1043,7 @@ public sealed class SolutionArchitectureTests
         var contractsAssembly = typeof(PointD).Assembly;
         string[] expectedGeometryTypes =
         [
+            typeof(GridGeometry).FullName!,
             typeof(DocumentGeometryBoundary).FullName!,
             typeof(Matrix2D).FullName!,
             typeof(PointD).FullName!,

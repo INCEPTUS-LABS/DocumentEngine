@@ -271,7 +271,7 @@ public sealed class BpmnN90ToolboxPlacementTests
         Assert.Equal("Timer Boundary Event 2", command.Name);
         Assert.Null(command.TimerDefinition);
         Assert.True(command.CancelActivity);
-        Assert.Equal("Timer Boundary Event created from the Toolbox.", command.Description);
+        Assert.Null(command.Description);
         Assert.Equal(document.SemanticModel.RootScopeId, command.TargetScopeId);
     }
 

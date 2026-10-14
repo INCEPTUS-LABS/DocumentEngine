@@ -249,4 +249,15 @@
   <data name="SmartEdit_Label" xml:space="preserve"><value>Intelligente Bearbeitung</value></data>
   <data name="SmartEdit_On" xml:space="preserve"><value>EIN</value></data>
   <data name="SmartEdit_Off" xml:space="preserve"><value>AUS</value></data>
+  <data name="Settings_Title" xml:space="preserve"><value>Einstellungen</value></data>
+  <data name="Settings_Grid" xml:space="preserve"><value>Raster</value></data>
+  <data name="Settings_ShowGrid" xml:space="preserve"><value>Raster anzeigen</value></data>
+  <data name="Settings_SnapToGrid" xml:space="preserve"><value>Am Raster ausrichten</value></data>
+  <data name="Settings_PointDistance" xml:space="preserve"><value>Rasterpunktabstand</value></data>
+  <data name="Settings_DiagramUnits" xml:space="preserve"><value>Abstand in Diagrammeinheiten. Bestehende Elemente behalten ihre Positionen.</value></data>
+  <data name="Settings_InvalidDistance" xml:space="preserve"><value>Geben Sie eine endliche Zahl größer als null ein.</value></data>
+  <data name="Settings_SaveFailed" xml:space="preserve"><value>Die Editoreinstellungen konnten nicht im Browserspeicher gespeichert werden.</value></data>
+  <data name="Toolbar_Layout" xml:space="preserve"><value>Anordnung</value></data>
+  <data name="Toolbar_AlignHorizontal" xml:space="preserve"><value>Horizontal am zuerst ausgewählten Element ausrichten</value></data>
+  <data name="Toolbar_AlignVertical" xml:space="preserve"><value>Vertikal am zuerst ausgewählten Element ausrichten</value></data>
 </root>

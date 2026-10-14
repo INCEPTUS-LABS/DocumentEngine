@@ -125,6 +125,9 @@ public sealed class ModelerLocalizationTests
         Assert.DoesNotContain("issues-toggle", markup, StringComparison.Ordinal);
         Assert.Contains($"title=\"{start}\"", markup, StringComparison.Ordinal);
         var text = services.GetRequiredService<IStringLocalizer<ModelerStrings>>();
+        var siteToolbarEnd = markup.IndexOf("<canvas", StringComparison.Ordinal);
+        Assert.Contains($">{text["Settings_Title"]}</button>", markup[..siteToolbarEnd], StringComparison.Ordinal);
+        Assert.DoesNotContain($">{text["Settings_Title"]}</button>", markup[siteToolbarEnd..], StringComparison.Ordinal);
         foreach (var group in BpmnModelerCompositionFactory.ToolboxCatalog.Groups)
         {
             Assert.NotNull(ModelerLabels.ToolboxKey(group.GroupId.Value));

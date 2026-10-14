@@ -38,7 +38,8 @@ public sealed class EditingSessionConfiguration
         IElementConnectorAnchorPolicyProvider? connectorAnchorPolicyProvider = null,
         ModelProfileCatalog? modelProfileCatalog = null,
         ModelProfileViewStateSnapshot? initialModelProfileViewState = null,
-        IRoutingInputPreparer? routingInputPreparer = null)
+        IRoutingInputPreparer? routingInputPreparer = null,
+        IGridSettingsSource? gridSettings = null)
     {
         ArgumentNullException.ThrowIfNull(projectionEngine);
         ArgumentNullException.ThrowIfNull(layoutEngine);
@@ -57,6 +58,7 @@ public sealed class EditingSessionConfiguration
         LayoutContext = layoutContext ?? LayoutContext.Empty;
         RoutingContext = routingContext ?? RoutingContext.Empty;
         RoutingInputPreparer = routingInputPreparer;
+        GridSettings = gridSettings;
         InitialEditorState = initialEditorState ?? EditorStateSnapshot.Empty;
         CommandHandlers = Copy(commandHandlers, nameof(commandHandlers));
         CommandValidators = Copy(commandValidators, nameof(commandValidators));
@@ -90,6 +92,8 @@ public sealed class EditingSessionConfiguration
     public RoutingContext RoutingContext { get; }
 
     public IRoutingInputPreparer? RoutingInputPreparer { get; }
+
+    public IGridSettingsSource? GridSettings { get; }
 
     public EditorStateSnapshot InitialEditorState { get; }
 

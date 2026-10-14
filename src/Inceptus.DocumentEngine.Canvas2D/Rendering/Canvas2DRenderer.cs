@@ -207,7 +207,8 @@ public sealed class Canvas2DRenderer : ITextMetricsService, IAsyncDisposable
                     scene.BoundedPresentation is { } move && _cachedScene?.BoundedPresentation is { } cachedMove &&
                     ReferenceEquals(move.Source, cachedMove.Source) && move.Items == cachedMove.Items &&
                     move.BeforeContentIndices == cachedMove.BeforeContentIndices
-                        ? null : Canvas2DBoundedRenderItem.From(scene.BoundedPresentation));
+                        ? null : Canvas2DBoundedRenderItem.From(scene.BoundedPresentation),
+                    scene.BackgroundPoints);
                 var viewportResult = await InvokeInteropAsync(
                     () => _execution.RenderViewportAsync(viewport),
                     Canvas2DRendererDiagnosticCodes.RenderingFailed,
@@ -245,7 +246,7 @@ public sealed class Canvas2DRenderer : ITextMetricsService, IAsyncDisposable
                 frame = new Canvas2DRenderFrame(scene.ViewportTransform, items,
                     checked(++_contentVersion), presentationVersion,
                     Canvas2DViewportLine.From(scene.BoundaryGuides),
-                    Canvas2DBoundedRenderItem.From(scene.BoundedPresentation));
+                    Canvas2DBoundedRenderItem.From(scene.BoundedPresentation), scene.BackgroundPoints);
                 cancellationToken.ThrowIfCancellationRequested();
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -584,7 +585,8 @@ public sealed class Canvas2DRenderer : ITextMetricsService, IAsyncDisposable
         // Exact array identity proves order and every immutable drawing input, without hashes.
         // A different wrapper additionally requires compatible Pan provenance so shared empty
         // arrays cannot authorize reuse across document/session/scope/profile replacements.
-        if (ReferenceEquals(cached, scene))
+        if (ReferenceEquals(cached, scene) ||
+            ReferenceEquals(cached.BackgroundSource ?? cached, scene.BackgroundSource ?? scene))
         {
             return true;
         }

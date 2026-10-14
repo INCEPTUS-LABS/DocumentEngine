@@ -20,6 +20,21 @@ public partial class BpmnDemoHost
 {
     [Parameter] public IBpmnDocumentEditor? Editor { get; set; }
     private InceptusBpmnModeler? _modeler;
+    private ElementReference _settingsButton;
+    private InceptusBpmnModeler? SettingsModeler => _modeler ?? Editor as InceptusBpmnModeler;
+
+    private Task OpenSettingsAsync()
+    {
+        if (_disposed || _state is not { IsInitialized: true }) return Task.CompletedTask;
+        CloseDocumentMenu();
+        return SettingsModeler?.OpenSettingsAsync(RestoreSettingsFocusAsync) ?? Task.CompletedTask;
+    }
+
+    private async Task RestoreSettingsFocusAsync()
+    {
+        if (!_disposed) await _settingsButton.FocusAsync();
+    }
+
     private IBpmnDocumentEditor? _host;
     private DemoDocumentOperations? _operations;
     private DemoHostEditorState? _state;
@@ -29,6 +44,7 @@ public partial class BpmnDemoHost
     protected override void OnParametersSet() { if (Editor is not null && !ReferenceEquals(Editor, _host)) AttachEditor(Editor); }
     internal void AttachEditor(IBpmnDocumentEditor editor, DemoDocumentOperations? operations = null)
     {
+        InvalidateToolbarPresentation();
         _host = editor;
         _operations = operations ?? new DemoDocumentOperations(editor);
         _state = CaptureHostState(editor);
@@ -53,7 +69,7 @@ public partial class BpmnDemoHost
         var context = editor.CaptureEditorContext();
         return new(context?.Presentation, context is not null, context?.AttachmentVersion ?? 0,
             context?.Document.Publication, Operations.ValidationSnapshot, Operations.ValidationInFlight,
-            context?.CanReplaceDocument != true, context?.SurfaceSize);
+            context?.HasOpenProperties == true, context?.SurfaceSize);
     }
     private void RefreshHostState(IBpmnDocumentEditor host) { _state = CaptureHostState(host); SynchronizeIssuesPanelSurface(); }
     private string? TargetName(ModelValidationTarget target) => target.SemanticElementId is { } id &&
@@ -67,6 +83,7 @@ public partial class BpmnDemoHost
     public async ValueTask DisposeAsync()
     {
         _disposed = true;
+        InvalidateToolbarPresentation();
         _componentLifetime.Cancel();
         _publishOperationCancellation?.Cancel();
         _issuesPanel.CancelMove();
@@ -871,7 +888,7 @@ public partial class BpmnDemoHost
             host = _disposed ? null : _host;
         }
 
-        if (host is null)
+        if (host is null || !CanValidate)
         {
             return;
         }

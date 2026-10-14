@@ -43,6 +43,7 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
     private readonly ConnectorEndpointReconnectionCatalog _endpointReconnectionCatalog;
     private readonly IDocumentCreationIdentityProvider? _creationIdentityProvider;
     private readonly Canvas2DSpatialEditPlannerCatalog _spatialEditPlanners;
+    private readonly Func<SemanticTypeId, bool>? _gridSnapEligibility;
     private readonly object _disposalSync = new();
     private readonly SemaphoreSlim _operationGate = new(1, 1);
     private readonly CancellationTokenSource _lifetime = new();
@@ -59,7 +60,8 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
         AnchorConnectionCreationCatalog? connectionCreationCatalog = null,
         IDocumentCreationIdentityProvider? creationIdentityProvider = null,
         ConnectorEndpointReconnectionCatalog? endpointReconnectionCatalog = null,
-        Canvas2DSpatialEditPlannerCatalog? spatialEditPlanners = null)
+        Canvas2DSpatialEditPlannerCatalog? spatialEditPlanners = null,
+        Func<SemanticTypeId, bool>? gridSnapEligibility = null)
     {
         ArgumentNullException.ThrowIfNull(session);
         _session = session;
@@ -75,6 +77,7 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
 
         _creationIdentityProvider = creationIdentityProvider;
         _spatialEditPlanners = spatialEditPlanners ?? Canvas2DSpatialEditPlannerCatalog.Empty;
+        _gridSnapEligibility = gridSnapEligibility;
         _lifetimeToken = _lifetime.Token;
     }
 
@@ -1663,14 +1666,8 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
         // Use the same basis on activation as on subsequent spatial move samples. A drop
         // into another region is validated against its destination inverse, not the source
         // origin (which may be hundreds of Scene units below the destination).
-        var effectiveDelta = pending.Scene.SpatialPresentationPlan is { } spatialPlan
-            ? Canvas2DSpatialMoveEvaluator.ClampTranslation(spatialPlan,
-                moveTargets.Select(static target => target.OriginalBounds), delta)
-            : DocumentGeometryBoundary.ClampTranslation(
-                moveTargets.Select(static target =>
-                    target.SpatialRegion?.MapSceneToLocal(target.BoundaryBounds) ?? target.ProcessPlacement?.MapViewToLocal(target.BoundaryBounds) ??
-                    target.BoundaryBounds),
-                delta);
+        var grid = ResolveMoveGrid(commandTargetItems);
+        var effectiveDelta = ConstrainMoveTranslation(pending.Scene, moveTargets, initiator.OriginalBounds, delta, grid);
         var effectiveDocumentPoint = pending.StartDocumentPoint + effectiveDelta;
         var gestureId = FormattableString.Invariant(
             $"move:{observed.DocumentRevision.Value}:{input.PointerId}:{initiatorVisualStateId.Value}");
@@ -1717,7 +1714,7 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
                 currentScene,
                 update.SessionState.Generation,
                 update.SessionState.EditorState,
-                SpatialRegion: initiator.SpatialRegion, ProcessPlacement: initiator.ProcessPlacement);
+                SpatialRegion: initiator.SpatialRegion, ProcessPlacement: initiator.ProcessPlacement, Grid: grid);
             return update;
         }
 
@@ -4825,17 +4822,8 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
     {
         if (gesture.Kind == PersistentGestureKind.Move)
         {
-            if (gesture.CurrentScene.SpatialPresentationPlan is { } plan)
-            {
-                return gesture.StartDocumentPoint + Canvas2DSpatialMoveEvaluator.ClampTranslation(plan,
-                    gesture.MoveTargets.Select(static target => target.OriginalBounds),
-                    requestedPoint - gesture.StartDocumentPoint);
-            }
-            var translation = DocumentGeometryBoundary.ClampTranslation(
-                gesture.MoveTargets.Select(static target =>
-                    target.SpatialRegion?.MapSceneToLocal(target.BoundaryBounds) ?? target.ProcessPlacement?.MapViewToLocal(target.BoundaryBounds) ??
-                    target.BoundaryBounds),
-                requestedPoint - gesture.StartDocumentPoint);
+            var translation = ConstrainMoveTranslation(gesture.CurrentScene, gesture.MoveTargets,
+                gesture.OriginalBounds, requestedPoint - gesture.StartDocumentPoint, gesture.Grid);
             return gesture.StartDocumentPoint + translation;
         }
 
@@ -5029,7 +5017,8 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
         BoundaryAttachmentPlacement? OriginalBoundaryAttachment = null,
         Canvas2DSpatialRegion? SpatialRegion = null,
         Canvas2DRouteBendSnapState RouteSnap = default,
-        PresentationScopePlacement? ProcessPlacement = null);
+        PresentationScopePlacement? ProcessPlacement = null,
+        GridSettings? Grid = null);
 
     private sealed record AnchorConnectionGestureState(
         AnchorConnectionCreationRegistration Registration,

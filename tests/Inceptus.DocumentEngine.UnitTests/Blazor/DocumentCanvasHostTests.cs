@@ -5317,7 +5317,8 @@ public sealed partial class DocumentCanvasHostTests
         ToolboxSelectionState? toolboxSelection = null,
         Func<Canvas2DRenderer>? replacementRendererFactory = null,
         Inceptus.DocumentEngine.Canvas2D.Publishing.PublishedProcessPackageBuilder?
-            publishPackageBuilder = null)
+            publishPackageBuilder = null,
+        IGridSettingsSource? gridSettings = null)
     {
         var pointerObserver = new RecordingPointerObserver(observer.Lifecycle);
         var renderer = CreateRenderer(execution);
@@ -5330,7 +5331,7 @@ public sealed partial class DocumentCanvasHostTests
             observerFactory,
             pointerObserverFactory,
             toolboxSelection,
-            replacementRendererFactory);
+            replacementRendererFactory, gridSettings);
         host.ConfigureOperations(rules: compositionFactory is null ? ModelValidationCatalog.Empty : null, publisher: publishPackageBuilder);
         HostObservers.Add(host, pointerObserver);
         return host;

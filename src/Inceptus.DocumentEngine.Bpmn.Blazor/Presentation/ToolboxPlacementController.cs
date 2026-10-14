@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Diagnostics;
+using Inceptus.DocumentEngine.Bpmn.Visuals;
 using Inceptus.DocumentEngine.Canvas2D.EditingSession;
 using Inceptus.DocumentEngine.Canvas2D.Rendering;
 using Inceptus.DocumentEngine.Canvas2D.Scene;
@@ -384,6 +385,11 @@ internal sealed partial class ToolboxPlacementController
                 exception);
             return false;
         }
+
+        var type = Composition.BpmnModelerCompositionFactory.ToolboxCatalog.Items
+            .SingleOrDefault(item => item.ItemId == itemId)?.ElementTypeId;
+        if (type is not null && BpmnGridPolicy.Supports(type) && session.GridSettings is { } grid)
+            scenePoint = GridGeometry.Snap(scenePoint, grid);
 
         if (!TryResolveCurrentPlacementTarget(observed, document, scenePoint,
                 out var documentPoint, out var targetScopeId, out var presentation,

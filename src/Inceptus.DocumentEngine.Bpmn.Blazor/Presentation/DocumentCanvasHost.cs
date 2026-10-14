@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using Inceptus.DocumentEngine.Bpmn.Visuals;
 using Inceptus.DocumentEngine.Canvas2D.EditingSession;
 using Inceptus.DocumentEngine.Canvas2D.Interaction;
 using Inceptus.DocumentEngine.Canvas2D.Rendering;
@@ -136,15 +137,18 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable, IBpmnDocume
     private bool _modelViewPropertiesApplyInFlight;
     private DocumentScopeId? _modelViewPropertiesScopeId;
     private Task? _disposeTask;
+    private readonly IGridSettingsSource? _gridSettings;
 
     internal DocumentCanvasHost(
         IJSRuntime jsRuntime,
         IDocumentCanvasCompositionFactory compositionFactory,
-        ToolboxSelectionState? toolboxSelection = null)
+        ToolboxSelectionState? toolboxSelection = null,
+        IGridSettingsSource? gridSettings = null)
     {
         ArgumentNullException.ThrowIfNull(jsRuntime);
         ArgumentNullException.ThrowIfNull(compositionFactory);
         _lifetimeToken = _lifetime.Token;
+        _gridSettings = gridSettings;
         _unattachedRenderer = new Canvas2DRenderer(jsRuntime, CreateRendererConfiguration());
         _observerFactory = new CanvasPresentationSurfaceObserverFactory(jsRuntime);
         _pointerObserverFactory = new CanvasPresentationPointerObserverFactory(jsRuntime);
@@ -161,7 +165,8 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable, IBpmnDocume
         ICanvasPresentationSurfaceObserverFactory observerFactory,
         ICanvasPresentationPointerObserverFactory? pointerObserverFactory = null,
         ToolboxSelectionState? toolboxSelection = null,
-        Func<Canvas2DRenderer>? replacementRendererFactory = null)
+        Func<Canvas2DRenderer>? replacementRendererFactory = null,
+        IGridSettingsSource? gridSettings = null)
     {
         ArgumentNullException.ThrowIfNull(compositionFactory);
         ArgumentNullException.ThrowIfNull(renderer);
@@ -173,6 +178,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable, IBpmnDocume
         _compositionFactory = compositionFactory;
         _toolboxSelection = toolboxSelection ?? new ToolboxSelectionState();
         _replacementRendererFactory = replacementRendererFactory;
+        _gridSettings = gridSettings;
     }
 
     internal event Func<EditingSessionGeneration?, Task>? StateChanged;
@@ -2520,7 +2526,8 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable, IBpmnDocume
                             composition.DocumentCreationIdentityProvider,
                         endpointReconnectionCatalog:
                             composition.EndpointReconnectionCatalog,
-                        spatialEditPlanners: composition.SpatialEditPlanners);
+                        spatialEditPlanners: composition.SpatialEditPlanners,
+                        gridSnapEligibility: BpmnGridPolicy.Supports);
                     _toolboxPlacementController = new ToolboxPlacementController(
                         composition.ToolboxPlacementCatalog,
                         _toolboxSelection,
@@ -4477,6 +4484,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable, IBpmnDocume
 
             if (_propertiesFormOpen)
             {
+                // A missing Scene during rebuilding must not retarget the form or lose its Apply draft.
                 var semanticSelection =
                     eventArgs.State.EditorState.SemanticSceneSelection;
                 if (selection.IsEmpty && semanticSelection is null)
@@ -4490,8 +4498,9 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable, IBpmnDocume
                 }
                 else if (!((_propertiesTargetVisualStateId is { } currentVisualTarget &&
                             selection.Contains(currentVisualTarget) &&
-                            GetSpatialRegionId(eventArgs.State, currentVisualTarget) ==
-                                _propertiesTargetPresentationId) ||
+                            (eventArgs.State.Status == EditingSessionStatus.Rebuilding ||
+                             GetSpatialRegionId(eventArgs.State, currentVisualTarget) ==
+                                 _propertiesTargetPresentationId)) ||
                            (_propertiesTargetSemanticElementId is { } currentSemanticTarget &&
                             selection.IsEmpty &&
                             semanticSelection == currentSemanticTarget)))
@@ -5378,7 +5387,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable, IBpmnDocume
             ],
             defaultFontFamily: ModelerFontFamily);
 
-    private static EditingSessionConfiguration WithVisibleDocumentRegion(
+    private EditingSessionConfiguration WithVisibleDocumentRegion(
         EditingSessionConfiguration source,
         Canvas2DSurfaceSize surfaceSize,
         BpmnModelerDocumentNotificationSource? notificationSource = null)
@@ -5411,7 +5420,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable, IBpmnDocume
             source.ConnectorAnchorPolicyProvider,
             source.ModelProfileCatalog,
             source.InitialModelProfileViewState,
-            source.RoutingInputPreparer);
+            source.RoutingInputPreparer, _gridSettings ?? source.GridSettings);
     }
 
     private static EditorStateSnapshot CopyEditorStateWithViewport(

@@ -144,7 +144,7 @@ class Renderer {
             return failure("CANVAS2D_RENDERER_DISPOSED", "Canvas2DRenderer");
         }
 
-        if (!this.#initialized || !validPresentation(frame) || !Array.isArray(frame.items) ||
+        if (!this.#initialized || !validPresentation(frame) || !validPointPattern(frame.backgroundPoints) || !Array.isArray(frame.items) ||
             !validViewportLines(frame.viewportLines, frame.items.length) ||
             !validPresentationItems(frame.presentationItems, frame.items.length) ||
             frame.contentVersion <= this.#contentVersion ||
@@ -183,7 +183,7 @@ class Renderer {
         this.#contentBounds = bounds;
         this.#presentationItems = frame.presentationItems ?? [];
         const result = this.#draw(frame.viewportTransform, this.#content, dpr,
-            frame.viewportLines, this.#presentationItems);
+            frame.viewportLines, this.#presentationItems, frame.backgroundPoints);
         this.#contentReady = result.succeeded;
         return result;
     }
@@ -192,7 +192,7 @@ class Renderer {
         if (this.#disposed) {
             return failure("CANVAS2D_RENDERER_DISPOSED", "Canvas2DRenderer");
         }
-        if (!this.#initialized || !validPresentation(frame) ||
+        if (!this.#initialized || !validPresentation(frame) || !validPointPattern(frame.backgroundPoints) ||
             !this.#contentReady || !this.#content ||
             !validViewportLines(frame.viewportLines, this.#content.length) ||
             !validPresentationItems(frame.presentationItems, this.#content.length) ||
@@ -214,12 +214,12 @@ class Renderer {
         }
         this.#presentationItems = frame.presentationItems ?? this.#presentationItems;
         const result = this.#draw(frame.viewportTransform, this.#content, dpr,
-            frame.viewportLines, this.#presentationItems);
+            frame.viewportLines, this.#presentationItems, frame.backgroundPoints);
         this.#contentReady = result.succeeded;
         return result;
     }
 
-    #draw(viewportTransform, items, dpr, viewportLines = null, presentationItems = null) {
+    #draw(viewportTransform, items, dpr, viewportLines = null, presentationItems = null, backgroundPoints = null) {
         const context = this.#context;
         try {
             context.save();
@@ -235,6 +235,22 @@ class Renderer {
             context.setLineDash([]);
             context.scale(dpr, dpr);
             applyTransform(context, viewportTransform);
+
+            // A generic, already culled managed primitive. No grid or snapping policy here.
+            if (backgroundPoints) {
+                const p = backgroundPoints;
+                context.fillStyle = p.fill;
+                context.beginPath();
+                for (let row = 0; row < p.rows; row++) {
+                    for (let column = 0; column < p.columns; column++) {
+                        const x = p.x + column * p.step;
+                        const y = p.y + row * p.step;
+                        context.moveTo(x + p.radius, y);
+                        context.ellipse(x, y, p.radius, p.radius, 0, 0, Math.PI * 2);
+                    }
+                }
+                context.fill();
+            }
 
             const visibleBounds = hasUnboundedEffects(context) ? null :
                 visibleDocumentBounds(viewportTransform, this.#canvas.width, this.#canvas.height, dpr);
@@ -663,6 +679,15 @@ function validPresentation(frame) {
         Number.isSafeInteger(frame.presentationVersion) && frame.presentationVersion > 0 &&
         matrix && [matrix.m11, matrix.m12, matrix.m21, matrix.m22, matrix.offsetX, matrix.offsetY]
             .every(Number.isFinite);
+}
+
+function validPointPattern(pattern) {
+    return pattern == null ||
+        ([pattern.x, pattern.y].every(Number.isFinite) && finitePositive(pattern.step) &&
+         finitePositive(pattern.radius) && Number.isSafeInteger(pattern.columns) && pattern.columns > 0 &&
+         Number.isSafeInteger(pattern.rows) && pattern.rows > 0 && pattern.columns * pattern.rows <= 8192 &&
+         Number.isFinite(pattern.x + (pattern.columns - 1) * pattern.step) &&
+         Number.isFinite(pattern.y + (pattern.rows - 1) * pattern.step) && validPaint(pattern.fill));
 }
 
 // Managed presentation supplies line presence, geometry, style and canonical insertion

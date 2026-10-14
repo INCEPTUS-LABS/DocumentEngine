@@ -116,6 +116,21 @@ public sealed class Canvas2DScene : IEquatable<Canvas2DScene>, IDisposable
 
     internal Canvas2DBoundedPresentation? BoundedPresentation { get; }
 
+    internal Canvas2DPointPattern? BackgroundPoints { get; private set; }
+
+    internal Canvas2DScene? BackgroundSource { get; private set; }
+
+    // A background-only render plan shares every immutable content and interaction input.
+    // It is never installed as a new interaction generation or a pipeline result.
+    internal Canvas2DScene WithGrid(GridSettings? settings)
+    {
+        if (settings is null) return this;
+        var copy = (Canvas2DScene)MemberwiseClone();
+        copy.BackgroundSource = this;
+        copy.BackgroundPoints = Canvas2DPointPattern.Create(settings, Viewport);
+        return copy;
+    }
+
     internal ImmutableArray<Canvas2DSceneItem> RenderContent => BoundedPresentation?.Source.Items ?? Items;
 
     internal Canvas2DScene WithBoundedPresentation(
@@ -245,6 +260,7 @@ public sealed class Canvas2DScene : IEquatable<Canvas2DScene>, IDisposable
         ToolState.Equals(other.ToolState) &&
         ContributorMetadata.Equals(other.ContributorMetadata) &&
         Items.AsSpan().SequenceEqual(other.Items.AsSpan()) &&
+        BackgroundPoints == other.BackgroundPoints &&
         BoundaryGuides.HasSamePresentation(other.BoundaryGuides) &&
         Equals(SpatialPresentationPlan, other.SpatialPresentationPlan) &&
         Canvas2DSceneDiagnosticCollection.SequenceEquals(Diagnostics, other.Diagnostics);
@@ -267,6 +283,7 @@ public sealed class Canvas2DScene : IEquatable<Canvas2DScene>, IDisposable
         }
 
         hash.Add(Viewport);
+        hash.Add(BackgroundPoints);
         hash.Add(ViewportTransform);
         hash.Add(ActiveToolId, StringComparer.Ordinal);
         hash.Add(FocusTargetId, StringComparer.Ordinal);

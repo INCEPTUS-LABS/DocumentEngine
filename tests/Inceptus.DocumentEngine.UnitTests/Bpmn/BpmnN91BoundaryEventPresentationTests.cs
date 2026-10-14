@@ -560,7 +560,7 @@ public sealed class BpmnN91BoundaryEventPresentationTests
         {
             var typed = Assert.IsType<CreateBpmnMessageBoundaryEventCommand>(command);
             Assert.Equal("Message Boundary Event 1", typed.Name);
-            Assert.Equal("Message Boundary Event created from the Toolbox.", typed.Description);
+            Assert.Null(typed.Description);
             AssertCommonBoundaryCommand(typed.AttachedToActivityId, typed.EffectiveOwnerBounds);
             return;
         }
@@ -571,14 +571,14 @@ public sealed class BpmnN91BoundaryEventPresentationTests
         {
             var typed = Assert.IsType<CreateBpmnTimerBoundaryEventCommand>(command);
             Assert.Equal("Timer Boundary Event 1", typed.Name);
-            Assert.Equal("Timer Boundary Event created from the Toolbox.", typed.Description);
+            Assert.Null(typed.Description);
             AssertCommonBoundaryCommand(typed.AttachedToActivityId, typed.EffectiveOwnerBounds);
             return;
         }
 
         var signal = Assert.IsType<CreateBpmnSignalBoundaryEventCommand>(command);
         Assert.Equal("Signal Boundary Event 1", signal.Name);
-        Assert.Equal("Signal Boundary Event created from the Toolbox.", signal.Description);
+        Assert.Null(signal.Description);
         AssertCommonBoundaryCommand(signal.AttachedToActivityId, signal.EffectiveOwnerBounds);
     }
 

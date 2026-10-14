@@ -583,6 +583,24 @@ const content = (contentVersion, presentationVersion, items = [rectangle("body",
     ...viewport(contentVersion, presentationVersion), items
 });
 
+test("background point primitive draws behind cached content and clears independently", async () => {
+    const renderer = createRenderer("canvas");
+    await renderer.initialize(cacheSurface, [], [], null);
+    const points = { x: -20, y: 0, step: 20, columns: 4, rows: 3, radius: .85, fill: "#94a3b8" };
+    operations.length = 0;
+    assert.equal((await renderer.render({ ...content(1, 1), backgroundPoints: points })).succeeded, true);
+    assert.equal(operations.filter(op => op[0] === "ellipse").length, 12);
+    assert.ok(operations.findIndex(op => op[0] === "ellipse") < operations.findIndex(op => op[0] === "fillRect"));
+    operations.length = 0;
+    assert.equal(renderer.renderViewport({ ...viewport(1, 2, 13), backgroundPoints: { ...points, columns: 2 } }).succeeded, true);
+    assert.equal(operations.filter(op => op[0] === "ellipse").length, 6);
+    operations.length = 0;
+    assert.equal(renderer.renderViewport(viewport(1, 3)).succeeded, true);
+    assert.equal(operations.filter(op => op[0] === "ellipse").length, 0);
+    assert.equal(renderer.renderViewport({ ...viewport(1, 4), backgroundPoints: { ...points, rows: 10000 } }).succeeded, false);
+    renderer.dispose();
+});
+
 test("bounded primitives preserve full drawing and style order including guides and stable overlays", async () => {
     const renderer = createRenderer("canvas");
     await renderer.initialize(cacheSurface, [{ reference: "image:test", uri: "/image.png" }], [delayedFont], "Delayed");

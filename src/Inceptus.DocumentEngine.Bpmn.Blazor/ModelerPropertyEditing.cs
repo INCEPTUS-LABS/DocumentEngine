@@ -11,8 +11,8 @@ using Inceptus.DocumentEngine.Organizational.Semantics;
 namespace Inceptus.DocumentEngine.Bpmn.Blazor;
 
 /// <summary>
-/// BPMN application adapters for concrete type switching and optional connector
-/// Name field. The generic property command retains its replacement-only contract.
+/// BPMN application adapters for concrete type switching and optional properties.
+/// The generic property command retains its replacement-only contract.
 /// </summary>
 internal static class ModelerPropertyEditing
 {
@@ -31,7 +31,12 @@ internal static class ModelerPropertyEditing
     internal static bool CanEditMissingValue(
         SemanticTypeId typeId, ElementPropertyFieldDefinition field) =>
         (typeId == BpmnSemanticTypes.SequenceFlow || typeId == BpmnSemanticTypes.MessageFlow) &&
-        field.SemanticPropertyKey == BpmnSemanticProperties.Name || IsParticipantField(typeId, field);
+        field.SemanticPropertyKey == BpmnSemanticProperties.Name || IsParticipantField(typeId, field) ||
+        IsDescriptionField(typeId, field);
+
+    private static bool IsDescriptionField(SemanticTypeId typeId, ElementPropertyFieldDefinition field) =>
+        (BpmnActivitySemanticTypes.IsActivity(typeId) || BpmnGatewaySemanticTypes.IsGateway(typeId)) &&
+        field.SemanticPropertyKey == BpmnSemanticProperties.Description;
 
     internal static bool IsParticipantField(SemanticTypeId typeId, ElementPropertyFieldDefinition field) =>
         typeId == OrganizationalSemanticTypes.Pool && field.SemanticPropertyKey == OrganizationalSemanticProperties.ParticipantId;
@@ -41,6 +46,9 @@ internal static class ModelerPropertyEditing
         ElementPropertyFieldDefinition field,
         PropertyValue value)
     {
+        if (IsDescriptionField(target.TypeId, field))
+            return new UpdateBpmnElementDescriptionCommand(target.DocumentId, target.Revision, target.SemanticId,
+                value.TextValue);
         if (IsParticipantField(target.TypeId, field))
             return new SetBpmnPoolParticipantCommand(target.DocumentId, target.Revision, target.SemanticId,
                 string.IsNullOrWhiteSpace(value.TextValue) ? null : new SemanticElementId(value.TextValue));

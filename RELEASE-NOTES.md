@@ -1,5 +1,42 @@
 # Release notes
 
+## 0.1.11
+
+- Prepares the aligned seven-package family locally after the committed Snap to
+  Grid and editing improvements. Public source provenance and publication remain
+  separate release steps.
+- Adds shared `GridSettings` and an Editor Parameters form with independent Show
+  Grid and Snap to Grid controls and configurable Grid Point Distance. Preferences
+  persist in browser storage at editor level, outside Document state and History.
+  The rendered grid and snapping use diagram coordinates independently of zoom
+  and pan; changing settings does not reposition existing elements.
+- Adds center-based snapping for eligible BPMN flow nodes during manual movement
+  and placement. Committed geometry uses the existing Command and History path,
+  with Undo/Redo and existing connector-routing semantics preserved. Connector
+  bend-point snapping, Pool/Lane resize snapping and boundary-event snapping are
+  not included.
+- Integrates Smart Create with grid-aware, collision-aware placement and
+  deterministic candidate selection. Existing Process, Pool and Lane constraints
+  remain authoritative; element and Sequence Flow creation stay atomic in one
+  History operation. Disabling Snap to Grid retains free placement behavior.
+- Aligns Auto Arrange columns and tracks to the grid while preserving branching,
+  merging and existing connector-routing integration. Layout remains
+  deterministic. Equivalent floating-point coordinates are retained to avoid
+  unnecessary History entries when an unchanged arrangement is repeated.
+- Adds horizontal and vertical alignment of eligible selected flow nodes against
+  the first selected node, preserving the reference position, existing containment
+  and exact Undo/Redo through the established move command.
+- Stabilizes editor action bars, the source Demo toolbar and Smart Edit panels
+  during Scene rebuilds. Properties retains drafts through presentation updates
+  and closes after successful Apply. Tasks, SubProcesses and Gateways support
+  missing and multiline Description values with exact Undo/Redo; newly created
+  elements use an empty Description instead of generated descriptive text.
+- Updates the NuGet Project URL to `https://inceptus.online/bpmn/editor/` and the
+  corresponding architecture and package-inspection assertions, including symbol
+  package metadata. Centralizes the existing package icon configuration. Retains
+  package IDs, net10.0, dependency policies, MIT metadata, documentation and
+  portable-symbol packaging without changing native or published data formats.
+
 ## 0.1.10
 
 - Prepares the aligned seven-package family locally after the accepted A3,

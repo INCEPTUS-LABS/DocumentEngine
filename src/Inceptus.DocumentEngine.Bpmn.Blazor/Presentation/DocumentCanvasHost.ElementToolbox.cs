@@ -3,15 +3,18 @@ using Inceptus.DocumentEngine.Bpmn.Arrangement;
 using Inceptus.DocumentEngine.Bpmn.Commands;
 using Inceptus.DocumentEngine.Bpmn.Toolbox;
 using Inceptus.DocumentEngine.Canvas2D.EditingSession;
+using Inceptus.DocumentEngine.Canvas2D.Scene;
 using Inceptus.DocumentEngine.Contracts.Canvas2D;
 using Inceptus.DocumentEngine.Contracts.Commands;
 using Inceptus.DocumentEngine.Contracts.ConnectionCreation;
 using Inceptus.DocumentEngine.Contracts.Diagnostics;
+using Inceptus.DocumentEngine.Contracts.Documents;
 using Inceptus.DocumentEngine.Contracts.EditorState;
 using Inceptus.DocumentEngine.Contracts.Geometry;
 using Inceptus.DocumentEngine.Contracts.History;
 using Inceptus.DocumentEngine.Contracts.Presentation;
 using Inceptus.DocumentEngine.Contracts.Primitives;
+using Inceptus.DocumentEngine.Contracts.Properties;
 using Inceptus.DocumentEngine.Contracts.Toolbox;
 
 namespace Inceptus.DocumentEngine.Bpmn.Blazor.Presentation;
@@ -26,6 +29,10 @@ internal sealed partial class DocumentCanvasHost
     private (DocumentId Document, DocumentRevision Revision, VisualStateId Visual, DocumentScopeId Scope)? _elementCandidateKey;
     private ImmutableArray<ToolboxItemDefinition> _elementCandidates = [];
     private VisualStateId? _dismissedElementToolbox;
+    private ElementToolboxState? _elementToolbox;
+    private (long SessionVersion, DocumentId Document, DocumentScopeId Scope, VisualStateId Visual, SemanticElementId Element)? _elementToolboxOwner;
+    private bool _elementCanAutoPoints;
+    private bool _elementCanDelete;
     internal int ElementCandidateEvaluationCount { get; private set; }
 
     internal void SetSmartEditEnabled(bool enabled)
@@ -46,33 +53,41 @@ internal sealed partial class DocumentCanvasHost
 
     private ElementToolboxState? CaptureElementToolbox(EditingSessionState? state)
     {
-        if (state?.EditorState.Selection.Length != 1 || state.EditorState.Selection[0] != _dismissedElementToolbox)
-            _dismissedElementToolbox = null;
-        if (!_smartEditEnabled || _disposed || !_initialized || _propertiesFormOpen || _modelViewPropertiesFormOpen || _contextMenu is not null ||
-            state is not { Status: EditingSessionStatus.Ready, CurrentScene: { } scene } ||
-            state.EditorState.ActiveGesture is not null || state.EditorState.Selection.Length != 1 ||
-            state.EditorState.SemanticSceneSelection is not null || _toolboxSelection.SelectedItemId is not null ||
-            ConnectionToolState.GetSelection(state.EditorState) is not null ||
-            state.PresentationContext is not ProcessScopePresentationContext process ||
-            _session is null || !_session.TryCaptureDocumentSnapshot(out var document) || document.Revision != state.DocumentRevision ||
-            _surfaceSize is not { } surface) return null;
-        var id = state.EditorState.Selection.Single();
-        if (_dismissedElementToolbox == id) return null;
-        _dismissedElementToolbox = null;
-        if (!document.VisualModel.TryGetVisualState(id, out var visual) ||
-            !BpmnSmartNextCatalog.SupportsElementActions(document, visual!.SemanticElementId) ||
-            !TryResolveVisualPropertiesTarget(state, document, id, null, GetSpatialRegionId(state, id), out var body, out _)) return null;
-        var key = (document.DocumentId, document.Revision, id, process.ScopeId);
+        if (!TryCaptureElementToolboxTarget(state, out var document, out var id, out var scope))
+            return _elementToolbox = null;
+        document.VisualModel.TryGetVisualState(id, out var visual);
+        var owner = (_documentSessionVersion, document.DocumentId, scope, id, visual!.SemanticElementId);
+        if (_elementToolboxOwner != owner)
+        {
+            _elementToolboxOwner = owner;
+            _elementToolbox = null;
+            _elementCandidateKey = null;
+        }
+
+        // Rebuilding temporarily has no current Scene. Retain presentation only for
+        // the same, still-valid selected element; it is never an action authority.
+        if (state!.Status == EditingSessionStatus.Rebuilding) return _elementToolbox;
+        if (state is not { Status: EditingSessionStatus.Ready, CurrentScene: { } scene } ||
+            !TryResolveVisualPropertiesTarget(state, document, id, null, GetSpatialRegionId(state, id), out var body, out _))
+            return _elementToolbox = null;
+        var bounds = ElementToolboxDisplayedBounds(scene, state, body!);
+        if (bounds is null) return _elementToolbox;
+        var key = (document.DocumentId, document.Revision, id, scope);
         if (_elementCandidateKey != key)
         {
-            _elementCandidates = BpmnSmartNextCatalog.GetCandidates(document, visual.SemanticElementId, process.ScopeId);
+            var candidates = BpmnSmartNextCatalog.GetCandidates(document, visual.SemanticElementId, scope);
+            if (!_elementCandidates.SequenceEqual(candidates)) _elementCandidates = candidates;
             _elementCandidateKey = key;
+            _elementCanAutoPoints = BpmnAutoPointsPlanner.CanOptimize(document, id);
+            _elementCanDelete = TryCreateDeletionRequest(document, id, out var request) && request is not null &&
+                _deletionCatalog.GetMatchingRegistrations(request).Length == 1;
             ElementCandidateEvaluationCount++;
         }
-        var top = scene.ViewportTransform.TransformPoint(body!.Bounds.TopLeft);
-        var bottom = scene.ViewportTransform.TransformPoint(new(body.Bounds.Right, body.Bounds.Bottom));
-        var anchor = new RectD(top.X, top.Y, bottom.X - top.X, bottom.Y - top.Y);
-        if (!anchor.Intersects(new RectD(0, 0, surface.CssWidth, surface.CssHeight))) return null;
+        var anchor = ElementToolboxScreenBounds(scene, bounds.Value);
+        var top = anchor.TopLeft;
+        var bottom = new PointD(anchor.Right, anchor.Bottom);
+        var surface = _surfaceSize!.Value;
+        if (!anchor.Intersects(new RectD(0, 0, surface.CssWidth, surface.CssHeight))) return _elementToolbox = null;
         var width = Math.Min(424, Math.Max(0, surface.CssWidth - 16));
         var center = (top.X + bottom.X) / 2;
         var actions = new PointD(Math.Clamp(center - 62, 8, Math.Max(8, surface.CssWidth - 132)),
@@ -85,9 +100,60 @@ internal sealed partial class DocumentCanvasHost
         if (lowerY + panelHeight > surface.CssHeight - 8) lowerY = top.Y - panelHeight - 68;
         var lower = new PointD(Math.Clamp(center - width / 2, 8, Math.Max(8, surface.CssWidth - width - 8)),
             Math.Clamp(lowerY, 8, Math.Max(8, surface.CssHeight - panelHeight - 8)));
-        var canDelete = TryCreateDeletionRequest(document, id, out var request) && request is not null &&
-            _deletionCatalog.GetMatchingRegistrations(request).Length == 1;
-        return new(id, anchor, actions, lower, width, BpmnAutoPointsPlanner.CanOptimize(document, id), canDelete, _elementCandidates);
+        if (_elementToolbox is not { } previous || previous.VisualId != id || previous.Anchor != anchor ||
+            previous.ActionsPosition != actions || previous.CreationPosition != lower || previous.CreationWidth != width ||
+            previous.CanAutoPoints != _elementCanAutoPoints || previous.CanDelete != _elementCanDelete ||
+            previous.Candidates != _elementCandidates)
+            _elementToolbox = new(id, anchor, actions, lower, width, _elementCanAutoPoints, _elementCanDelete, _elementCandidates);
+        return _elementToolbox;
+    }
+
+    private bool TryCaptureElementToolboxTarget(EditingSessionState? state,
+        out DocumentSnapshot document, out VisualStateId id, out DocumentScopeId scope)
+    {
+        document = null!;
+        id = null!;
+        scope = null!;
+        if (state?.EditorState.Selection.Length != 1 || state.EditorState.Selection[0] != _dismissedElementToolbox)
+            _dismissedElementToolbox = null;
+        if (!_smartEditEnabled || _disposed || !_initialized || _propertiesFormOpen || _modelViewPropertiesFormOpen || _contextMenu is not null ||
+            state is null || state.IsClosed || state.EditorState.Selection.Length != 1 ||
+            state.EditorState.SemanticSceneSelection is not null || _toolboxSelection.SelectedItemId is not null ||
+            ConnectionToolState.GetSelection(state.EditorState) is not null ||
+            state.PresentationContext is not ProcessScopePresentationContext process ||
+            _session is null || !_session.TryCaptureDocumentSnapshot(out var snapshot) || snapshot.Revision != state.DocumentRevision ||
+            _surfaceSize is null) return false;
+        id = state.EditorState.Selection.Single();
+        if (_dismissedElementToolbox == id) return false;
+        _dismissedElementToolbox = null;
+        if (!snapshot.VisualModel.TryGetVisualState(id, out var visual) ||
+            !BpmnSmartNextCatalog.SupportsElementActions(snapshot, visual!.SemanticElementId) ||
+            !snapshot.SemanticModel.TryGetScope(visual.SemanticElementId, out var semanticScope) || semanticScope!.Id != process.ScopeId)
+            return false;
+        document = snapshot;
+        scope = process.ScopeId;
+        return true;
+    }
+
+    private static RectD? ElementToolboxDisplayedBounds(Canvas2DScene scene, EditingSessionState state, Canvas2DSceneItem body)
+    {
+        if (state.EditorState.ActiveGesture is not { } gesture) return body.Bounds;
+        // Follow the Scene's existing preview of this body. Do not calculate a
+        // second move/resize preview or interpret browser coordinates here.
+        var previews = scene.Items.Where(item => item.IsVisible &&
+            (item.Origin.Categories & Canvas2DSceneOriginCategory.EditorState) != 0 &&
+            item.Origin.VisualStateId == body.Origin.VisualStateId &&
+            item.Origin.RelatedSceneObjectIds.Contains(body.Id) &&
+            item.Metadata.TryGetValue("inceptus.canvas2d:editor-kind", out var kind) &&
+            kind.Kind == PropertyValueKind.Text && kind.TextValue == gesture.Kind).Take(2).ToArray();
+        return previews.Length switch { 0 => body.Bounds, 1 => previews[0].Bounds, _ => null };
+    }
+
+    private static RectD ElementToolboxScreenBounds(Canvas2DScene scene, RectD bounds)
+    {
+        var top = scene.ViewportTransform.TransformPoint(bounds.TopLeft);
+        var bottom = scene.ViewportTransform.TransformPoint(new(bounds.Right, bounds.Bottom));
+        return new(top.X, top.Y, bottom.X - top.X, bottom.Y - top.Y);
     }
 
     internal ValueTask<HistoryOperationResult?> SmartCreateAsync(ToolboxItemId itemId, CancellationToken cancellationToken = default) =>
@@ -106,22 +172,32 @@ internal sealed partial class DocumentCanvasHost
         try
         {
             EditingSession? session;
-            ElementToolboxState? overlay;
-            lock (_sync) { session = _session; overlay = CaptureElementToolbox(session?.CaptureState()); }
-            if (session is null || overlay is null || !session.TryCaptureDocumentSnapshot(out var document)) return null;
-            var state = session.CaptureState();
-            if (!TryResolveVisualPropertiesTarget(state, document, overlay.VisualId, null, GetSpatialRegionId(state, overlay.VisualId),
+            EditingSessionState? state;
+            DocumentSnapshot document;
+            VisualStateId id;
+            lock (_sync)
+            {
+                session = _session;
+                state = session?.CaptureState();
+                if (state is not { Status: EditingSessionStatus.Ready, CurrentScene: not null } ||
+                    state.EditorState.ActiveGesture is not null ||
+                    !TryCaptureElementToolboxTarget(state, out document, out id, out _)) return null;
+            }
+            if (session is null || !TryResolveVisualPropertiesTarget(state, document, id, null, GetSpatialRegionId(state, id),
                 out var body, out _)) return null;
+            if (_surfaceSize is not { } surface || !ElementToolboxScreenBounds(state.CurrentScene!, body!.Bounds)
+                .Intersects(new RectD(0, 0, surface.CssWidth, surface.CssHeight))) return null;
             ICommand command;
             if (itemId is not null)
             {
                 var configuration = _nativeDocumentSessionConfiguration!;
+                var grid = session.GridSettings;
                 command = await new BpmnSmartCreatePlanner(configuration.CommandHandlers, configuration.CommandValidators)
-                    .PlanAsync(document, overlay.VisualId, itemId, _documentCreationIdentityProvider, linked.Token).ConfigureAwait(false);
+                    .PlanAsync(document, id, itemId, _documentCreationIdentityProvider, grid, linked.Token).ConfigureAwait(false);
             }
             else if (delete)
             {
-                if (!TryCreateDeletionRequest(document, overlay.VisualId, out var request) || request is null) return null;
+                if (!TryCreateDeletionRequest(document, id, out var request) || request is null) return null;
                 var registrations = _deletionCatalog.GetMatchingRegistrations(request);
                 if (registrations.Length != 1) return null;
                 var plan = registrations[0].CommandFactory.CreatePlan(request);
@@ -134,8 +210,8 @@ internal sealed partial class DocumentCanvasHost
             }
             else
             {
-                if (!overlay.CanAutoPoints) return null;
-                command = new BpmnAutoPointsCommand(document, overlay.VisualId);
+                if (!BpmnAutoPointsPlanner.CanOptimize(document, id)) return null;
+                command = new BpmnAutoPointsCommand(document, id);
             }
             var result = await session.ExecuteForSceneTargetAsync(command, state.CurrentScene!, state.Generation,
                 body!.Id, body.SpatialRegion, linked.Token).ConfigureAwait(false);

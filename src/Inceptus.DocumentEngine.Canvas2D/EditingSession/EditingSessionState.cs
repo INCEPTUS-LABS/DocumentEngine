@@ -85,7 +85,8 @@ public sealed class EditingSessionState
         bool isCurrentScenePresented = false,
         bool isPanPresentationPending = false,
         PresentationViewContext? presentationContext = null,
-        PresentationViewPlan? presentationPlan = null)
+        PresentationViewPlan? presentationPlan = null,
+        ImmutableArray<VisualStateId> selectionOrder = default)
     {
         ArgumentNullException.ThrowIfNull(documentId);
         ArgumentNullException.ThrowIfNull(activeScopeId);
@@ -145,6 +146,7 @@ public sealed class EditingSessionState
         LayoutResult = layoutResult;
         RoutingResult = routingResult;
         EditorState = editorState;
+        SelectionOrder = selectionOrder.IsDefault ? editorState.Selection : selectionOrder;
         HistoryStatus = historyStatus;
         ModelProfileCatalog = modelProfileCatalog ??
             Inceptus.DocumentEngine.Contracts.Profiles.ModelProfileCatalog.Empty;
@@ -191,6 +193,12 @@ public sealed class EditingSessionState
     public RoutingResult? RoutingResult { get; }
 
     public EditorStateSnapshot EditorState { get; }
+
+    /// <summary>
+    /// Current selection in acquisition order, with the earliest surviving selection first.
+    /// Targets added together use canonical ID order. This is transient session metadata.
+    /// </summary>
+    public ImmutableArray<VisualStateId> SelectionOrder { get; }
 
     public HistoryStatus HistoryStatus { get; }
 

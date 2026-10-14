@@ -20,6 +20,7 @@ public static class BpmnModelerServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
         services.AddLocalization();
+        services.TryAddScoped<BpmnEditorSettingsStore>();
         services.TryAddTransient(static provider => new BpmnModelerCompositionFactory(
             () => provider.GetServices<IBpmnModelerStartupDocumentProvider>()));
         return services;

@@ -9,6 +9,7 @@ using Inceptus.DocumentEngine.Bpmn.Blazor.Composition;
 using Inceptus.DocumentEngine.Bpmn.Blazor.Presentation;
 using Inceptus.DocumentEngine.Bpmn.Semantics;
 using Inceptus.DocumentEngine.Canvas2D.Rendering;
+using Inceptus.DocumentEngine.Canvas2D.EditingSession;
 using Inceptus.DocumentEngine.Canvas2D.Scene;
 using Inceptus.DocumentEngine.Canvas2D.Interaction;
 using Inceptus.DocumentEngine.Contracts.Commands;
@@ -391,6 +392,83 @@ public sealed partial class DocumentCanvasHostTests
         Assert.Equal(1, state.Session!.HistoryStatus.EntryCount);
         Assert.Equal("Committed original", Assert.Single(ModelerChanges(log)).Snapshot.SemanticModel.Elements.Single(
             element => element.Id == PropertiesUxElementId).Properties[BpmnSemanticProperties.Name].TextValue);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PropertiesUxFirstApplyClosesAfterSceneRebuild(bool inLane)
+    {
+        var execution = new RecordingRenderExecution();
+        var initial = inLane ? A22PoolSnapshot() : CreatePropertiesUxSnapshot("BPMN.ServiceTask");
+        var visualId = inLane ? new VisualStateId("sales-task-visual") : PropertiesUxVisualId;
+        var elementId = inLane ? new SemanticElementId("sales-task") : PropertiesUxElementId;
+        await using var host = CreateHost(execution,
+            new RecordingSurfaceObserver(new Canvas2DSurfaceSize(1400d, 900d, 1d)),
+            compositionFactory: new BpmnModelerCompositionFactory(initialDocument: initial));
+        await host.InitializeAsync("properties-rebuild", "properties-rebuild-container");
+        var session = Session(host);
+        await session.UpdateEditorStateAsync(new EditorStateSnapshot(selection: [visualId]));
+        await session.WaitForIdleAsync();
+        var snapshot = Assert.IsType<DocumentCanvasPropertySnapshot>(await host.OpenPropertiesAsync(visualId));
+        Assert.Equal(inLane, snapshot.SpatialRegion is not null);
+        var draft = new DocumentCanvasPropertiesDraft(snapshot);
+        const string savedName = "Name saved with the first Apply click";
+        draft.DataFields.Single(field => field.FieldId.Value == "name").EditorValue = savedName;
+        var activator = new LocalizationComponentActivator(host, draft);
+        using var services = new ServiceCollection().AddLogging().AddInceptusBpmnModeler()
+            .AddSingleton<Microsoft.JSInterop.IJSRuntime>(new PublishDownloadRuntime())
+            .AddSingleton<Microsoft.AspNetCore.Components.IComponentActivator>(activator).BuildServiceProvider();
+        await using var renderer = new HtmlRenderer(services, NullLoggerFactory.Instance);
+        var rendered = await renderer.Dispatcher.InvokeAsync(() => renderer.RenderComponentAsync<DocumentCanvas>());
+        var callback = typeof(DocumentCanvas).GetMethod("HandleHostStateChangedAsync", PropertiesUxFlags)!
+            .CreateDelegate<Func<Inceptus.DocumentEngine.Canvas2D.EditingSession.EditingSessionGeneration?, Task>>(activator.Canvas.Component);
+        host.StateChanged += callback;
+        var before = AttachedDocument(session).CaptureSnapshot();
+        var history = session.CaptureState().HistoryStatus.EntryCount;
+        execution.BlockMeasureText = true;
+        var apply = renderer.Dispatcher.InvokeAsync(() => InvokePropertiesUxAsync(activator.Canvas.Component, "ApplyPropertiesAsync"));
+        try
+        {
+            await execution.TextMeasurementStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            // Replay the scene-less rebuild notification at an asynchronous boundary.
+            // A fast in-process pipeline otherwise hides this browser-visible interval.
+            var ready = session.CaptureState();
+            var rebuilding = new EditingSessionState(ready.DocumentId, ready.DocumentRevision,
+                ready.ActiveScopeId, EditingSessionStatus.Rebuilding, ready.Generation,
+                null, ready.CurrentScene, null, null, null, ready.EditorState, ready.HistoryStatus,
+                [], [], false, ready.ModelProfileCatalog, ready.ModelProfileState,
+                ready.ModelProfileViewState, ready.ModelProfileElementViewState,
+                presentationContext: ready.PresentationContext);
+            await renderer.Dispatcher.InvokeAsync(async () =>
+            {
+                typeof(DocumentCanvas).GetField("_state", PropertiesUxFlags)!
+                    .SetValue(activator.Canvas.Component, host.CaptureState() with { Session = rebuilding });
+                await InvokePropertiesUxAsync(activator.Canvas.Component, "ReconcilePropertiesForm");
+            });
+            Assert.Same(draft, typeof(DocumentCanvas).GetField("_propertiesDraft", PropertiesUxFlags)!
+                .GetValue(activator.Canvas.Component));
+            typeof(DocumentCanvasHost).GetMethod("HandleSessionStateChanged", PropertiesUxFlags)!
+                .Invoke(host, [session, new EditingSessionStateChangedEventArgs(rebuilding)]);
+            Assert.True(host.UpdatePropertiesFormState(true, visualId, true, applyInFlight: true,
+                targetPresentationId: snapshot.SpatialRegion?.Id));
+        }
+        finally
+        {
+            execution.ReleaseTextMeasurement();
+            await apply.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+        await session.WaitForIdleAsync();
+        await callback(null);
+        Assert.False(host.CaptureState().PropertiesFormOpen);
+        Assert.Null(typeof(DocumentCanvas).GetField("_propertiesDraft", PropertiesUxFlags)!
+            .GetValue(activator.Canvas.Component));
+        Assert.DoesNotContain("<form", await renderer.Dispatcher.InvokeAsync(rendered.ToHtmlString), StringComparison.Ordinal);
+        var saved = AttachedDocument(session).CaptureSnapshot();
+        Assert.Equal(before.Revision.Increment(), saved.Revision);
+        Assert.Equal(history + 1, session.CaptureState().HistoryStatus.EntryCount);
+        Assert.Equal(savedName, saved.SemanticModel.Elements.Single(element => element.Id == elementId)
+            .Properties[BpmnSemanticProperties.Name].TextValue);
     }
 
     private static async Task InvokePropertiesUxAsync(DocumentCanvas component, string method)

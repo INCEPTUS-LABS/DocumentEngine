@@ -1,0 +1,26 @@
+.editor-parameters-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: grid;
+    place-items: center;
+    padding: 1rem;
+    background: rgba(15, 23, 42, .5);
+}
+.editor-parameters {
+    width: min(30rem, 100%);
+    padding: 1.25rem;
+    border: 1px solid #64748b;
+    border-radius: .7rem;
+    color: #e2e8f0;
+    background: #0f172a;
+}
+h2 { margin: 0 0 1rem; font-size: 1.1rem; }
+fieldset { border: 1px solid #475569; border-radius: .4rem; }
+label { display: flex; align-items: center; gap: .5rem; margin: .8rem 0; }
+label span { flex: 1; }
+input[type=number] { width: 7rem; padding: .4rem; }
+small { color: #cbd5e1; }
+p[role=alert] { color: #fca5a5; }
+.editor-parameters-actions { display: flex; justify-content: flex-end; gap: .6rem; margin-top: 1rem; }
+button { padding: .5rem .85rem; }

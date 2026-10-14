@@ -200,7 +200,7 @@ public sealed class BpmnN1ToolboxPlacementTests
         Assert.Equal(42L, command.ElementNumber);
         Assert.Equal("TASK_42", command.Code);
         Assert.Equal("Task 42", command.Name);
-        Assert.Equal("Task 42 created from the Toolbox.", command.Description);
+        Assert.Null(command.Description);
         Assert.Equal(new PointD(440d, 260d), command.Position);
         Assert.Equal(new SizeD(120d, 80d), command.Size);
 
@@ -222,9 +222,7 @@ public sealed class BpmnN1ToolboxPlacementTests
             task.Properties[BpmnSemanticProperties.ElementNumber].Kind);
         Assert.Equal(42L,
             task.Properties[BpmnSemanticProperties.ElementNumber].IntegerValue);
-        Assert.Equal(
-            "Task 42 created from the Toolbox.",
-            task.Properties[BpmnSemanticProperties.Description].TextValue);
+        Assert.False(task.Properties.ContainsKey(BpmnSemanticProperties.Description));
         Assert.True(committed.VisualModel.TryGetVisualState(identity.VisualStateId, out var visual));
         Assert.NotNull(visual);
         Assert.Equal(new PointD(440d, 260d), visual.Position);
@@ -445,28 +443,22 @@ public sealed class BpmnN1ToolboxPlacementTests
                 Assert.Equal("TASK_1", task.Code);
                 Assert.Equal("Task 1", task.Name);
                 Assert.Equal(1L, task.ElementNumber);
-                Assert.Equal("Task 1 created from the Toolbox.", task.Description);
+                Assert.Null(task.Description);
                 break;
             case CreateBpmnExclusiveGatewayCommand gateway:
                 Assert.Equal("EXCLUSIVE_GATEWAY", gateway.Code);
                 Assert.Equal("Exclusive Gateway", gateway.Name);
-                Assert.Equal(
-                    "Exclusive Gateway created from the Toolbox.",
-                    gateway.Description);
+                Assert.Null(gateway.Description);
                 break;
             case CreateBpmnParallelGatewayCommand gateway:
                 Assert.Equal("PARALLEL_GATEWAY", gateway.Code);
                 Assert.Equal("Parallel Gateway", gateway.Name);
-                Assert.Equal(
-                    "Parallel Gateway created from the Toolbox.",
-                    gateway.Description);
+                Assert.Null(gateway.Description);
                 break;
             case CreateBpmnInclusiveGatewayCommand gateway:
                 Assert.Equal("INCLUSIVE_GATEWAY", gateway.Code);
                 Assert.Equal("Inclusive Gateway", gateway.Name);
-                Assert.Equal(
-                    "Inclusive Gateway created from the Toolbox.",
-                    gateway.Description);
+                Assert.Null(gateway.Description);
                 break;
             case CreateBpmnEndEventCommand end:
                 Assert.Null(end.Name);

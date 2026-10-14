@@ -1,7 +1,9 @@
 using Inceptus.DocumentEngine.Bpmn.Layout;
 using Inceptus.DocumentEngine.Bpmn.Semantics;
+using Inceptus.DocumentEngine.Bpmn.Visuals;
 using Inceptus.DocumentEngine.Contracts.Commands;
 using Inceptus.DocumentEngine.Contracts.Documents;
+using Inceptus.DocumentEngine.Contracts.EditorState;
 using Inceptus.DocumentEngine.Contracts.Geometry;
 using Inceptus.DocumentEngine.Contracts.Primitives;
 using Inceptus.DocumentEngine.Contracts.Visuals;
@@ -17,7 +19,10 @@ public static class BpmnAutoArrangePlanner
             element is { AttachedToElementId: null } && BpmnSemanticTypes.IsFlowNode(element.TypeId));
 
     public static BpmnAutoArrangePlan Plan(DocumentSnapshot document, IEnumerable<DocumentScopeId> scopeIds,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) => Plan(document, scopeIds, null, cancellationToken);
+
+    public static BpmnAutoArrangePlan Plan(DocumentSnapshot document, IEnumerable<DocumentScopeId> scopeIds,
+        GridSettings? gridSettings, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(scopeIds);
@@ -48,7 +53,8 @@ public static class BpmnAutoArrangePlanner
                 var type = elements[visual.SemanticElementId].TypeId;
                 return new ArrangeNode(visual.SemanticElementId, visual.Id, body.LocalBounds, body.RegionId?.Value ?? "",
                     body.RegionId is { } region ? regionOrder.GetValueOrDefault(region) : 0,
-                    type == BpmnSemanticTypes.StartEvent ? 0 : type == BpmnSemanticTypes.EndEvent ? 2 : 1);
+                    type == BpmnSemanticTypes.StartEvent ? 0 : type == BpmnSemanticTypes.EndEvent ? 2 : 1,
+                    BpmnGridPolicy.Supports(type));
             }).ToArray();
             var ids = nodes.Select(node => node.Id).ToHashSet();
             // Boundary outgoing branches begin at their owner's track, never at an independent rank.
@@ -57,21 +63,41 @@ public static class BpmnAutoArrangePlanner
                 ids.Contains(Owner(edge.SourceId)) && ids.Contains(Owner(edge.TargetId)))
                 .Select(edge => new ArrangeEdge(edge.Id, Owner(edge.SourceId), Owner(edge.TargetId))).ToArray();
             if (nodes.Length == 0) continue;
-            var arranged = BpmnAutoArrangeGraph.Arrange(nodes, edges, cancellationToken);
-            var local = nodes.ToDictionary(node => node.VisualId, node => arranged[node.Id]);
-            foreach (var visual in visuals.Where(visual => visual.BoundaryAttachment is not null))
+            var layers = BpmnAutoArrangeGraph.Prepare(nodes, edges, cancellationToken);
+            var basis = proposal;
+            var frames = saved.Geometry.Regions.Where(region => region.IsActive)
+                .ToDictionary(region => region.Id.Value, region => region.LocalToScopeTransform!.Value);
+            // Expansion can move a downstream Pool/Lane frame. Re-evaluate coordinate allocation
+            // from the same logical plan and original geometry, before any connector planning.
+            // Each pass stabilizes at least the next frame in the ordered container stack.
+            for (var pass = 0; ; pass++)
             {
-                var attachment = visual.BoundaryAttachment!;
-                if (!arranged.TryGetValue(elements[visual.SemanticElementId].AttachedToElementId!, out var owner))
-                    throw new InvalidOperationException("Boundary attachment owner is not in the active arrangement.");
-                local.Add(visual.Id, attachment.ResolveBounds(owner, visual.Size));
+                var arranged = BpmnAutoArrangeGraph.Place(nodes, layers, gridSettings, frames, cancellationToken);
+                var local = nodes.ToDictionary(node => node.VisualId, node => arranged[node.Id]);
+                foreach (var visual in visuals.Where(visual => visual.BoundaryAttachment is not null))
+                {
+                    var attachment = visual.BoundaryAttachment!;
+                    if (!arranged.TryGetValue(elements[visual.SemanticElementId].AttachedToElementId!, out var owner))
+                        throw new InvalidOperationException("Boundary attachment owner is not in the active arrangement.");
+                    local.Add(visual.Id, attachment.ResolveBounds(owner, visual.Size));
+                }
+                var expanded = OrganizationalArrangeGeometry.Expand(basis, scopeId, local);
+                var nextFrames = expanded.Document.VisualModel.RoutingScopes!.Value.Single(scope => scope.ScopeId == scopeId)
+                    .Geometry.Regions.Where(region => region.IsActive)
+                    .ToDictionary(region => region.Id.Value, region => region.LocalToScopeTransform!.Value);
+                if (gridSettings is { SnapToGrid: true } && frames.Any(pair => nextFrames[pair.Key] != pair.Value))
+                {
+                    if (pass >= frames.Count) throw new InvalidOperationException("The grid cannot fit the container arrangement.");
+                    frames = nextFrames;
+                    continue;
+                }
+                foreach (var visual in visuals)
+                    replacements[visual.Id] = WithGeometry(visual, local[visual.Id].TopLeft, visual.ConnectorAnchors);
+                proposal = expanded.Document;
+                heights.AddRange(expanded.Heights);
+                widths.AddRange(expanded.Widths);
+                break;
             }
-            foreach (var visual in visuals)
-                replacements[visual.Id] = WithGeometry(visual, local[visual.Id].TopLeft, visual.ConnectorAnchors);
-            var expanded = OrganizationalArrangeGeometry.Expand(proposal, scopeId, local);
-            proposal = expanded.Document;
-            heights.AddRange(expanded.Heights);
-            widths.AddRange(expanded.Widths);
         }
         proposal = ReplaceVisuals(proposal, replacements);
         var anchors = BpmnAutoArrangeConnectorPlanner.ArrangeAttachments(proposal, selected, replacements.Keys.ToHashSet(), cancellationToken);

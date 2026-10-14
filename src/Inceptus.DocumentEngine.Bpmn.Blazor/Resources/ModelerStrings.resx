@@ -249,4 +249,15 @@
   <data name="SmartEdit_Label" xml:space="preserve"><value>Smart Edit</value></data>
   <data name="SmartEdit_On" xml:space="preserve"><value>ON</value></data>
   <data name="SmartEdit_Off" xml:space="preserve"><value>OFF</value></data>
+  <data name="Settings_Title" xml:space="preserve"><value>Settings</value></data>
+  <data name="Settings_Grid" xml:space="preserve"><value>Grid</value></data>
+  <data name="Settings_ShowGrid" xml:space="preserve"><value>Show Grid</value></data>
+  <data name="Settings_SnapToGrid" xml:space="preserve"><value>Snap to Grid</value></data>
+  <data name="Settings_PointDistance" xml:space="preserve"><value>Grid Point Distance</value></data>
+  <data name="Settings_DiagramUnits" xml:space="preserve"><value>Spacing in diagram units. Existing elements keep their positions.</value></data>
+  <data name="Settings_InvalidDistance" xml:space="preserve"><value>Enter a finite number greater than zero.</value></data>
+  <data name="Settings_SaveFailed" xml:space="preserve"><value>Could not save editor settings in browser storage.</value></data>
+  <data name="Toolbar_Layout" xml:space="preserve"><value>Layout</value></data>
+  <data name="Toolbar_AlignHorizontal" xml:space="preserve"><value>Align horizontally to first selected element</value></data>
+  <data name="Toolbar_AlignVertical" xml:space="preserve"><value>Align vertically to first selected element</value></data>
 </root>

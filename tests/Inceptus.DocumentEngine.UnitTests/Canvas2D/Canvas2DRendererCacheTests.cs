@@ -200,10 +200,11 @@ public sealed class Canvas2DRendererCacheTests
         await renderer.RenderAsync(scene);
         await renderer.RenderAsync(scene);
         var json = JsonSerializer.SerializeToElement(execution.LastViewportFrame);
-        Assert.Equal(["ViewportTransform", "ContentVersion", "PresentationVersion", "ViewportLines", "PresentationItems"], json.EnumerateObject().Select(property => property.Name));
+        Assert.Equal(["ViewportTransform", "ContentVersion", "PresentationVersion", "ViewportLines", "PresentationItems", "BackgroundPoints"], json.EnumerateObject().Select(property => property.Name));
         Assert.Equal(6, json.GetProperty("ViewportTransform").EnumerateObject().Count());
         Assert.Equal(0, json.GetProperty("ViewportLines").GetArrayLength());
         Assert.Equal(0, json.GetProperty("PresentationItems").GetArrayLength());
+        Assert.Equal(JsonValueKind.Null, json.GetProperty("BackgroundPoints").ValueKind);
     }
 
     private static Canvas2DScene Copy(Canvas2DScene scene, ImmutableArray<Canvas2DSceneItem> items) => new(

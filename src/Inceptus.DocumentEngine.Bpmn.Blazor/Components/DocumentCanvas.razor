@@ -26,10 +26,12 @@
 @inject Microsoft.JSInterop.IJSRuntime JavaScript
 @inject IServiceProvider Services
 
+@{ var actionBar = CaptureActionBarPresentation(); }
+
 <main class="document-canvas-page"
       @onclick="CloseContextMenu"
       @onkeydown="HandleEditorKeyDownAsync">
-    <section class="document-canvas-shell"
+    <section class="document-canvas-shell" inert="@_editorParametersOpen"
              data-presentation-status="@StatusValue"
              data-scene-status="@SceneStatusValue"
              data-scene-revision="@SceneRevision"
@@ -107,7 +109,7 @@
                 <label class="presentation-view-selector" for="@DomId("presentation-view")">
                     @Text["Navigation_PresentationView"]
                     <select id="@DomId("presentation-view")" value="@SelectedPresentationView"
-                            disabled="@(!CanNavigateScope)" @onchange="SelectPresentationViewAsync">
+                            disabled="@(!actionBar.CanNavigateScope)" @onchange="SelectPresentationViewAsync">
                         @foreach (var view in PresentationViewChoices)
                         {
                             <option value="@ViewChoiceValue(view.Context)">@(view.ResourceKey is { } key ? Text[key] : view.Label)</option>
@@ -133,7 +135,7 @@
                     {
                         <button class="scope-breadcrumb-link"
                                 type="button"
-                                disabled="@(!CanNavigateScope)"
+                                disabled="@(!actionBar.CanNavigateScope)"
                                 title="@segment.ScopeId.Value"
                                 @onclick="() => NavigateToScopeAsync(segment.ScopeId)">@BreadcrumbLabel(segment)</button>
                     }
@@ -143,7 +145,7 @@
                 <button id="@DomId("new-diagram")"
                         class="native-document-action new-diagram-action"
                         type="button"
-                        disabled="@(!CanCreateNewDiagram)"
+                        disabled="@(!actionBar.CanCreateNewDiagram)"
                         aria-label="@Text["Toolbar_NewDiagram"]"
                         title="@Text["Toolbar_NewDiagram"]"
                         @onclick="OpenNewDiagramConfirmation">
@@ -153,12 +155,12 @@
             <div class="toolbar-group history-controls" role="group" aria-label="@Text["Accessibility_History"]">
                 <button id="@DomId("undo")"
                         type="button"
-                        disabled="@(!CanUndo)"
+                        disabled="@(!actionBar.CanUndo)"
                         title="@Text["Toolbar_Undo"]"
                         @onclick="UndoAsync">@Text["Toolbar_Undo"]</button>
                 <button id="@DomId("redo")"
                         type="button"
-                        disabled="@(!CanRedo)"
+                        disabled="@(!actionBar.CanRedo)"
                         title="@Text["Toolbar_Redo"]"
                         @onclick="RedoAsync">@Text["Toolbar_Redo"]</button>
             </div>
@@ -169,36 +171,57 @@
             <div class="toolbar-group zoom-controls" role="group" aria-label="@Text["Accessibility_Zoom"]">
                 <button id="@DomId("zoom-out")"
                         type="button"
-                        disabled="@(!CanZoomOut)"
+                        disabled="@(!actionBar.CanZoomOut)"
                         aria-label="@Text["Toolbar_ZoomOut"]"
                         title="@Text["Toolbar_ZoomOut"]"
                         @onclick="ZoomOutAsync">−</button>
                 <button id="@DomId("zoom-100")"
                         class="zoom-percentage"
                         type="button"
-                        disabled="@(!CanSetZoomToActualSize)"
+                        disabled="@(!actionBar.CanSetZoomToActualSize)"
                         aria-label="@Text["Toolbar_ZoomActualSize"]"
                         title="@Text["Toolbar_ZoomActualSize"]"
                         @onclick="SetZoomToActualSizeAsync">@ZoomPercentage%</button>
                 <button id="@DomId("zoom-in")"
                         type="button"
-                        disabled="@(!CanZoomIn)"
+                        disabled="@(!actionBar.CanZoomIn)"
                         aria-label="@Text["Toolbar_ZoomIn"]"
                         title="@Text["Toolbar_ZoomIn"]"
                         @onclick="ZoomInAsync">+</button>
             </div>
-            <div class="toolbar-group layout-controls" role="group" aria-label="@Text["Toolbar_AutoArrange"]">
+            <div class="toolbar-group layout-controls" role="group" aria-label="@Text["Toolbar_Layout"]">
+                <button id="@DomId("align-horizontal")" class="layout-icon-action"
+                        type="button" disabled="@(!actionBar.CanAlignHorizontal)"
+                        title="@Text["Toolbar_AlignHorizontal"]" aria-label="@Text["Toolbar_AlignHorizontal"]"
+                        @onclick="() => AlignAsync(true)">
+                    <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <path d="M2 12h20" stroke-dasharray="2 2"/><rect x="5" y="4" width="5" height="16" rx="1"/><rect x="14" y="8" width="5" height="8" rx="1"/>
+                    </svg>
+                </button>
+                <button id="@DomId("align-vertical")" class="layout-icon-action"
+                        type="button" disabled="@(!actionBar.CanAlignVertical)"
+                        title="@Text["Toolbar_AlignVertical"]" aria-label="@Text["Toolbar_AlignVertical"]"
+                        @onclick="() => AlignAsync(false)">
+                    <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <path d="M12 2v20" stroke-dasharray="2 2"/><rect x="4" y="5" width="16" height="5" rx="1"/><rect x="8" y="14" width="8" height="5" rx="1"/>
+                    </svg>
+                </button>
                 <button id="@DomId("auto-arrange")"
+                        class="layout-icon-action"
                         type="button"
-                        disabled="@(!CanAutoArrange)"
+                        disabled="@(!actionBar.CanAutoArrange)"
                         title="@Text["Toolbar_AutoArrange"]"
                         aria-label="@Text["Toolbar_AutoArrange"]"
-                        @onclick="AutoArrangeAsync">@Text["Toolbar_AutoArrange"]</button>
+                        @onclick="AutoArrangeAsync">
+                    <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <rect x="2" y="9" width="6" height="6" rx="1"/><rect x="16" y="2" width="6" height="6" rx="1"/><rect x="16" y="16" width="6" height="6" rx="1"/><path d="M8 12h4V5h4m-4 7v7h4"/>
+                    </svg>
+                </button>
             </div>
         </div>
 
         <div id="@ContainerElementId" class="document-canvas-surface">
-            <ElementToolbox @key="_state?.SmartEditEnabled" State="@(_newDiagramConfirmationOpen ? null : _state?.ElementToolbox)"
+            <ElementToolbox State="@(_newDiagramConfirmationOpen ? null : _state?.ElementToolbox)"
                             Properties="OpenElementToolboxPropertiesAsync" AutoPoints="AutoPointsAsync"
                             Delete="DeleteToolboxElementAsync" Create="SmartCreateAsync" Dismiss="DismissElementToolbox" />
             <canvas id="@CanvasElementId"
@@ -608,6 +631,10 @@
             </div>
         </div>
     </section>
+    @if (_editorParametersOpen && _settings is not null)
+    {
+        <EditorParameters Settings="@_settings" Closed="CloseEditorParametersAsync" />
+    }
     @if (_newDiagramConfirmationOpen)
     {
         <div class="new-diagram-confirmation-backdrop"
@@ -1071,6 +1098,7 @@
     {
         if (firstRender)
         {
+            await InitializeGridAsync();
             DocumentCanvasHost host;
             lock (_lifecycleSync)
             {
@@ -1082,7 +1110,7 @@
                 host = new DocumentCanvasHost(
                     JavaScript,
                     CompositionFactory,
-                    _toolboxSelection);
+                    _toolboxSelection, _settings);
                 host.StateChanged += HandleHostStateChangedAsync;
                 ModelerFacade?.Attach(host);
                 _host = host;
@@ -1124,6 +1152,8 @@
             }
 
             _disposed = true;
+            if (_settings is not null) _settings.Changed -= HandleGridChangedAsync;
+            InvalidateActionBarPresentation();
             _componentLifetime.Cancel();
             _propertiesDraft = null;
             _modelViewPropertiesDraft = null;
@@ -2309,8 +2339,10 @@
             ? state.PropertiesTargetVisualStateId == targetVisualStateId &&
               state.PropertiesTargetSemanticElementId is null &&
               session.EditorState.Selection.Contains(targetVisualStateId) &&
-              session.CurrentScene?.GetVisualRegion(targetVisualStateId)?.Id ==
-                  target.SpatialRegion?.Id
+              // A rebuild temporarily removes the Scene, not the selected spatial target.
+              (session.Status == EditingSessionStatus.Rebuilding ||
+               session.CurrentScene?.GetVisualRegion(targetVisualStateId)?.Id ==
+                   target.SpatialRegion?.Id)
             : state.PropertiesTargetVisualStateId is null &&
               state.PropertiesTargetSemanticElementId == target.SemanticId &&
               session.EditorState.Selection.IsEmpty &&
@@ -2346,6 +2378,15 @@
     }
 
     private bool CanAutoArrange => CanNavigateScope && !AnyPropertiesApplying && _state?.CanAutoArrange == true;
+
+    private bool CanAlign(bool horizontal) => CanNavigateScope && !AnyPropertiesApplying && _host?.CanAlign(horizontal) == true;
+
+    private async Task AlignAsync(bool horizontal)
+    {
+        if (!CanAlign(horizontal) || _host is not { } host) return;
+        await host.AlignAsync(horizontal, _componentLifetime.Token);
+        RefreshHostState(host);
+    }
 
     private async Task AutoArrangeAsync()
     {

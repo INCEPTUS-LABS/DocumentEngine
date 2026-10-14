@@ -196,7 +196,7 @@ public sealed class BpmnN6TaskFamilyTests
         Assert.Equal(22, command.ElementNumber);
         Assert.Equal("MANUAL_TASK_22", command.Code);
         Assert.Equal("Manual Task 22", command.Name);
-        Assert.Equal("Manual Task 22 created from the Toolbox.", command.Description);
+        Assert.Null(command.Description);
         Assert.Equal(new SizeD(120d, 80d), command.Size);
         Assert.Equal(new PointD(200d, 140d), command.Position);
         Assert.Equal(VisualPlacementMode.Pinned, command.PlacementMode);

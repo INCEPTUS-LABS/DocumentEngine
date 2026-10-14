@@ -33,10 +33,4 @@
     <ProjectReference Include="../Inceptus.DocumentEngine.Bpmn/Inceptus.DocumentEngine.Bpmn.csproj" />
     <ProjectReference Include="../Inceptus.DocumentEngine.Organizational/Inceptus.DocumentEngine.Organizational.csproj" />
   </ItemGroup>
-
-  <ItemGroup>
-    <None Include="../../branding/inceptus-nuget-icon.png"
-          Pack="true"
-          PackagePath="inceptus-nuget-icon.png" />
-  </ItemGroup>
 </Project>

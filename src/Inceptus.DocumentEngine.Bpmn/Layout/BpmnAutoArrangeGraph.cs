@@ -1,3 +1,5 @@
+using Inceptus.DocumentEngine.Bpmn.Placement;
+using Inceptus.DocumentEngine.Contracts.EditorState;
 using Inceptus.DocumentEngine.Contracts.Geometry;
 using Inceptus.DocumentEngine.Contracts.Primitives;
 
@@ -14,13 +16,13 @@ public static class BpmnAutoArrangeOptions
 }
 
 internal sealed record ArrangeNode(SemanticElementId Id, VisualStateId VisualId, RectD Bounds,
-    string Region, int RegionOrder, int TypeOrder);
+    string Region, int RegionOrder, int TypeOrder, bool GridEligible);
 internal sealed record ArrangeEdge(SemanticElementId Id, SemanticElementId Source, SemanticElementId Target);
 
 /// <summary>Pure Sequence Flow analysis. No model replacement, routing or hidden-scope traversal.</summary>
 internal static class BpmnAutoArrangeGraph
 {
-    internal static Dictionary<SemanticElementId, RectD> Arrange(ArrangeNode[] nodes, ArrangeEdge[] edges,
+    internal static List<Dictionary<int, List<SemanticElementId>>> Prepare(ArrangeNode[] nodes, ArrangeEdge[] edges,
         CancellationToken cancellationToken)
     {
         var byId = nodes.ToDictionary(node => node.Id);
@@ -50,8 +52,7 @@ internal static class BpmnAutoArrangeGraph
             }
             components.Add([.. component]);
         }
-        var result = new Dictionary<SemanticElementId, RectD>();
-        var cursors = nodes.Select(node => node.Region).Distinct().ToDictionary(region => region, _ => BpmnAutoArrangeOptions.Origin);
+        var result = new List<Dictionary<int, List<SemanticElementId>>>();
         foreach (var component in components.OrderBy(component => component.Min(id => byId[id].RegionOrder))
                      .ThenBy(component => component.Min(id => byId[id].Bounds.Top))
                      .ThenBy(component => component.Min(id => id.Value), StringComparer.Ordinal))
@@ -67,7 +68,29 @@ internal static class BpmnAutoArrangeGraph
             var authored = layers.Values.SelectMany(layer => layer.Select((id, index) => (id, index)))
                 .ToDictionary(item => item.id, item => item.index);
             Order(layers, ranks, byId, componentEdges, outgoing, incoming, authored, cancellationToken);
-            var regionHeights = component.GroupBy(id => byId[id].Region).ToDictionary(group => group.Key,
+            result.Add(layers);
+        }
+        return result;
+    }
+
+    internal static Dictionary<SemanticElementId, RectD> Place(ArrangeNode[] nodes,
+        List<Dictionary<int, List<SemanticElementId>>> components, GridSettings? grid,
+        IReadOnlyDictionary<string, Matrix2D> frames, CancellationToken cancellationToken)
+    {
+        var byId = nodes.ToDictionary(node => node.Id);
+        var result = new Dictionary<SemanticElementId, RectD>();
+        var cursors = nodes.Select(node => node.Region).Distinct().ToDictionary(region => region, _ => BpmnAutoArrangeOptions.Origin);
+        foreach (var layers in components)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (grid is { SnapToGrid: true })
+            {
+                PlaceOnGrid(layers, byId, cursors, frames, grid, result);
+                continue;
+            }
+            var ranks = layers.SelectMany(layer => layer.Value.Select(id => (id, layer.Key)))
+                .ToDictionary(item => item.id, item => item.Key);
+            var regionHeights = layers.Values.SelectMany(layer => layer).GroupBy(id => byId[id].Region).ToDictionary(group => group.Key,
                 group => group.GroupBy(id => ranks[id]).Max(layer => layer.Sum(id => byId[id].Bounds.Height) +
                     (layer.Count() - 1) * BpmnAutoArrangeOptions.VerticalGap));
             var x = BpmnAutoArrangeOptions.Origin;
@@ -91,6 +114,56 @@ internal static class BpmnAutoArrangeGraph
                 cursors[region] += height + BpmnAutoArrangeOptions.ComponentGap;
         }
         return result;
+    }
+
+    private static void PlaceOnGrid(Dictionary<int, List<SemanticElementId>> layers,
+        Dictionary<SemanticElementId, ArrangeNode> nodes, Dictionary<string, double> cursors,
+        IReadOnlyDictionary<string, Matrix2D> frames, GridSettings grid, Dictionary<SemanticElementId, RectD> result)
+    {
+        // Plan track pitch and column centers before placing nodes. Every dependency consumes the
+        // allocated size, including grid slack; no completed layout is independently rounded.
+        var members = layers.Values.SelectMany(layer => layer).Select(id => nodes[id]).ToArray();
+        var tracks = members.GroupBy(node => node.Region).ToDictionary(group => group.Key, group =>
+        {
+            var height = group.Max(node => node.Bounds.Height);
+            var pitch = BpmnGridPlacement.AtOrAfter(height + BpmnAutoArrangeOptions.VerticalGap,
+                height + BpmnAutoArrangeOptions.VerticalGap, grid);
+            var count = layers.Values.Max(layer => layer.Count(id => nodes[id].Region == group.Key));
+            var offset = frames.GetValueOrDefault(group.Key, Matrix2D.Identity).OffsetY;
+            var first = BpmnGridPlacement.AtOrAfter(cursors[group.Key] + height / 2 + offset,
+                cursors[group.Key] + height / 2 + offset, grid);
+            return (Pitch: pitch, Count: count, First: first);
+        });
+        var left = BpmnAutoArrangeOptions.Origin + members.Max(node => frames.GetValueOrDefault(node.Region, Matrix2D.Identity).OffsetX);
+        foreach (var layer in layers.OrderBy(pair => pair.Key))
+        {
+            var width = layer.Value.Max(id => nodes[id].Bounds.Width);
+            var centerX = BpmnGridPlacement.AtOrAfter(left + width / 2, left + width / 2, grid);
+            foreach (var group in layer.Value.GroupBy(id => nodes[id].Region))
+            {
+                var track = tracks[group.Key];
+                var firstCenterY = GridGeometry.Snap(new(0, track.First + (track.Count - group.Count()) * track.Pitch / 2), grid).Y;
+                var index = 0;
+                foreach (var id in group)
+                {
+                    var node = nodes[id];
+                    if (!node.GridEligible) throw new InvalidOperationException("This node does not support grid arrangement.");
+                    var frame = frames.GetValueOrDefault(group.Key, Matrix2D.Identity);
+                    if (!frame.TryInvert(out var inverse)) throw new InvalidOperationException("The arrangement frame is unavailable.");
+                    var centerY = GridGeometry.Snap(new(0, firstCenterY + index++ * track.Pitch), grid).Y;
+                    var center = inverse.TransformPoint(new(centerX, centerY));
+                    var bounds = new RectD(center.X - node.Bounds.Width / 2, center.Y - node.Bounds.Height / 2,
+                        node.Bounds.Width, node.Bounds.Height);
+                    bounds = BpmnGridPlacement.RetainEquivalentCoordinates(bounds, node.Bounds, frame);
+                    BpmnGridPlacement.Validate(bounds);
+                    if (!DocumentGeometryBoundary.Contains(bounds)) throw new InvalidOperationException("The grid crosses the document boundary.");
+                    result.Add(id, bounds);
+                }
+            }
+            left = centerX + width / 2 + BpmnAutoArrangeOptions.HorizontalGap;
+        }
+        foreach (var region in tracks.Keys)
+            cursors[region] = members.Where(node => node.Region == region).Max(node => result[node.Id].Bottom) + BpmnAutoArrangeOptions.ComponentGap;
     }
 
     private static Dictionary<SemanticElementId, int> Rank(SemanticElementId[] component,

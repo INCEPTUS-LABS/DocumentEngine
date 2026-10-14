@@ -152,8 +152,11 @@ public sealed class PhaseN100OptionalProfilesAndCollaborationArchitectureTests
         Assert.Equal(prior.ModelValidationRules, current.ModelValidationRules.Where(rule => rule is not BpmnMessageFlowValidationRule && rule is not BpmnPoolFlowValidationRule));
         Assert.Single(current.ModelValidationRules, rule => rule is BpmnMessageFlowValidationRule);
         // A2.4 adds Smart Create, its focused replay, and Auto Points to the A2.3 registrations.
-        Assert.Equal(prior.CommandHandlers.Length + 21, current.CommandHandlers.Length);
-        Assert.Equal(prior.HistoryPolicies.Length + 19, current.HistoryPolicies.Length);
+        Assert.Equal(prior.CommandHandlers.Length + 22, current.CommandHandlers.Length);
+        Assert.Equal(prior.HistoryPolicies.Length + 20, current.HistoryPolicies.Length);
+        Assert.Single(current.CommandHandlers, registration => registration.TypeId == UpdateBpmnElementDescriptionCommand.KnownTypeId);
+        Assert.Single(current.CommandValidators, registration => registration.TypeId == UpdateBpmnElementDescriptionCommand.KnownTypeId);
+        Assert.Single(current.HistoryPolicies, registration => registration.TypeId == UpdateBpmnElementDescriptionCommand.KnownTypeId);
         Assert.Single(current.CommandHandlers, registration => registration.TypeId == BpmnSmartCreateCommand.KnownTypeId);
         Assert.Single(current.HistoryPolicies, registration => registration.TypeId == BpmnSmartCreateCommand.KnownTypeId);
         Assert.Single(current.CommandHandlers, registration => registration.TypeId == BpmnAutoPointsCommand.KnownTypeId);

@@ -249,4 +249,15 @@
   <data name="SmartEdit_Label" xml:space="preserve"><value>Édition intelligente</value></data>
   <data name="SmartEdit_On" xml:space="preserve"><value>OUI</value></data>
   <data name="SmartEdit_Off" xml:space="preserve"><value>NON</value></data>
+  <data name="Settings_Title" xml:space="preserve"><value>Paramètres</value></data>
+  <data name="Settings_Grid" xml:space="preserve"><value>Grille</value></data>
+  <data name="Settings_ShowGrid" xml:space="preserve"><value>Afficher la grille</value></data>
+  <data name="Settings_SnapToGrid" xml:space="preserve"><value>Aligner sur la grille</value></data>
+  <data name="Settings_PointDistance" xml:space="preserve"><value>Espacement des points</value></data>
+  <data name="Settings_DiagramUnits" xml:space="preserve"><value>Espacement en unités du diagramme. Les éléments existants conservent leur position.</value></data>
+  <data name="Settings_InvalidDistance" xml:space="preserve"><value>Saisissez un nombre fini strictement positif.</value></data>
+  <data name="Settings_SaveFailed" xml:space="preserve"><value>Impossible d’enregistrer les paramètres dans le stockage du navigateur.</value></data>
+  <data name="Toolbar_Layout" xml:space="preserve"><value>Disposition</value></data>
+  <data name="Toolbar_AlignHorizontal" xml:space="preserve"><value>Aligner horizontalement sur le premier élément sélectionné</value></data>
+  <data name="Toolbar_AlignVertical" xml:space="preserve"><value>Aligner verticalement sur le premier élément sélectionné</value></data>
 </root>

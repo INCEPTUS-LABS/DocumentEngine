@@ -1148,7 +1148,7 @@ public sealed partial class DocumentCanvasHostTests
         var context = host.CaptureEditorContext();
         return new(context?.Presentation, context is not null, context?.AttachmentVersion ?? 0,
             context?.Document.Publication, host.Operations().ValidationSnapshot, host.Operations().ValidationInFlight,
-            context?.CanReplaceDocument != true, context?.SurfaceSize);
+            context?.HasOpenProperties == true, context?.SurfaceSize);
     }
 
     private static void InvokePublishComponent(DocumentCanvas component, string methodName) =>

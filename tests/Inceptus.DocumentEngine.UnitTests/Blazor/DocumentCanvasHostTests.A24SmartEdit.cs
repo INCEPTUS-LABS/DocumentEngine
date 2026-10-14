@@ -78,7 +78,8 @@ public sealed partial class DocumentCanvasHostTests
         foreach (var enabled in new[] { true, false, true })
         {
             host.SetSmartEditEnabled(enabled);
-            Assert.Null(host.CaptureState().ElementToolbox);
+            if (enabled && !kind.EndsWith("Flow", StringComparison.Ordinal)) Assert.NotNull(host.CaptureState().ElementToolbox);
+            else Assert.Null(host.CaptureState().ElementToolbox);
             Assert.Equal(active, session.CaptureState().EditorState);
             Assert.Same(snapshot, AttachedDocument(session).CaptureSnapshot());
         }

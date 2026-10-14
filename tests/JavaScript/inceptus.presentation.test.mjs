@@ -136,6 +136,19 @@ const {
 } = await import(pathToFileURL(modulePath));
 const { downloadFile } = await import(pathToFileURL(path.resolve("src/Inceptus.DocumentEngine.Blazor/wwwroot/inceptus.documents.js")));
 
+test("editor preferences use separate browser storage and report unavailable writes", async () => {
+    const { readEditorSettings, writeEditorSettings } = await import(pathToFileURL(modulePath));
+    const values = new Map();
+    globalThis.localStorage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) };
+    assert.equal(readEditorSettings("settings"), null);
+    assert.equal(writeEditorSettings("settings", '{"PointDistance":12.5}'), true);
+    assert.equal(readEditorSettings("settings"), '{"PointDistance":12.5}');
+    globalThis.localStorage = { getItem() { throw Error("unavailable"); }, setItem() { throw Error("unavailable"); } };
+    assert.equal(readEditorSettings("settings"), null);
+    assert.equal(writeEditorSettings("settings", "{}"), false);
+    delete globalThis.localStorage;
+});
+
 beforeEach(() => {
     container = new FakeElement(640, 480);
     canvas = new FakeElement(640, 480, 15, 25);

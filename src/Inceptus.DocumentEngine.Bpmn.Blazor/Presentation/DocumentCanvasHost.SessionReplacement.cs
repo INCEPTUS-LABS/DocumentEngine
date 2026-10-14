@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using Inceptus.DocumentEngine.Bpmn.Visuals;
 using Inceptus.DocumentEngine.Canvas2D.EditingSession;
 using Inceptus.DocumentEngine.Canvas2D.Interaction;
 using Inceptus.DocumentEngine.Canvas2D.Rendering;
@@ -182,7 +183,8 @@ internal sealed partial class DocumentCanvasHost
                 connectionCreationCatalog: _anchorConnectionCreationCatalog,
                 creationIdentityProvider: _documentCreationIdentityProvider,
                 endpointReconnectionCatalog: _endpointReconnectionCatalog,
-                spatialEditPlanners: _spatialEditPlanners);
+                spatialEditPlanners: _spatialEditPlanners,
+                gridSnapEligibility: BpmnGridPolicy.Supports);
             var candidateToolboxController = new ToolboxPlacementController(
                 _toolboxPlacementCatalog,
                 _toolboxSelection,

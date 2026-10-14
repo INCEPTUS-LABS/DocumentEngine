@@ -13,7 +13,12 @@ namespace Inceptus.DocumentEngine.Bpmn.Blazor.Components;
 public partial class InceptusBpmnModeler : IDisposable, IBpmnDocumentEditor
 {
     private BpmnModelerFacade? _facade;
+    private DocumentCanvas? _canvas;
     private bool _disposed;
+
+    /// <summary>Opens editor-wide settings; the optional close callback lets the host restore focus.</summary>
+    public Task OpenSettingsAsync(Func<Task>? closed = null) =>
+        !_disposed && _canvas is { } canvas ? canvas.OpenSettingsAsync(closed) : Task.CompletedTask;
 
     // A host may cascade its UI culture to notify parameterless modelers of a re-render.
     // Resource lookup still uses CurrentUICulture; this is only a Blazor render dependency.

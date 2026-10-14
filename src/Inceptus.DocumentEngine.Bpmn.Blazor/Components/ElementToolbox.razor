@@ -23,7 +23,7 @@
              @onkeydown="KeyDown" @onkeydown:stopPropagation>
             @foreach (var group in state.Candidates.GroupBy(item => item.GroupId))
             {
-                <div class="element-creation-row" role="group" aria-label="@Text[ModelerLabels.ToolboxKey(group.Key.Value)!]">
+                <div class="element-creation-row" role="group" aria-label="@Text[ModelerLabels.ToolboxKey(group.Key.Value)!]" @key="group.Key">
                     <span class="element-group-name">@Text[ModelerLabels.ToolboxKey(group.Key.Value)!]</span>
                     <div class="element-candidates">
                         @foreach (var item in group)
@@ -42,6 +42,7 @@
 }
 
 @code {
+    [CascadingParameter(Name = "ModelerUICulture")] private CultureInfo? RenderCulture { get; set; }
     [Parameter] public ElementToolboxState? State { get; set; }
     [Parameter] public EventCallback Properties { get; set; }
     [Parameter] public EventCallback AutoPoints { get; set; }
@@ -51,6 +52,25 @@
     private ElementReference _propertiesButton;
     private readonly Dictionary<ToolboxItemId, ElementReference> _candidateButtons = [];
     private ToolboxItemId? _restoreFocus;
+    private ElementToolboxState? _previousState;
+    private string? _previousCulture;
+    private (EventCallback Properties, EventCallback AutoPoints, EventCallback Delete,
+        EventCallback<ToolboxItemId> Create, EventCallback Dismiss) _previousCallbacks;
+    private bool _renderRequired;
+
+    protected override void OnParametersSet()
+    {
+        var culture = (RenderCulture ?? CultureInfo.CurrentUICulture).Name;
+        var callbacks = (Properties, AutoPoints, Delete, Create, Dismiss);
+        _renderRequired = State != _previousState || culture != _previousCulture || !callbacks.Equals(_previousCallbacks);
+        _previousState = State;
+        _previousCulture = culture;
+        _previousCallbacks = callbacks;
+        if (State is null) _restoreFocus = null;
+    }
+
+    protected override bool ShouldRender() => _renderRequired || _restoreFocus is not null;
+
     private async Task CreateAndFocusAsync(ToolboxItemId itemId)
     {
         await Create.InvokeAsync(itemId);
@@ -58,6 +78,7 @@
     }
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        _renderRequired = false;
         if (State is not { } state || _restoreFocus is not { } itemId) return;
         _restoreFocus = null;
         await (state.Candidates.Any(item => item.ItemId == itemId) && _candidateButtons.TryGetValue(itemId, out var button)

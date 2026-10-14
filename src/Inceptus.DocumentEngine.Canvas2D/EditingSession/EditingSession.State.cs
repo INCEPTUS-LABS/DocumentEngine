@@ -34,7 +34,8 @@ public sealed partial class EditingSession
             observedArtifacts = null;
         }
 
-        var editorState = _editorState?.CaptureSnapshot() ?? _finalEditorState;
+        var ordered = _editorState?.CaptureOrderedSnapshot();
+        var editorState = ordered?.Snapshot ?? _finalEditorState;
         return new EditingSessionState(
             _documentId,
             snapshot?.Revision ?? _lastDocumentRevision,
@@ -65,7 +66,8 @@ public sealed partial class EditingSession
                 pending.SurfaceGeneration == _surfaceGeneration && _surfaceOperations == 0 &&
                 ReferenceEquals(pending.EditorState, editorState),
             presentationContext: _presentationContext,
-            presentationPlan: observedStatus == EditingSessionStatus.Ready ? observedArtifacts?.PresentationPlan : null);
+            presentationPlan: observedStatus == EditingSessionStatus.Ready ? observedArtifacts?.PresentationPlan : null,
+            selectionOrder: ordered?.SelectionOrder ?? editorState.Selection);
     }
 
     private bool IsUnavailable(out EditingSessionState state)

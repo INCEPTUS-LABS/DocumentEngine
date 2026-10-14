@@ -45,7 +45,8 @@ internal sealed partial class DocumentCanvasHost
             lock (_sync) session = _disposed || !_initialized || _propertiesFormOpen || _modelViewPropertiesFormOpen ? null : _session;
             if (session is null || !TryArrangeScopes(session, session.CaptureState(), out var document, out var scopes)) return null;
             var state = session.CaptureState();
-            var plan = BpmnAutoArrangePlanner.Plan(document!, scopes, linked.Token);
+            var grid = session.GridSettings;
+            var plan = BpmnAutoArrangePlanner.Plan(document!, scopes, grid, linked.Token);
             var result = await session.ExecuteAsync(new BpmnAutoArrangeCommand(plan), linked.Token).ConfigureAwait(false);
             RetainContextCommandDiagnostics(session, state, result);
             if (result.IsCommitted) await session.WaitForIdleAsync(linked.Token).ConfigureAwait(false);

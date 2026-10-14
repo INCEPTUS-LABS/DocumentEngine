@@ -551,6 +551,16 @@
     border-left: 1px solid rgba(148, 163, 184, 0.2);
 }
 
+.layout-controls .layout-icon-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    min-width: 2.25rem;
+    padding: 0.35rem;
+}
+
 .editor-status-row {
     display: flex;
     /* Feedback must never resize the drawing surface or reset a pending gesture. */

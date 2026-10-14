@@ -23,7 +23,7 @@ public sealed partial class EditingSession
                 }
             }
 
-            var result = await _renderer.RenderAsync(scene).ConfigureAwait(false);
+            var result = await _renderer.RenderAsync(scene.WithGrid(GridSettings)).ConfigureAwait(false);
             lock (_sync)
             {
                 if (!_closing && !_closed && generation == _generation &&
@@ -66,7 +66,7 @@ public sealed partial class EditingSession
                 }
             }
 
-            var result = await _renderer.RenderAsync(scene).ConfigureAwait(false);
+            var result = await _renderer.RenderAsync(scene.WithGrid(GridSettings)).ConfigureAwait(false);
             lock (_sync)
             {
                 if (!_closing && !_closed && generation == _generation &&
@@ -234,7 +234,7 @@ public sealed partial class EditingSession
                 }
             }
 
-            renderResult = await _renderer.RenderAsync(scene, linked.Token).ConfigureAwait(false);
+            renderResult = await _renderer.RenderAsync(scene.WithGrid(GridSettings), linked.Token).ConfigureAwait(false);
             lock (_sync)
             {
                 if (!_closing && !_closed && generation == _generation &&

@@ -28,6 +28,7 @@ public sealed partial class EditingSession : IAsyncDisposable
     private Document? _document;
     private readonly DocumentId _documentId;
     private readonly Canvas2DRenderer _renderer;
+    private readonly IGridSettingsSource? _gridSettings;
     private readonly ISessionPipelineProcessing _pipeline;
     private EditorStateStore? _editorState;
     private HistoryManager? _history;
@@ -92,6 +93,7 @@ public sealed partial class EditingSession : IAsyncDisposable
         _document = document;
         _documentId = document.DocumentId;
         _renderer = renderer;
+        _gridSettings = configuration.GridSettings;
         _pipeline = pipeline;
         ConnectorAnchorPolicyProvider = configuration.ConnectorAnchorPolicyProvider;
         _modelProfileCatalog = configuration.ModelProfileCatalog;
@@ -133,6 +135,9 @@ public sealed partial class EditingSession : IAsyncDisposable
     public event EventHandler<EditingSessionStateChangedEventArgs>? StateChanged;
 
     public IElementConnectorAnchorPolicyProvider ConnectorAnchorPolicyProvider { get; }
+
+    /// <summary>Current editor preference; null means this host has not enabled grid support.</summary>
+    public GridSettings? GridSettings => _gridSettings?.Grid;
 
     public ModelProfileCatalog ModelProfileCatalog => _modelProfileCatalog;
 

@@ -249,4 +249,15 @@
   <data name="SmartEdit_Label" xml:space="preserve"><value>Edición inteligente</value></data>
   <data name="SmartEdit_On" xml:space="preserve"><value>SÍ</value></data>
   <data name="SmartEdit_Off" xml:space="preserve"><value>NO</value></data>
+  <data name="Settings_Title" xml:space="preserve"><value>Configuración</value></data>
+  <data name="Settings_Grid" xml:space="preserve"><value>Cuadrícula</value></data>
+  <data name="Settings_ShowGrid" xml:space="preserve"><value>Mostrar cuadrícula</value></data>
+  <data name="Settings_SnapToGrid" xml:space="preserve"><value>Ajustar a la cuadrícula</value></data>
+  <data name="Settings_PointDistance" xml:space="preserve"><value>Distancia entre puntos</value></data>
+  <data name="Settings_DiagramUnits" xml:space="preserve"><value>Espaciado en unidades del diagrama. Los elementos existentes conservan sus posiciones.</value></data>
+  <data name="Settings_InvalidDistance" xml:space="preserve"><value>Introduzca un número finito mayor que cero.</value></data>
+  <data name="Settings_SaveFailed" xml:space="preserve"><value>No se pudieron guardar los ajustes en el almacenamiento del navegador.</value></data>
+  <data name="Toolbar_Layout" xml:space="preserve"><value>Distribución</value></data>
+  <data name="Toolbar_AlignHorizontal" xml:space="preserve"><value>Alinear horizontalmente al primer elemento seleccionado</value></data>
+  <data name="Toolbar_AlignVertical" xml:space="preserve"><value>Alinear verticalmente al primer elemento seleccionado</value></data>
 </root>

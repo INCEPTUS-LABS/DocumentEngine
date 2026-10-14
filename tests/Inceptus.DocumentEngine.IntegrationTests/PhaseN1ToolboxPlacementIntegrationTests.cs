@@ -747,10 +747,9 @@ public sealed class PhaseN1ToolboxPlacementIntegrationTests
 
         var code = RequiredProperty(element, BpmnSemanticProperties.Code);
         var name = RequiredProperty(element, BpmnSemanticProperties.Name);
-        var description = RequiredProperty(element, BpmnSemanticProperties.Description);
+        Assert.False(element.Properties.ContainsKey(BpmnSemanticProperties.Description));
         Assert.Equal(PropertyValueKind.Text, code.Kind);
         Assert.Equal(PropertyValueKind.Text, name.Kind);
-        Assert.Equal(PropertyValueKind.Text, description.Kind);
         Assert.True(composition.PropertiesSchemaCatalog.TryGetSchema(
             element.TypeId,
             out var schema));
@@ -763,9 +762,6 @@ public sealed class PhaseN1ToolboxPlacementIntegrationTests
             Assert.Equal(expectedTaskNumber, number.IntegerValue);
             Assert.Equal($"TASK_{expectedTaskNumber}", code.TextValue);
             Assert.Equal($"Task {expectedTaskNumber}", name.TextValue);
-            Assert.Equal(
-                $"Task {expectedTaskNumber} created from the Toolbox.",
-                description.TextValue);
             Assert.Equal(
                 [
                     BpmnSemanticProperties.Code,
@@ -786,9 +782,6 @@ public sealed class PhaseN1ToolboxPlacementIntegrationTests
         Assert.Equal(expectedPrefix, code.TextValue);
         Assert.Equal(expectedPrefix.Replace('_', ' ').ToLowerInvariant(),
             name.TextValue.ToLowerInvariant());
-        Assert.Equal(
-            $"{name.TextValue} created from the Toolbox.",
-            description.TextValue);
         Assert.Equal(
             [
                 BpmnSemanticProperties.Code,

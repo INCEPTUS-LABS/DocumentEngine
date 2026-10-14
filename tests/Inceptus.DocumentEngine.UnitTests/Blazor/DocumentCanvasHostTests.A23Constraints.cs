@@ -44,8 +44,14 @@ public sealed partial class DocumentCanvasHostTests
         A23PresentationEqual(after, document.CaptureSnapshot());
     }
 
-    [Fact]
-    public async Task A23AutoArrangeExpandsSmallLanesAndTranslatesFollowingBlocksWithoutReordering()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(10)]
+    [InlineData(20)]
+    [InlineData(25)]
+    [InlineData(40)]
+    [InlineData(500)]
+    public async Task A23AutoArrangeExpandsSmallLanesAndTranslatesFollowingBlocksWithoutReordering(double distance)
     {
         var initial = A23Snapshot(A23Edges("branches"));
         var pools = A22PoolSnapshot();
@@ -60,7 +66,8 @@ public sealed partial class DocumentCanvasHostTests
                 ? new VisualStateSnapshot(state.Id, state.SemanticElementId, new(40, 30), state.Size, state.PlacementMode,
                     state.Route, state.Properties, state.ConnectorAnchors, state.SourceAnchorId, state.TargetAnchorId, state.BoundaryAttachment)
                 : state), pools.VisualModel.ProfileElementPresentations);
-        await using var host = A23Host(new(semantic, visual, initial.Metadata));
+        var grid = distance == 0 ? null : new TestGridSource(new() { PointDistance = distance });
+        await using var host = A23Host(new(semantic, visual, initial.Metadata), grid);
         await host.InitializeAsync("arrange-expansion", "container");
         var session = Session(host);
         var document = AttachedDocument(session);
@@ -69,6 +76,7 @@ public sealed partial class DocumentCanvasHostTests
         Assert.NotNull(result);
         Assert.True(result.IsCommitted, string.Join("; ", result.Diagnostics.Select(diagnostic => diagnostic.Message)));
         var after = document.CaptureSnapshot();
+        if (grid is not null) AssertGridStage2Centers(after, grid.Grid);
         var old = before.VisualModel.RoutingScopes!.Value.Single().Geometry;
         var current = after.VisualModel.RoutingScopes!.Value.Single().Geometry;
         Assert.Equal(before.SemanticModel.ProfileAssignments.AsEnumerable(), after.SemanticModel.ProfileAssignments);
@@ -103,11 +111,14 @@ public sealed partial class DocumentCanvasHostTests
     }
 
     [Theory]
-    [InlineData("BPMN.TimerBoundaryEvent")]
-    [InlineData("BPMN.MessageBoundaryEvent")]
-    public async Task A23AutoArrangeBoundaryKeepsAuthoredPlacementAndFollowsOwner(string type)
+    [InlineData("BPMN.TimerBoundaryEvent", 0)]
+    [InlineData("BPMN.MessageBoundaryEvent", 0)]
+    [InlineData("BPMN.TimerBoundaryEvent", 25)]
+    [InlineData("BPMN.MessageBoundaryEvent", 25)]
+    public async Task A23AutoArrangeBoundaryKeepsAuthoredPlacementAndFollowsOwner(string type, double distance)
     {
-        await using var host = A23Host(CreatePropertiesUxSnapshot(type));
+        var grid = distance == 0 ? null : new TestGridSource(new() { PointDistance = distance });
+        await using var host = A23Host(CreatePropertiesUxSnapshot(type), grid);
         await host.InitializeAsync("arrange-boundary", "container");
         var session = Session(host);
         var document = AttachedDocument(session);
@@ -131,8 +142,10 @@ public sealed partial class DocumentCanvasHostTests
         A23PresentationEqual(after, opened.Document!.CaptureSnapshot());
     }
 
-    [Fact]
-    public async Task A23AutoArrangeSubProcessIsOneNodeAndHiddenScopeIsExactlyRetained()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(25)]
+    public async Task A23AutoArrangeSubProcessIsOneNodeAndHiddenScopeIsExactlyRetained(double distance)
     {
         var initial = A23Snapshot(A23Edges("linear"));
         var nested = new DocumentScopeId("a23:nested");
@@ -144,7 +157,8 @@ public sealed partial class DocumentCanvasHostTests
             initial.SemanticModel.Relationships, [new(nested, initial.SemanticModel.RootScopeId, new("a"))], [new(child.Id, nested)]);
         var visual = new VisualModelSnapshot(initial.DocumentId, initial.Revision, initial.VisualModel.VisualStates.Append(
             new(new("v-child"), child.Id, new(500, 200), new(120, 80), VisualPlacementMode.Pinned)));
-        await using var host = A23Host(new(semantic, visual, initial.Metadata));
+        var grid = distance == 0 ? null : new TestGridSource(new() { PointDistance = distance });
+        await using var host = A23Host(new(semantic, visual, initial.Metadata), grid);
         await host.InitializeAsync("arrange-nested", "container");
         Assert.True(host.CaptureState().IsInitialized, string.Join("; ", host.CaptureState().HostDiagnostics.Select(diagnostic => diagnostic.Message)));
         var session = Session(host);
@@ -160,10 +174,16 @@ public sealed partial class DocumentCanvasHostTests
             after.VisualModel.VisualStates.Single(state => state.SemanticElementId.Value == "a").Size);
     }
 
-    [Fact]
-    public async Task A23AutoArrangeOrdersOutgoingAndIncomingPointsByRemoteTracks()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(10)]
+    [InlineData(20)]
+    [InlineData(25)]
+    [InlineData(40)]
+    public async Task A23AutoArrangeOrdersOutgoingAndIncomingPointsByRemoteTracks(double distance)
     {
-        await using var host = A23Host(A23Snapshot(A23Edges("no-merge")));
+        await using var host = A23Host(A23Snapshot(A23Edges("no-merge")),
+            distance == 0 ? null : new TestGridSource(new() { PointDistance = distance }));
         await host.InitializeAsync("arrange-anchors", "container");
         Assert.True((await host.AutoArrangeAsync())!.IsCommitted);
         var document = AttachedDocument(Session(host)).CaptureSnapshot();

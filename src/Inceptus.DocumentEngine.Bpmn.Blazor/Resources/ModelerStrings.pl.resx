@@ -249,4 +249,15 @@
   <data name="SmartEdit_Label" xml:space="preserve"><value>Inteligentna edycja</value></data>
   <data name="SmartEdit_On" xml:space="preserve"><value>WŁ.</value></data>
   <data name="SmartEdit_Off" xml:space="preserve"><value>WYŁ.</value></data>
+  <data name="Settings_Title" xml:space="preserve"><value>Ustawienia</value></data>
+  <data name="Settings_Grid" xml:space="preserve"><value>Siatka</value></data>
+  <data name="Settings_ShowGrid" xml:space="preserve"><value>Pokaż siatkę</value></data>
+  <data name="Settings_SnapToGrid" xml:space="preserve"><value>Przyciągaj do siatki</value></data>
+  <data name="Settings_PointDistance" xml:space="preserve"><value>Odstęp punktów siatki</value></data>
+  <data name="Settings_DiagramUnits" xml:space="preserve"><value>Odstęp w jednostkach diagramu. Istniejące elementy zachowają pozycje.</value></data>
+  <data name="Settings_InvalidDistance" xml:space="preserve"><value>Wprowadź skończoną liczbę większą od zera.</value></data>
+  <data name="Settings_SaveFailed" xml:space="preserve"><value>Nie można zapisać ustawień edytora w pamięci przeglądarki.</value></data>
+  <data name="Toolbar_Layout" xml:space="preserve"><value>Układ</value></data>
+  <data name="Toolbar_AlignHorizontal" xml:space="preserve"><value>Wyrównaj w poziomie do pierwszego zaznaczonego elementu</value></data>
+  <data name="Toolbar_AlignVertical" xml:space="preserve"><value>Wyrównaj w pionie do pierwszego zaznaczonego elementu</value></data>
 </root>

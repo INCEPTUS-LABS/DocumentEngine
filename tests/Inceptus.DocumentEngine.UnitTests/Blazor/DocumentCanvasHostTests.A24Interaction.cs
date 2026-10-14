@@ -25,18 +25,19 @@ public sealed partial class DocumentCanvasHostTests
     [InlineData("resize")]
     [InlineData("reconnect")]
     [InlineData("placement")]
-    public async Task A24OverlayHiddenDuringGestureAndReturnsAfterwards(string kind)
+    public async Task A24OverlayRetainedDuringGestureWithoutDisplayedGeometryChange(string kind)
     {
         await using var host = A23Host(A24Snapshot());
         await host.InitializeAsync("a24-gesture", "container");
         await A24Select(host, new VisualStateId("v-source"));
         var session = Session(host);
         var before = AttachedDocument(session).CaptureSnapshot();
+        var overlay = host.CaptureState().ElementToolbox;
         var editor = session.CaptureState().EditorState;
         Assert.True((await session.UpdateEditorStateAsync(new EditorStateSnapshot(editor.Selection, null, null, null, editor.Viewport,
             new EditorGestureSnapshot("a24-test", kind, default, default)))).Succeeded);
         await session.WaitForIdleAsync();
-        Assert.Null(host.CaptureState().ElementToolbox);
+        Assert.Same(overlay, host.CaptureState().ElementToolbox);
         await A24Select(host, new VisualStateId("v-source"));
         Assert.NotNull(host.CaptureState().ElementToolbox);
         Assert.Same(before, AttachedDocument(session).CaptureSnapshot());

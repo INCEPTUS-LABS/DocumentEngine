@@ -41,10 +41,13 @@ public sealed partial class DocumentCanvasHostTests
     }
 
     [Theory]
-    [InlineData("routing")]
-    [InlineData("throw")]
-    [InlineData("invariant")]
-    public async Task A23AutoArrangePreparationFailuresAreAtomic(string fault)
+    [InlineData("routing", 0)]
+    [InlineData("throw", 0)]
+    [InlineData("invariant", 0)]
+    [InlineData("routing", 25)]
+    [InlineData("throw", 25)]
+    [InlineData("invariant", 25)]
+    public async Task A23AutoArrangePreparationFailuresAreAtomic(string fault, double distance)
     {
         await using var host = A23Host(A23Snapshot(A23Edges("branches")));
         await host.InitializeAsync("arrange-failure", "container");
@@ -57,7 +60,8 @@ public sealed partial class DocumentCanvasHostTests
         var preparer = new A23FaultPreparer(fault);
         var processor = new CommandProcessor(registration.CommandHandlers, registration.CommandValidators, null,
             registration.HistoryPolicies, policy, preparer);
-        var result = await history.ExecuteAsync(processor, new BpmnAutoArrangeCommand(BpmnAutoArrangePlanner.Plan(original, [original.SemanticModel.RootScopeId])));
+        var result = await history.ExecuteAsync(processor, new BpmnAutoArrangeCommand(BpmnAutoArrangePlanner.Plan(original,
+            [original.SemanticModel.RootScopeId], distance == 0 ? null : new Contracts.EditorState.GridSettings { PointDistance = distance })));
         Assert.False(result.IsCommitted);
         Assert.Same(before, document.CaptureSnapshot());
         Assert.Equal(0, history.CaptureStatus().EntryCount);
@@ -92,8 +96,10 @@ public sealed partial class DocumentCanvasHostTests
         Assert.Equal(after.VisualModel.VisualStates.Select(state => state.Position), document.VisualModel.VisualStates.Select(state => state.Position));
     }
 
-    [Fact]
-    public async Task A23AutoArrangeCrossingSweepRemovesCanonicalCrossingAndIsPermutationStable()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(25)]
+    public async Task A23AutoArrangeCrossingSweepRemovesCanonicalCrossingAndIsPermutationStable(double distance)
     {
         var original = A23Snapshot([("start", "a"), ("start", "b"), ("a", "d"), ("b", "c"), ("c", "end"), ("d", "end")]);
         var positions = new Dictionary<string, PointD>
@@ -108,7 +114,8 @@ public sealed partial class DocumentCanvasHostTests
         var visual = new VisualModelSnapshot(original.DocumentId, original.Revision, original.VisualModel.VisualStates.Select(state =>
             positions.TryGetValue(state.SemanticElementId.Value, out var point) ? new VisualStateSnapshot(state.Id, state.SemanticElementId, point,
                 state.Size, state.PlacementMode, state.Route, state.Properties, state.ConnectorAnchors, state.SourceAnchorId, state.TargetAnchorId) : state));
-        await using var host = A23Host(new(original.SemanticModel, visual, original.Metadata));
+        var grid = distance == 0 ? null : new TestGridSource(new() { PointDistance = distance });
+        await using var host = A23Host(new(original.SemanticModel, visual, original.Metadata), grid);
         await host.InitializeAsync("arrange-crossings", "container");
         var document = AttachedDocument(Session(host));
         var before = document.CaptureSnapshot();
@@ -116,17 +123,19 @@ public sealed partial class DocumentCanvasHostTests
         Assert.True((await host.AutoArrangeAsync())!.IsCommitted);
         var after = document.CaptureSnapshot();
         Assert.False(Crossed(after));
-        Assert.True(BpmnAutoArrangePlanner.Plan(after, [after.SemanticModel.RootScopeId]).IsNoChange);
+        Assert.True(BpmnAutoArrangePlanner.Plan(after, [after.SemanticModel.RootScopeId], grid?.Grid).IsNoChange);
         var reversed = new DocumentSnapshot(after.SemanticModel, new VisualModelSnapshot(after.DocumentId, after.Revision,
             after.VisualModel.VisualStates.Reverse(), after.VisualModel.ProfileElementPresentations, after.VisualModel.RoutingScopes,
             after.VisualModel.DocumentRoutingStates), after.Metadata);
-        Assert.True(BpmnAutoArrangePlanner.Plan(reversed, [after.SemanticModel.RootScopeId]).IsNoChange);
+        Assert.True(BpmnAutoArrangePlanner.Plan(reversed, [after.SemanticModel.RootScopeId], grid?.Grid).IsNoChange);
         static bool Crossed(DocumentSnapshot snapshot) => (A23Bounds(snapshot, "a").Y - A23Bounds(snapshot, "b").Y) *
             (A23Bounds(snapshot, "d").Y - A23Bounds(snapshot, "c").Y) < 0;
     }
 
-    [Fact]
-    public async Task A23AutoArrangeLargerDiagramCommitsOnceWithoutPerNodePreparation()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(25)]
+    public async Task A23AutoArrangeLargerDiagramCommitsOnceWithoutPerNodePreparation(double distance)
     {
         var edges = Enumerable.Range(0, 59).Select(index => ($"node-{index:D3}", $"node-{index + 1:D3}")).ToArray();
         var composition = await new BpmnModelerCompositionFactory(initialDocument: A23Snapshot(edges)).CreateAsync();
@@ -144,14 +153,15 @@ public sealed partial class DocumentCanvasHostTests
         var detached = DocumentFactory.Create(before, configuration.ConnectorAnchorPolicyProvider).Document!;
         var history = new HistoryManager(detached);
         var timer = Stopwatch.StartNew();
-        var plan = BpmnAutoArrangePlanner.Plan(before, [before.SemanticModel.RootScopeId]);
+        var grid = distance == 0 ? null : new Contracts.EditorState.GridSettings { PointDistance = distance };
+        var plan = BpmnAutoArrangePlanner.Plan(before, [before.SemanticModel.RootScopeId], grid);
         var result = await history.ExecuteAsync(measured, new BpmnAutoArrangeCommand(plan));
         timer.Stop();
         Assert.True(result.IsCommitted, string.Join("; ", result.Diagnostics.Select(diagnostic => diagnostic.Message)));
         Assert.Equal(1, counter.Count);
         Assert.Equal(1, history.CaptureStatus().EntryCount);
         Assert.Equal(before.Revision.Increment(), detached.Revision);
-        Assert.True(BpmnAutoArrangePlanner.Plan(detached.CaptureSnapshot(), [before.SemanticModel.RootScopeId]).IsNoChange);
+        Assert.True(BpmnAutoArrangePlanner.Plan(detached.CaptureSnapshot(), [before.SemanticModel.RootScopeId], grid).IsNoChange);
         Console.WriteLine($"A23 larger diagnostic: 60 nodes, 59 connectors, {timer.Elapsed.TotalMilliseconds:F1} ms, one routing preparation, one commit.");
     }
 

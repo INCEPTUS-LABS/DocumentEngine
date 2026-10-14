@@ -13,6 +13,7 @@ using Inceptus.DocumentEngine.Canvas2D.Rendering;
 using Inceptus.DocumentEngine.Canvas2D.Rendering.Interop;
 using Inceptus.DocumentEngine.Canvas2D.Scene;
 using Inceptus.DocumentEngine.Contracts.Geometry;
+using Inceptus.DocumentEngine.Contracts.Documents;
 using Inceptus.DocumentEngine.Runtime.Documents;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Forms;
@@ -379,13 +380,15 @@ public sealed partial class DocumentCanvasHostTests
         private ServiceProvider _services = null!;
         private HtmlRootComponent _rendered;
 
-        internal static async Task<PanComponentFixture> CreateAsync(bool invariantContributors = true)
+        internal static async Task<PanComponentFixture> CreateAsync(bool invariantContributors = true,
+            DocumentSnapshot? document = null, Contracts.EditorState.IGridSettingsSource? gridSettings = null)
         {
             var test = new PanComponentFixture();
             test.Host = CreateHost(test.Execution, test.Surface,
-                compositionFactory: invariantContributors ? BpmnModelerTestComposition.DemoFactory : null,
+                compositionFactory: document is not null ? new BpmnModelerCompositionFactory(initialDocument: document) :
+                    invariantContributors ? BpmnModelerTestComposition.DemoFactory : null,
                 toolboxSelection: test.Selection,
-                replacementRendererFactory: () => CreateRenderer(new RecordingRenderExecution()));
+                replacementRendererFactory: () => CreateRenderer(new RecordingRenderExecution()), gridSettings: gridSettings);
             await test.Host.InitializeAsync("active", "standby", "container");
             await PointerObserver(test.Host).WheelAsync(500, 500);
             test.Activator = new PanComponentActivator(test.Host, test.Selection);

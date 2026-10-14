@@ -16,7 +16,8 @@ internal sealed class Canvas2DRenderFrame
         long contentVersion,
         long presentationVersion,
         Canvas2DViewportLine[]? viewportLines = null,
-        Canvas2DBoundedRenderItem[]? presentationItems = null)
+        Canvas2DBoundedRenderItem[]? presentationItems = null,
+        Canvas2DPointPattern? backgroundPoints = null)
     {
         ViewportTransform = Canvas2DMatrixData.From(viewportTransform);
         Items = items;
@@ -24,6 +25,7 @@ internal sealed class Canvas2DRenderFrame
         PresentationVersion = presentationVersion;
         ViewportLines = viewportLines ?? [];
         PresentationItems = presentationItems ?? [];
+        BackgroundPoints = backgroundPoints;
     }
 
     public Canvas2DMatrixData ViewportTransform { get; }
@@ -37,6 +39,8 @@ internal sealed class Canvas2DRenderFrame
     public Canvas2DViewportLine[] ViewportLines { get; }
 
     public Canvas2DBoundedRenderItem[] PresentationItems { get; }
+
+    public Canvas2DPointPattern? BackgroundPoints { get; }
 }
 
 /// <summary>
@@ -48,7 +52,8 @@ internal sealed record Canvas2DViewportFrame(
     long ContentVersion,
     long PresentationVersion,
     Canvas2DViewportLine[]? ViewportLines = null,
-    Canvas2DBoundedRenderItem[]? PresentationItems = null);
+    Canvas2DBoundedRenderItem[]? PresentationItems = null,
+    Canvas2DPointPattern? BackgroundPoints = null);
 
 // Already composed generic primitives, inserted in the canonical managed order.
 internal sealed record Canvas2DBoundedRenderItem(int BeforeContentIndex, Canvas2DRenderItem Item)

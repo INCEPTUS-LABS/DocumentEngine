@@ -89,7 +89,7 @@ public sealed class BpmnN81ToolboxAndCompositionTests
         Assert.Equal(new SizeD(120d, 80d), command.Size);
         Assert.Equal("SUBPROCESS_1", command.Code);
         Assert.Equal("SubProcess 1", command.Name);
-        Assert.Equal("SubProcess created from the Toolbox.", command.Description);
+        Assert.Null(command.Description);
         Assert.Equal(VisualPlacementMode.Pinned, command.PlacementMode);
     }
 

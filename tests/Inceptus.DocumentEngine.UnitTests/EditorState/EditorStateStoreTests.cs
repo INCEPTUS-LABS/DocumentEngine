@@ -15,6 +15,34 @@ namespace Inceptus.DocumentEngine.UnitTests.EditorState;
 public sealed class EditorStateStoreTests
 {
     [Fact]
+    public void SelectionChronologySurvivesCanonicalSortingAndRejectsStaleUpdates()
+    {
+        var store = new EditorStateStore();
+        var z = new VisualStateId("z");
+        var a = new VisualStateId("a");
+        var b = new VisualStateId("b");
+        var first = new EditorStateSnapshot([z]);
+        Assert.True(store.TryUpdate(store.CaptureSnapshot(), first));
+        var second = new EditorStateSnapshot([a, z]);
+        Assert.True(store.TryUpdate(first, second));
+        var third = new EditorStateSnapshot([a, b, z]);
+        Assert.True(store.TryUpdate(second, third));
+        Assert.Equal(new[] { a, b, z }, third.Selection);
+        Assert.Equal(new[] { z, a, b }, store.CaptureOrderedSnapshot().SelectionOrder);
+        Assert.False(store.TryUpdate(first, EditorStateSnapshot.Empty));
+        Assert.Equal(new[] { z, a, b }, store.CaptureOrderedSnapshot().SelectionOrder);
+        var hover = new EditorStateSnapshot(third.Selection, new SceneObjectId("hover"));
+        Assert.True(store.TryUpdate(third, hover));
+        Assert.Equal(new[] { z, a, b }, store.CaptureOrderedSnapshot().SelectionOrder);
+        var removed = new EditorStateSnapshot([a, b]);
+        Assert.True(store.TryUpdate(hover, removed));
+        Assert.True(store.TryUpdate(removed, third));
+        Assert.Equal(new[] { a, b, z }, store.CaptureOrderedSnapshot().SelectionOrder);
+        Assert.True(store.TryUpdate(third, EditorStateSnapshot.Empty));
+        Assert.Empty(store.CaptureOrderedSnapshot().SelectionOrder);
+    }
+
+    [Fact]
     public void StoreStartsFromEmptyOrExplicitImmutableSnapshot()
     {
         var emptyStore = new EditorStateStore();

@@ -15,6 +15,17 @@ export function createCanvasSurfaceObserver(containerElementId, dotNetReference)
     return new CanvasSurfaceObserver(container, dotNetReference);
 }
 
+// Storage boundary only. Validation and settings ownership remain in managed code.
+export function readEditorSettings(key) {
+    try { return localStorage.getItem(key); }
+    catch { return null; }
+}
+
+export function writeEditorSettings(key, value) {
+    try { localStorage.setItem(key, value); return true; }
+    catch { return false; }
+}
+
 export function createCanvasPointerObserver(canvasElementId, dotNetReference) {
     const canvas = document.getElementById(canvasElementId);
     if (!(canvas instanceof HTMLCanvasElement)) {

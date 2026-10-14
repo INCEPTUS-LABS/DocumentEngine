@@ -261,7 +261,8 @@ $records = foreach ($id in $family) {
         Require ($symbolSpec.package.metadata.repository.url -ceq $repository -and $symbolSpec.package.metadata.repository.type -ceq 'git' -and $symbolSpec.package.metadata.repository.commit -ceq $Commit) "Symbol repository provenance: $id"
         Require ($metadata.license.type -ceq 'expression' -and $metadata.license.InnerText -ceq 'MIT') "MIT metadata: $id"
         Require ($metadata.copyright -ceq 'Copyright (c) 2026 Inceptus Robert Prokopczuk') "Copyright: $id"
-        Require ($metadata.projectUrl -ceq 'https://inceptus.online/bpmn/') "Project URL: $id"
+        Require ($metadata.projectUrl -ceq 'https://inceptus.online/bpmn/editor/') "Project URL: $id"
+        Require ($symbolSpec.package.metadata.projectUrl -ceq 'https://inceptus.online/bpmn/editor/') "Symbol project URL: $id"
         Require ($metadata.readme -ceq 'README.md') "README metadata: $id"
         Require (-not [string]::IsNullOrWhiteSpace($metadata.releaseNotes)) "Release notes metadata: $id"
         foreach ($document in @('README.md', 'LICENSE', 'RELEASE-NOTES.md', 'THIRD-PARTY-NOTICES.md')) {

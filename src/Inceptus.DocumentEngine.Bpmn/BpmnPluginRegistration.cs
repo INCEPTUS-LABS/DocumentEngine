@@ -1153,6 +1153,15 @@ public sealed class BpmnPluginRegistration
                 new BpmnSequenceFlowNameHistoryPolicy())];
         PropertiesSchemas = [.. PropertiesSchemas, BpmnSequenceFlowPropertiesSchema.Definition];
         CommandHandlers = [.. CommandHandlers,
+            Handler<UpdateBpmnElementDescriptionCommand>(UpdateBpmnElementDescriptionCommand.KnownTypeId,
+                new BpmnElementDescriptionCommandHandler())];
+        CommandValidators = [.. CommandValidators,
+            Validator(UpdateBpmnElementDescriptionCommand.KnownTypeId, "bpmn:validator/element-description",
+                new BpmnElementDescriptionCommandHandler())];
+        HistoryPolicies = [.. HistoryPolicies,
+            new CommandHistoryPolicyRegistration(UpdateBpmnElementDescriptionCommand.KnownTypeId,
+                new BpmnElementDescriptionHistoryPolicy())];
+        CommandHandlers = [.. CommandHandlers,
             Handler<ChangeBpmnElementTypeCommand>(ChangeBpmnElementTypeCommand.KnownTypeId,
                 new BpmnElementTypeCommandHandler())];
         CommandValidators = [.. CommandValidators,

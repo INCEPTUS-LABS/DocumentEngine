@@ -34,7 +34,7 @@ internal sealed record BpmnToolboxCreationDefaults(
         long number = 0L;
         string displayName;
         string? code = null;
-        string? description;
+        // Leave optional descriptions absent so new elements display an empty field.
         if (BpmnTaskSemanticTypes.IsTask(type))
         {
             var maximum = 0L;
@@ -62,7 +62,7 @@ internal sealed record BpmnToolboxCreationDefaults(
             var name = string.Concat(displayName, " ", text);
             return new(type, size, name,
                 string.Concat(BpmnTaskSemanticTypes.DefaultCodePrefix(type), "_", text),
-                number, string.Concat(name, " created from the Toolbox."));
+                number, null);
         }
 
         if (BpmnSemanticTypes.IsGateway(type))
@@ -74,8 +74,7 @@ internal sealed record BpmnToolboxCreationDefaults(
                     : type == BpmnSemanticTypes.InclusiveGateway
                         ? ("Inclusive Gateway", "INCLUSIVE_GATEWAY")
                         : ("Event-Based Gateway", "EVENT_BASED_GATEWAY");
-            return new(type, size, displayName, code, 0L,
-                string.Concat(displayName, " created from the Toolbox."));
+            return new(type, size, displayName, code, 0L, null);
         }
 
         number = checked(document.SemanticModel.Elements.LongCount(element => element.TypeId == type) + 1L);
@@ -84,12 +83,10 @@ internal sealed record BpmnToolboxCreationDefaults(
         {
             displayName = "SubProcess";
             code = string.Concat("SUBPROCESS_", numberText);
-            description = "SubProcess created from the Toolbox.";
         }
         else if (BpmnBoundaryEventSemanticTypes.IsBoundaryEvent(type))
         {
             displayName = BpmnBoundaryEventSemanticTypes.DisplayName(type);
-            description = string.Concat(displayName, " created from the Toolbox.");
         }
         else
         {
@@ -98,13 +95,8 @@ internal sealed record BpmnToolboxCreationDefaults(
                 : type == BpmnSemanticTypes.MessageThrowEvent ? "Message Throw Event"
                 : type == BpmnSemanticTypes.SignalCatchEvent ? "Signal Catch Event"
                 : "Signal Throw Event";
-            description = type == BpmnSemanticTypes.MessageCatchEvent
-                ? "Message catch event created from the Toolbox."
-                : type == BpmnSemanticTypes.TimerCatchEvent
-                    ? "Timer catch event created from the Toolbox."
-                    : string.Concat(displayName, " created from the Toolbox.");
         }
 
-        return new(type, size, string.Concat(displayName, " ", numberText), code, number, description);
+        return new(type, size, string.Concat(displayName, " ", numberText), code, number, null);
     }
 }

@@ -9,6 +9,7 @@
 @inject IStringLocalizer<ModelerStrings> Text
 @inject Microsoft.JSInterop.IJSRuntime JavaScript
 @implements IAsyncDisposable
+@{ var toolbar = CaptureToolbarPresentation(); }
 <div class="demo-host" @onkeydown="HandleHostKeyDown" @onclick="CloseDocumentMenu" data-native-document-operation="@_nativeDocumentOperationStatus"
      data-native-document-error-code="@(_nativeDocumentOperationErrorCode ?? string.Empty)"
      data-publish-operation="@_publishOperationStatus" data-publish-error-code="@(_publishOperationErrorCode ?? string.Empty)"
@@ -20,46 +21,46 @@
     <div class="editor-toolbar host-toolbar" role="toolbar" aria-label="Document operations" @onclick:stopPropagation>
         <div class="document-format-control">
             <button type="button" aria-expanded="@(_documentMenu == "import" ? "true" : "false")" aria-controls="@DomId("import-formats")"
-                    disabled="@(!CanUseNativeDocumentTransfer)" @onclick='() => ToggleDocumentMenu("import")'>Import <span aria-hidden="true">▾</span></button>
+                    disabled="@(!toolbar.CanTransfer)" @onclick='() => ToggleDocumentMenu("import")'>Import <span aria-hidden="true">▾</span></button>
             <div id="@DomId("import-formats")" class="document-format-menu" hidden="@(_documentMenu != "import")">
                 <label id="@DomId("import")"
                        class="native-document-import-action format-choice"
                        for="@DomId("import-file")"
-                       aria-disabled="@(!CanUseNativeDocumentTransfer)"
+                       aria-disabled="@(!toolbar.CanTransfer)"
                        title="@Text["Toolbar_ImportHint"]">
                     Inceptus JSON <small>Full fidelity</small>
                     <InputFile @key="_nativeDocumentInputKey"
                                id="@DomId("import-file")"
                                class="native-document-file-input"
                                aria-label="Import Inceptus JSON"
-                               disabled="@(!CanUseNativeDocumentTransfer)"
+                               disabled="@(!toolbar.CanTransfer)"
                                accept=".inceptus.json,application/json"
                                OnChange="ImportNativeDocumentAsync" />
                 </label>
                 <label class="native-document-import-action format-choice" for="@DomId("import-bpmn-file")"
-                       aria-disabled="@(!CanUseNativeDocumentTransfer)">
+                       aria-disabled="@(!toolbar.CanTransfer)">
                     BPMN 2.0.2 <small>Interchange · may omit information</small>
                     <InputFile @key="_standardInputKey" id="@DomId("import-bpmn-file")" class="native-document-file-input"
-                               aria-label="Import BPMN 2.0.2" disabled="@(!CanUseNativeDocumentTransfer)"
+                               aria-label="Import BPMN 2.0.2" disabled="@(!toolbar.CanTransfer)"
                                accept=".xml,.bpmn,application/xml,text/xml" OnChange="ImportStandardDocumentAsync" />
                 </label>
             </div>
         </div>
         <div class="document-format-control">
             <button type="button" aria-expanded="@(_documentMenu == "export" ? "true" : "false")" aria-controls="@DomId("export-formats")"
-                    disabled="@(!CanUseNativeDocumentTransfer)" @onclick='() => ToggleDocumentMenu("export")'>Export <span aria-hidden="true">▾</span></button>
+                    disabled="@(!toolbar.CanTransfer)" @onclick='() => ToggleDocumentMenu("export")'>Export <span aria-hidden="true">▾</span></button>
             <div id="@DomId("export-formats")" class="document-format-menu" hidden="@(_documentMenu != "export")">
                 <button id="@DomId("export")"
                         class="format-choice"
                         type="button"
-                        disabled="@(!CanUseNativeDocumentTransfer)"
+                        disabled="@(!toolbar.CanTransfer)"
                         aria-label="Export Inceptus JSON"
                         title="@Text["Toolbar_Export"]"
                         @onclick="ExportNativeDocumentAsync">
                     Inceptus JSON <small>Full fidelity</small>
                 </button>
                 <button type="button" class="format-choice" aria-label="Export BPMN 2.0.2"
-                        disabled="@(!CanUseNativeDocumentTransfer)" @onclick="ExportStandardDocumentAsync">
+                        disabled="@(!toolbar.CanTransfer)" @onclick="ExportStandardDocumentAsync">
                     BPMN 2.0.2 <small>Interchange · may omit information</small>
                 </button>
             </div>
@@ -67,7 +68,7 @@
                 <button id="@DomId("publish")"
                         class="native-document-action publish-action"
                         type="button"
-                        disabled="@(!CanPublish)"
+                        disabled="@(!toolbar.CanPublish)"
                         aria-label="@Text["Toolbar_Publish"]"
                         title="@Text["Toolbar_Publish"]"
                         @onclick="OpenPublicationDialog">
@@ -75,9 +76,12 @@
                 </button>
                 <button id="@DomId("validate")" aria-label="@Text["Accessibility_ModelValidation"]"
                         type="button"
-                        disabled="@(!CanValidate)"
+                        disabled="@(!toolbar.CanValidate)"
                         title="@Text["Toolbar_ValidateHint"]"
                         @onclick="ValidateAsync">@Text["Toolbar_Validate"]</button>
+        <button @ref="_settingsButton" id="@DomId("settings")" type="button"
+                disabled="@(SettingsModeler is null || _state is not { IsInitialized: true })"
+                @onclick="OpenSettingsAsync">@Text["Settings_Title"]</button>
         <div class="host-validation-summary">
             @if (CurrentValidation is null)
             {

@@ -1,7 +1,7 @@
 # Inceptus Document Engine
 
 A reusable BPMN modeler with immutable native documents and a standalone process
-presentation export. This README describes the locally prepared **0.1.10** release
+presentation export. This README describes the locally prepared **0.1.11** release
 candidate targeting **net10.0**; public publication is a separate step.
 
 [Open BPMN Editor](https://bpmn-editor.inceptus.online)
@@ -30,8 +30,8 @@ transitively; hosts using only editing still need only the Bpmn.Blazor reference
 The validated hosting model is a **standalone Blazor WebAssembly application** on .NET 10. Configure a feed containing the reviewed candidate before adding the package:
 
 ```xml
-<PackageReference Include="Inceptus.DocumentEngine.Bpmn.Blazor" Version="0.1.10" />
-<PackageReference Include="Inceptus.Bpmn.Integration" Version="0.1.10" />
+<PackageReference Include="Inceptus.DocumentEngine.Bpmn.Blazor" Version="0.1.11" />
+<PackageReference Include="Inceptus.Bpmn.Integration" Version="0.1.11" />
 ```
 
 Register the modeler in the application's `Program.cs`. The extension namespace is `Microsoft.Extensions.DependencyInjection`:
