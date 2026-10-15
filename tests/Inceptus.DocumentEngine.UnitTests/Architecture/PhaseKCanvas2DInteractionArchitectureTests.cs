@@ -179,7 +179,11 @@ public sealed class PhaseKCanvas2DInteractionArchitectureTests
         var callbackMethod = Assert.Single(callbackMethods, method =>
             method.Name == "OnCanvasPointerInput");
         Assert.Equal("OnCanvasPointerInput", callbackMethod.Name);
-        Assert.Equal(14, callbackMethod.GetParameters().Length);
+        Assert.Equal(15, callbackMethod.GetParameters().Length);
+        var touchParameter = callbackMethod.GetParameters()[^1];
+        Assert.Equal(typeof(bool), touchParameter.ParameterType);
+        Assert.True(touchParameter.IsOptional);
+        Assert.Equal(false, touchParameter.DefaultValue);
         Assert.All(
             callbackMethod.GetParameters(),
             parameter => Assert.True(

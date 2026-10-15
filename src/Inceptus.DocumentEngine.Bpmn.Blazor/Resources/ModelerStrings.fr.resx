@@ -260,4 +260,6 @@
   <data name="Toolbar_Layout" xml:space="preserve"><value>Disposition</value></data>
   <data name="Toolbar_AlignHorizontal" xml:space="preserve"><value>Aligner horizontalement sur le premier élément sélectionné</value></data>
   <data name="Toolbar_AlignVertical" xml:space="preserve"><value>Aligner verticalement sur le premier élément sélectionné</value></data>
+  <data name="Toolbar_MaximizeDrawingArea" xml:space="preserve"><value>Agrandir la zone de dessin</value></data>
+  <data name="Toolbar_RestoreDrawingArea" xml:space="preserve"><value>Restaurer la zone de dessin</value></data>
 </root>

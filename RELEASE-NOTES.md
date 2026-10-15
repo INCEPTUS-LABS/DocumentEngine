@@ -1,5 +1,41 @@
 # Release notes
 
+## 0.1.12
+
+- Prepares the aligned seven-package family locally after the committed graphical
+  export, drawing-area display mode and touch interaction changes. Public source
+  provenance and package publication remain separate release steps.
+- Adds SVG Image and PNG Image export for the complete current active diagram
+  level, including content beyond the viewport, independently of zoom and pan.
+  Shared graphical preparation preserves retained geometry and excludes editor
+  overlays without implicit BPMN validation, document mutation or History changes.
+  Public `GraphicalExportPreparer`, `SvgGraphicalExporter`,
+  `Canvas2DGraphicalExporter`, `GraphicalExportOptions` and `GraphicalExportResult`
+  support reusable host integration through `CapturePresentationAsync()`.
+  Hosts own file downloads and operation feedback; native JSON and BPMN XML
+  export retain their existing behavior.
+- Adds Normal and Maximized drawing-area presentation modes, with an internal
+  graphical Maximize/Restore toggle and public `BpmnModelerDisplayMode`,
+  `DisplayMode` and `DisplayModeChanged` integration. Hosts control their own
+  toolbar visibility and responsive viewport container while keeping the same
+  editor mounted. Maximization activates Compact toolbox presentation and Restore
+  reinstates its previous mode. Document, selection, zoom, pan and History are
+  preserved; mobile layouts keep the display toggle accessible.
+- Adds two-contact touchscreen midpoint panning and improves ordered wheel and
+  touchpad event delivery with bounded processing and compatible-event coalescing.
+  Gesture takeover cancels conflicting editing previews safely. Touch element
+  placement commits on release so a second contact does not create an unwanted
+  element; single-finger editing and mouse placement remain available. Panning
+  changes only transient viewport state and never the document or History.
+- Physical mobile-device, touchscreen and laptop-touchpad acceptance testing has
+  not yet been performed. It is deferred until publication of the public packages
+  and integration into the standalone InceptusBpmnEditor. Automated and simulated
+  browser checks do not constitute physical-device acceptance.
+- Retains all seven package IDs, net10.0, dependency policies, MIT metadata,
+  package icons, Project URL, portable symbols and existing native/published data
+  formats. Local DEVELOPMENT artifacts do not establish public Source Link or
+  nuget.org availability.
+
 ## 0.1.11
 
 - Prepares the aligned seven-package family locally after the committed Snap to

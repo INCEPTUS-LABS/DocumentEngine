@@ -1,6 +1,7 @@
 @namespace Inceptus.DocumentEngine.Blazor.Demo
 @using Inceptus.DocumentEngine.Bpmn.Blazor
 @using Inceptus.DocumentEngine.Bpmn.Blazor.Components
+@using Inceptus.DocumentEngine.Canvas2D.Export
 @using Inceptus.DocumentEngine.Contracts.Diagnostics
 @using Inceptus.Bpmn.Integration
 @using Microsoft.AspNetCore.Components.Forms
@@ -10,7 +11,8 @@
 @inject Microsoft.JSInterop.IJSRuntime JavaScript
 @implements IAsyncDisposable
 @{ var toolbar = CaptureToolbarPresentation(); }
-<div class="demo-host" @onkeydown="HandleHostKeyDown" @onclick="CloseDocumentMenu" data-native-document-operation="@_nativeDocumentOperationStatus"
+<div class="demo-host" data-display-mode="@_displayMode.ToString().ToLowerInvariant()"
+     @onkeydown="HandleHostKeyDown" @onclick="CloseDocumentMenu" data-native-document-operation="@_nativeDocumentOperationStatus"
      data-native-document-error-code="@(_nativeDocumentOperationErrorCode ?? string.Empty)"
      data-publish-operation="@_publishOperationStatus" data-publish-error-code="@(_publishOperationErrorCode ?? string.Empty)"
      data-publication-dialog="@(_publicationDialogOpen ? "open" : "closed")"
@@ -18,7 +20,8 @@
      data-validation-state="@ValidationStateValue" data-validation-issue-count="@ValidationIssueCount"
      data-validation-error-count="@ValidationErrorCount" data-validation-warning-count="@ValidationWarningCount"
      data-validation-info-count="@ValidationInfoCount" data-can-validate="@CanValidateValue" data-issues-panel-open="@IssuesPanelOpenValue">
-    <div class="editor-toolbar host-toolbar" role="toolbar" aria-label="Document operations" @onclick:stopPropagation>
+    <div class="editor-toolbar host-toolbar" hidden="@(_displayMode == BpmnModelerDisplayMode.Maximized)"
+         role="toolbar" aria-label="Document operations" @onclick:stopPropagation>
         <div class="document-format-control">
             <button type="button" aria-expanded="@(_documentMenu == "import" ? "true" : "false")" aria-controls="@DomId("import-formats")"
                     disabled="@(!toolbar.CanTransfer)" @onclick='() => ToggleDocumentMenu("import")'>Import <span aria-hidden="true">▾</span></button>
@@ -63,6 +66,14 @@
                         disabled="@(!toolbar.CanTransfer)" @onclick="ExportStandardDocumentAsync">
                     BPMN 2.0.2 <small>Interchange · may omit information</small>
                 </button>
+                <button type="button" class="format-choice" aria-label="Export SVG Image"
+                        disabled="@(!toolbar.CanTransfer)" @onclick="() => ExportGraphicalAsync(GraphicalExportFormat.Svg)">
+                    SVG Image <small>.svg</small>
+                </button>
+                <button type="button" class="format-choice" aria-label="Export PNG Image"
+                        disabled="@(!toolbar.CanTransfer)" @onclick="() => ExportGraphicalAsync(GraphicalExportFormat.Png)">
+                    PNG Image <small>.png</small>
+                </button>
             </div>
         </div>
                 <button id="@DomId("publish")"
@@ -106,7 +117,8 @@
     <canvas id="@DomId("import-measurement")" class="import-measurement" aria-hidden="true" width="1" height="1"></canvas>
     @if (Editor is null)
     {
-        <InceptusBpmnModeler @ref="_modeler" Ready="OnReady" DocumentChanged="OnDocumentChanged" ViewChanged="OnViewChanged" />
+        <InceptusBpmnModeler @ref="_modeler" @bind-DisplayMode="_displayMode"
+                             Ready="OnReady" DocumentChanged="OnDocumentChanged" ViewChanged="OnViewChanged" />
     }
             @if (_issuesPanel.IsOpen)
             {

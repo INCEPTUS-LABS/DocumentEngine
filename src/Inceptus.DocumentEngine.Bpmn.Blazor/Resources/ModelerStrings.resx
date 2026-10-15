@@ -260,4 +260,6 @@
   <data name="Toolbar_Layout" xml:space="preserve"><value>Layout</value></data>
   <data name="Toolbar_AlignHorizontal" xml:space="preserve"><value>Align horizontally to first selected element</value></data>
   <data name="Toolbar_AlignVertical" xml:space="preserve"><value>Align vertically to first selected element</value></data>
+  <data name="Toolbar_MaximizeDrawingArea" xml:space="preserve"><value>Maximize drawing area</value></data>
+  <data name="Toolbar_RestoreDrawingArea" xml:space="preserve"><value>Restore drawing area</value></data>
 </root>

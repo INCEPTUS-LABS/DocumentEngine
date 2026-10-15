@@ -15,6 +15,7 @@ class FakeElement {
         this.captureOperations = [];
         this.rejectCapture = false;
         this.style = { cursor: "" };
+        this.dataset = {};
     }
 
     getBoundingClientRect() {
@@ -196,6 +197,223 @@ function wheel(overrides = {}) {
         ...overrides
     };
 }
+
+test("two touch contacts produce an ordered midpoint pan instead of a second edit", async () => {
+    const calls = [];
+    const observer = createCanvasPointerObserver("canvas", {
+        invokeMethodAsync(...args) { calls.push(args); return Promise.resolve(); }
+    });
+    observer.start();
+    canvas.dispatch("pointerdown", pointer({ pointerType: "touch", button: 0, buttons: 1, clientX: 100, clientY: 100 }));
+    canvas.dispatch("pointerdown", pointer({ pointerType: "touch", pointerId: 8, isPrimary: false, button: 0, buttons: 1, clientX: 200, clientY: 200 }));
+    canvas.dispatch("pointermove", pointer({ pointerType: "touch", buttons: 1, clientX: 80, clientY: 60 }));
+    canvas.dispatch("pointermove", pointer({ pointerType: "touch", pointerId: 8, isPrimary: false, buttons: 1, clientX: 180, clientY: 160 }));
+    canvas.dispatch("pointerup", pointer({ pointerType: "touch", pointerId: 8, isPrimary: false, button: 0, clientX: 170, clientY: 150 }));
+    canvas.dispatch("pointermove", pointer({ pointerType: "touch", buttons: 1, clientX: 60, clientY: 40 }));
+    canvas.dispatch("pointerup", pointer({ pointerType: "touch", button: 0 }));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(calls.map(call => [call[1], call[6], call[7]]), [
+        [0, 100, 100], [7, 150, 150], [8, 130, 110], [9, 125, 105]
+    ]);
+    assert.equal(canvas.capturedPointers.size, 0);
+    observer.dispose();
+});
+
+test("wheel bursts wait behind pointer boundaries with one interop call in flight", async () => {
+    const calls = [];
+    let finish;
+    const observer = createCanvasPointerObserver("canvas", {
+        invokeMethodAsync(...args) {
+            calls.push(args);
+            return calls.length === 1 ? new Promise(resolve => { finish = resolve; }) : Promise.resolve();
+        }
+    });
+    observer.start();
+    canvas.dispatch("pointerdown", pointer({ button: 0, buttons: 1 }));
+    canvas.dispatch("pointerup", pointer({ button: 0 }));
+    for (let i = 0; i < 100; i++) canvas.dispatch("wheel", wheel({ deltaX: 0.25, deltaY: 0.5 }));
+    assert.equal(calls.length, 1);
+    finish();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(calls.map(call => call[0]), ["OnCanvasPointerInput", "OnCanvasPointerInput", "OnCanvasWheelInput"]);
+    assert.deepEqual(calls[2].slice(1), [25, 50, 0, false, false]);
+    observer.dispose();
+});
+
+function touch(pointerId, clientX, clientY, overrides = {}) {
+    return pointer({ pointerType: "touch", pointerId, isPrimary: pointerId === 7,
+        clientX, clientY, button: 0, buttons: 1, ...overrides });
+}
+
+function touchObserver() {
+    const calls = [];
+    const observer = createCanvasPointerObserver("canvas", {
+        invokeMethodAsync(...args) { calls.push(args); return Promise.resolve(); }
+    });
+    observer.start();
+    canvas.dispatch("pointerdown", touch(7, 100, 100));
+    canvas.dispatch("pointerdown", touch(8, 200, 200));
+    return { calls, observer };
+}
+
+test("opposed finger movement is coalesced to a stationary midpoint each frame", async () => {
+    const { calls, observer } = touchObserver();
+    await new Promise(resolve => setImmediate(resolve));
+    canvas.dispatch("pointermove", touch(7, 70, 60));
+    canvas.dispatch("pointermove", touch(8, 230, 240));
+    assert.equal(calls.length, 2);
+    await flushAnimationFrames();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(calls[2].slice(6, 8), [150, 150]);
+    assert.equal(calls[2][1], 8);
+    observer.dispose();
+});
+
+for (const boundary of ["pointerup", "pointercancel", "lostpointercapture", "pointerleave", "blur", "managed"]) {
+    test(`touch pan terminates safely on ${boundary} and a fresh finger can edit`, async () => {
+        const { calls, observer } = touchObserver();
+        await new Promise(resolve => setImmediate(resolve));
+        canvas.dispatch("pointermove", touch(7, 80, 60));
+        canvas.dispatch("pointermove", touch(8, 180, 160));
+        if (boundary === "blur") windowListeners.get("blur")();
+        else if (boundary === "managed") observer.releaseCapture(calls[1][14]);
+        else {
+            if (boundary === "pointerleave" || boundary === "lostpointercapture") canvas.capturedPointers.delete(8);
+            canvas.dispatch(boundary, touch(8, 180, 160, { buttons: 0 }));
+        }
+        canvas.dispatch("pointermove", touch(7, 40, 20));
+        canvas.dispatch("pointerup", touch(7, 40, 20, { buttons: 0 }));
+        canvas.dispatch("pointerup", touch(8, 180, 160, { buttons: 0 }));
+        await flushAnimationFrames();
+        await new Promise(resolve => setImmediate(resolve));
+        assert.deepEqual(calls.map(call => call[1]), [0, 7, 8, boundary === "pointerup" ? 9 : 10]);
+        assert.deepEqual(calls[2].slice(6, 8), [130, 110]);
+        assert.equal(canvas.capturedPointers.size, 0);
+        canvas.dispatch("dblclick", pointer({ button: 0 }));
+        canvas.dispatch("contextmenu", pointer({ button: 2 }));
+        await new Promise(resolve => setImmediate(resolve));
+        assert.equal(calls.length, 4);
+        canvas.dispatch("pointerdown", touch(7, 50, 50));
+        canvas.dispatch("pointerup", touch(7, 50, 50, { buttons: 0 }));
+        await new Promise(resolve => setImmediate(resolve));
+        assert.deepEqual(calls.slice(4).map(call => call[1]), [0, 2]);
+        assert.ok(calls[4][14] > calls[1][14]);
+        assert.equal(calls[4][15], true);
+        observer.dispose();
+    });
+}
+
+test("a third contact cancels panning and remaining fingers cannot restart editing", async () => {
+    const { calls, observer } = touchObserver();
+    canvas.dispatch("pointerdown", touch(9, 250, 250));
+    canvas.dispatch("pointerup", touch(9, 250, 250, { buttons: 0 }));
+    canvas.dispatch("pointermove", touch(7, 50, 50));
+    canvas.dispatch("pointermove", touch(8, 150, 150));
+    canvas.dispatch("pointerup", touch(7, 50, 50, { buttons: 0 }));
+    canvas.dispatch("pointerup", touch(8, 150, 150, { buttons: 0 }));
+    await flushAnimationFrames();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(calls.map(call => call[1]), [0, 7, 10]);
+    assert.equal(canvas.capturedPointers.size, 0);
+    observer.dispose();
+});
+
+test("touch capture rejection cancels the first edit and disposal discards scheduled input", async () => {
+    const calls = [];
+    const observer = createCanvasPointerObserver("canvas", {
+        invokeMethodAsync(...args) { calls.push(args); return Promise.resolve(); }
+    });
+    observer.start();
+    canvas.dispatch("pointerdown", touch(7, 100, 100));
+    canvas.rejectCapture = true;
+    canvas.dispatch("pointerdown", touch(8, 200, 200));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(calls.map(call => call[1]), [0, 3]);
+    canvas.rejectCapture = false;
+    canvas.dispatch("pointerdown", touch(7, 100, 100));
+    canvas.dispatch("pointerdown", touch(8, 200, 200));
+    await new Promise(resolve => setImmediate(resolve));
+    canvas.dispatch("pointermove", touch(7, 80, 60));
+    const count = calls.length;
+    observer.dispose();
+    await flushAnimationFrames();
+    assert.equal(calls.length, count);
+    assert.equal(canvas.capturedPointers.size, 0);
+    assert.equal(windowListeners.has("blur"), false);
+});
+
+test("touch move bursts retain their final boundary and stale release cannot end a new pan", async () => {
+    const { calls, observer } = touchObserver();
+    await new Promise(resolve => setImmediate(resolve));
+    const generation = calls[1][14];
+    observer.releaseCapture(calls[0][14]);
+    assert.equal(canvas.capturedPointers.size, 2);
+    for (let i = 0; i < 1000; i++) {
+        canvas.dispatch("pointermove", touch(7, 100 - i / 10, 100 - i / 5));
+        canvas.dispatch("pointermove", touch(8, 200 - i / 10, 200 - i / 5));
+    }
+    canvas.dispatch("pointerup", touch(7, 0, -100, { buttons: 0 }));
+    canvas.dispatch("pointerup", touch(8, 100, 0, { buttons: 0 }));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(calls.length, 4);
+    assert.deepEqual(calls[3].slice(6, 8), [50.05, -49.900000000000006]);
+    assert.equal(calls[3][14], generation);
+    observer.dispose();
+});
+
+test("wheel ownership leaves modified, prevented, unavailable and pointer-owned events to the browser", async () => {
+    const calls = [];
+    const observer = createCanvasPointerObserver("canvas", {
+        invokeMethodAsync(...args) { calls.push(args); return Promise.resolve(); }
+    });
+    observer.start();
+    let prevented = 0;
+    let stopped = 0;
+    const event = extra => wheel({ deltaX: 0.125, deltaY: 0.25,
+        preventDefault() { prevented++; }, stopPropagation() { stopped++; }, ...extra });
+    canvas.dataset.viewportInputEnabled = "false";
+    canvas.dispatch("wheel", event({}));
+    canvas.dataset.viewportInputEnabled = "true";
+    canvas.dispatch("wheel", event({ defaultPrevented: true }));
+    canvas.dispatch("wheel", event({ ctrlKey: true }));
+    canvas.dispatch("wheel", event({ metaKey: true }));
+    canvas.dispatch("pointerdown", pointer({ button: 0, buttons: 1 }));
+    canvas.dispatch("wheel", event({}));
+    canvas.dispatch("pointerup", pointer({ button: 0 }));
+    canvas.dispatch("wheel", event({}));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(prevented, 1);
+    assert.equal(stopped, 1);
+    assert.equal(calls.filter(call => call[0] === "OnCanvasWheelInput").length, 1);
+    observer.dispose();
+});
+
+test("wheel delta modes and reversals stay ordered and queue backpressure is bounded", async () => {
+    const calls = [];
+    let finish;
+    let accepted = 0;
+    let acceptedX = 0;
+    const observer = createCanvasPointerObserver("canvas", {
+        invokeMethodAsync(...args) {
+            calls.push(args);
+            return calls.length === 1 ? new Promise(resolve => { finish = resolve; }) : Promise.resolve();
+        }
+    });
+    observer.start();
+    for (let i = 0; i < 1000; i++) canvas.dispatch("wheel", wheel({
+        deltaX: i % 2 ? 1 : -1, deltaY: 0.5, deltaMode: i % 3,
+        preventDefault() { accepted++; acceptedX += i % 2 ? 1 : -1; }
+    }));
+    assert.equal(calls.length, 1);
+    assert.ok(accepted >= 61);
+    finish();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(calls.length, 61);
+    for (let i = 0; i < 60; i++) assert.deepEqual(calls[i].slice(1, 4), [i % 2 ? 1 : -1, 0.5, i % 3]);
+    assert.equal(calls.reduce((sum, call) => sum + call[1], 0), acceptedX);
+    assert.equal(calls.reduce((sum, call) => sum + call[2], 0), accepted * 0.5);
+    observer.dispose();
+});
 
 test("generic DOM observer captures only primary header drags and releases boundaries", () => {
     const observer = createDomPointerCaptureObserver("panel-header");
@@ -598,13 +816,13 @@ test("pointer observer emits one normalized scalar stream with fresh bounds and 
 
     assert.deepEqual(invocations, [
         ["OnCanvasPointerInput", 1, 7, -1, 0, true,
-            115, 225, 15, 25, true, false, false, false, 0],
+            115, 225, 15, 25, true, false, false, false, 0, false],
         ["OnCanvasPointerInput", 0, 7, 0, 1, true,
-            180, 260, 30, 40, false, true, false, true, 1],
+            180, 260, 30, 40, false, true, false, true, 1, false],
         ["OnCanvasPointerInput", 2, 7, 0, 0, true,
-            182, 262, 30, 40, false, false, false, false, 1],
+            182, 262, 30, 40, false, false, false, false, 1, false],
         ["OnCanvasPointerInput", 4, 7, -1, 0, true,
-            190, 270, 30, 40, false, false, false, false, 0]
+            190, 270, 30, 40, false, false, false, false, 0, false]
     ]);
     assert.equal(invocations.flat().includes(window.devicePixelRatio), false);
     assert.deepEqual(canvas.captureOperations, [["set", 7], ["release", 7]]);
@@ -640,7 +858,7 @@ test("ordinary Canvas wheel is non-passive, prevented, scalar, and fractional", 
         deltaY: 4.4,
         preventDefault() { prevented++; }
     }));
-    assert.equal(invocations.length, 3);
+    assert.equal(invocations.length, 1);
 
     releaseFirst();
     await first;
@@ -792,7 +1010,8 @@ test("canvas context menu is suppressed and forwards only ordered scalar input w
         false,
         true,
         true,
-        0
+        0,
+        false
     ]]);
     assert.equal(invocations.flat().includes(window.devicePixelRatio), false);
     assert.equal(preventDefaultCount, 2);
@@ -870,7 +1089,8 @@ test("double-click forwards scalar activation with fresh bounds only after captu
         false,
         false,
         true,
-        0
+        0,
+        false
     ]);
     observer.dispose();
 });

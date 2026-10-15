@@ -439,7 +439,9 @@ public sealed partial class DocumentCanvasHostTests
             Assert.Contains("title=\"" + name + "\"", markup);
             Assert.DoesNotContain(">" + name + "</button>", markup);
         }
-        Assert.Equal(3, System.Text.RegularExpressions.Regex.Count(markup[markup.IndexOf("toolbar-group layout-controls", StringComparison.Ordinal)..], "<svg "));
+        var layoutStart = markup.IndexOf("toolbar-group layout-controls", StringComparison.Ordinal);
+        var layoutControls = markup[layoutStart..markup.IndexOf("</div>", layoutStart, StringComparison.Ordinal)];
+        Assert.Equal(3, System.Text.RegularExpressions.Regex.Count(layoutControls, "<svg "));
         var presentation = ActionBarSnapshot(test.Activator.Canvas);
         Assert.True(ActionBarEnabled(presentation, "CanAlignHorizontal"));
         Assert.True(ActionBarEnabled(presentation, "CanAlignVertical"));

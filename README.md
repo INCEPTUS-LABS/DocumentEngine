@@ -1,7 +1,7 @@
 # Inceptus Document Engine
 
 A reusable BPMN modeler with immutable native documents and a standalone process
-presentation export. This README describes the locally prepared **0.1.11** release
+presentation export. This README describes the locally prepared **0.1.12** release
 candidate targeting **net10.0**; public publication is a separate step.
 
 [Open BPMN Editor](https://bpmn-editor.inceptus.online)
@@ -30,8 +30,8 @@ transitively; hosts using only editing still need only the Bpmn.Blazor reference
 The validated hosting model is a **standalone Blazor WebAssembly application** on .NET 10. Configure a feed containing the reviewed candidate before adding the package:
 
 ```xml
-<PackageReference Include="Inceptus.DocumentEngine.Bpmn.Blazor" Version="0.1.11" />
-<PackageReference Include="Inceptus.Bpmn.Integration" Version="0.1.11" />
+<PackageReference Include="Inceptus.DocumentEngine.Bpmn.Blazor" Version="0.1.12" />
+<PackageReference Include="Inceptus.Bpmn.Integration" Version="0.1.12" />
 ```
 
 Register the modeler in the application's `Program.cs`. The extension namespace is `Microsoft.Extensions.DependencyInjection`:
@@ -123,6 +123,41 @@ conservatively improves eligible incident connection points. Turning Smart Edit
 **OFF** hides both contextual toolboxes while ordinary editing remains available;
 turning it ON restores tools eligible for the current selection. Smart Edit and
 Toolbox expansion are transient editor UI state, not saved document preferences.
+
+## Graphical export and drawing area
+
+The source Demo's Export menu also offers **SVG Image** and **PNG Image**. Both
+export the complete current diagram level, including content outside the visible
+viewport, independently of zoom and pan. Export does not validate BPMN, modify the
+document, enter History or acknowledge native save state.
+
+External hosts capture with `CapturePresentationAsync()` and use the public
+`Canvas2DGraphicalExporter` with `GraphicalExportOptions` and their editor's font
+and image configuration. `GraphicalExportPreparer` shares preparation across
+formats; `SvgGraphicalExporter` also supports managed-only SVG generation. The
+host owns menus, downloads and operation feedback. See the
+[graphical export integration guide](docs/integration/graphical-export.md).
+
+The editor's internal **Maximize drawing area / Restore drawing area** toggle
+uses `BpmnModelerDisplayMode.Normal` / `Maximized`. Bind `DisplayMode` and
+`DisplayModeChanged` so the host can hide its own operations toolbar and expand
+its container to the available viewport. Keep the same editor mounted. The
+packaged component automatically selects Compact toolbox mode on entry and
+restores the previous mode on exit, preserving document, selection, zoom, pan
+and History. See the [host layout example](docs/integration/drawing-area.md).
+
+Two touchscreen contacts pan by their midpoint at fixed zoom; wheel/touchpad
+input uses ordered, bounded delivery and compatible-event coalescing. Gesture
+takeover safely cancels conflicting editing previews. One-finger touch placement
+commits on release, while mouse placement retains its existing behavior. Panning
+does not modify the document or History. Hosts receive this through the packaged
+CSS/JavaScript and should not add a second gesture handler. See the
+[touch interaction guide](docs/integration/two-finger-panning.md).
+
+Physical mobile-device, touchscreen and laptop-touchpad acceptance has **not**
+been performed. It remains deferred until public package publication and
+integration into the standalone InceptusBpmnEditor; browser simulation and
+automated coverage do not establish physical-device acceptance.
 
 ## UI localization
 

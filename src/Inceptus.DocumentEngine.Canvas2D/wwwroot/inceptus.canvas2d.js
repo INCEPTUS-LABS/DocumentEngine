@@ -5,6 +5,126 @@
 
 const rendererOwner = Symbol("inceptus.canvas2d.renderer-owner");
 
+// Detached export lifetime. Managed code owns scope/filtering/bounds; this boundary only
+// loads approved resources and renders the prepared primitives using the ordinary renderer.
+export function createGraphicalExport() {
+    return new GraphicalExport();
+}
+
+class GraphicalExport {
+    #abort = new AbortController();
+    #renderer = null;
+    #canvas = null;
+    #timer = setTimeout(() => this.dispose(), 60000);
+
+    async #wait(promise) {
+        this.#abort.signal.throwIfAborted();
+        let listener;
+        try {
+            return await Promise.race([promise, new Promise((_, reject) => {
+                listener = () => reject(new Error("Graphical export cancelled or timed out."));
+                this.#abort.signal.addEventListener("abort", listener, { once: true });
+            })]);
+        } finally {
+            this.#abort.signal.removeEventListener("abort", listener);
+        }
+    }
+
+    async resources(images, fonts) {
+        const result = { images: Object.create(null), fonts: Object.create(null) };
+        for (const image of images) result.images[image.reference] = await this.#embed(image.uri, false);
+        for (const font of fonts) result.fonts[font.fontFamily] = await this.#embed(font.sourceUri, true);
+        return result;
+    }
+
+    async #embed(uri, font) {
+        const allowed = font ? ["font/ttf", "font/otf", "font/woff", "font/woff2"] : ["image/png", "image/jpeg", "image/webp"];
+        const url = new URL(uri, document.baseURI);
+        if (url.protocol === "data:") {
+            if (!allowed.some(type => uri.startsWith(`data:${type};base64,`)) || uri.length > 24 * 1024 * 1024)
+                throw new Error("Unsupported embedded graphical resource.");
+            return uri;
+        }
+        if (!["http:", "https:"].includes(url.protocol) || url.origin !== new URL(document.baseURI).origin || url.username || url.password)
+            throw new Error("Only configured same-origin graphical resources can be exported.");
+        const response = await fetch(url, { signal: this.#abort.signal, redirect: "error", credentials: "same-origin" });
+        if (!response.ok) throw new Error("Graphical resource unavailable.");
+        const reader = response.body.getReader();
+        const chunks = [];
+        let size = 0;
+        try {
+            while (true) {
+                const chunk = await reader.read();
+                if (chunk.done) break;
+                size += chunk.value.length;
+                if (size > 16 * 1024 * 1024) throw new Error("Graphical resource exceeds 16 MiB.");
+                chunks.push(chunk.value);
+            }
+        } finally { await reader.cancel(); }
+        const bytes = new Uint8Array(size);
+        let offset = 0;
+        for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
+        const prefix = String.fromCharCode(...bytes.subarray(0, 4));
+        const type = font
+            ? ({ "\u0000\u0001\u0000\u0000": "font/ttf", OTTO: "font/otf", wOFF: "font/woff", wOF2: "font/woff2" })[prefix]
+            : bytes[0] === 137 && prefix.slice(1) === "PNG" ? "image/png"
+                : bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255 ? "image/jpeg"
+                    : prefix === "RIFF" && String.fromCharCode(...bytes.subarray(8, 12)) === "WEBP" ? "image/webp" : null;
+        if (!allowed.includes(type)) throw new Error("Unsupported graphical resource encoding.");
+        let binary = "";
+        for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
+        return `data:${type};base64,${btoa(binary)}`;
+    }
+
+    async png(frame, width, height, scale, resources) {
+        this.#abort.signal.throwIfAborted();
+        // Check before the first canvas allocation, including overflow and memory policy.
+        if (![width, height].every(v => Number.isSafeInteger(v) && v > 0 && v <= 16384) ||
+            width * height > 32 * 1024 * 1024 || !Number.isFinite(scale) || scale <= 0)
+            throw new Error("Requested PNG exceeds browser export dimensions or memory budget.");
+        if (this.#canvas) throw new Error("An export operation can render only one PNG.");
+        const canvas = this.#canvas = document.createElement("canvas");
+        const context = canvas.getContext("2d");
+        if (!context) throw new Error("Export canvas unavailable.");
+        const renderer = this.#renderer = new Renderer(canvas, context, "graphical-export", true);
+        const fonts = Object.entries(resources.fonts).map(([family, uri], index) => ({
+            fontIdentity: `export-${index}`, fontVersion: "1", fontFamily: family, sourceUri: uri,
+            fontWeight: 400, fontStyle: "normal"
+        }));
+        const images = Object.entries(resources.images).map(([reference, uri]) => ({ reference, uri }));
+        const initialized = await this.#wait(renderer.initialize(
+            { cssWidth: width / scale, cssHeight: height / scale, devicePixelRatio: scale },
+            images, fonts, resources.defaultFontFamily));
+        if (!initialized.succeeded || canvas.width !== width || canvas.height !== height)
+            throw new Error("Export canvas allocation or font loading failed.");
+        if (document.fonts?.ready) await this.#wait(document.fonts.ready);
+        const rendered = await this.#wait(renderer.render(frame));
+        if (!rendered.succeeded) throw new Error("Graphical rendering failed.");
+        context.save();
+        try {
+            context.setTransform(1, 0, 0, 1, 0, 0);
+            context.globalAlpha = 1;
+            context.globalCompositeOperation = "destination-over";
+            context.fillStyle = "white";
+            context.fillRect(0, 0, width, height);
+        } finally { context.restore(); }
+        const blob = await this.#wait(new Promise((resolve, reject) => canvas.toBlob(
+            value => value ? resolve(value) : reject(new Error("PNG encoding failed.")), "image/png")));
+        const bytes = new Uint8Array(await this.#wait(blob.arrayBuffer()));
+        this.#abort.signal.throwIfAborted();
+        return bytes;
+    }
+
+    dispose() {
+        clearTimeout(this.#timer);
+        this.#abort.abort();
+        this.#renderer?.dispose();
+        if (this.#canvas) { this.#canvas.width = 0; this.#canvas.height = 0; }
+        this.#renderer = null;
+        this.#canvas = null;
+    }
+}
+
 export function createRenderer(canvasElementId) {
     const canvas = document.getElementById(canvasElementId);
     if (!(canvas instanceof HTMLCanvasElement)) {
@@ -38,11 +158,13 @@ class Renderer {
     #presentationVersion = 0;
     #operationEpoch = 0;
     #contentReady = false;
+    #allowFontFallback;
 
-    constructor(canvas, context, canvasElementId) {
+    constructor(canvas, context, canvasElementId, allowFontFallback = false) {
         this.#canvas = canvas;
         this.#context = context;
         this.canvasElementId = canvasElementId;
+        this.#allowFontFallback = allowFontFallback;
     }
 
     async initialize(surface, imageResources, fontResources, defaultFontFamily) {
@@ -505,8 +627,8 @@ class Renderer {
             if (item.geometryKind === 3) {
                 const family = item.fontFamily ?? this.#defaultFontFamily;
                 const alias = this.#fontAliases.get(fontFaceKey(family, 400, "normal"));
-                if (!alias) throw new Error("Configured scene font is unavailable.");
-                context.font = `normal 400 ${item.fontSize}px ${quoteFont(alias)}`;
+                if (!alias && !this.#allowFontFallback) throw new Error("Configured scene font is unavailable.");
+                context.font = `normal 400 ${item.fontSize}px ${alias ? quoteFont(alias) : `${quoteFont(family)}, sans-serif`}`;
             }
 
             switch (item.geometryKind) {

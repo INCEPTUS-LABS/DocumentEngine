@@ -8,6 +8,35 @@ namespace Inceptus.DocumentEngine.UnitTests.Blazor;
 public sealed class CanvasPresentationPointerObserverTests
 {
     [Fact]
+    public async Task TouchPanCallbackRequiresTouchIdentityAndPositiveGeneration()
+    {
+        var inputs = new List<CanvasPointerInput>();
+        var callback = new CanvasPresentationPointerCallback(input =>
+        {
+            inputs.Add(input);
+            return Task.CompletedTask;
+        });
+        foreach (var kind in new[] { CanvasPointerEventKind.TouchPanStart, CanvasPointerEventKind.TouchPanMove,
+            CanvasPointerEventKind.TouchPanEnd, CanvasPointerEventKind.TouchPanCancel })
+        {
+            await callback.OnCanvasPointerInput(kind, 7, -1, 1, true, 150.25, 200.5, 15, 25,
+                false, false, false, false, 2, isTouch: true);
+            await callback.OnCanvasPointerInput(kind, 7, -1, 1, true, 150.25, 200.5, 15, 25,
+                false, false, false, false, 2, isTouch: false);
+            await callback.OnCanvasPointerInput(kind, 7, -1, 1, true, 150.25, 200.5, 15, 25,
+                false, false, false, false, 0, isTouch: true);
+        }
+        Assert.Equal(4, inputs.Count);
+        Assert.All(inputs, input =>
+        {
+            Assert.True(input.IsTouch);
+            Assert.Equal(2, input.CaptureGeneration);
+            Assert.Equal(150.25, input.ClientX);
+            Assert.Equal(200.5, input.ClientY);
+        });
+    }
+
+    [Fact]
     public async Task WheelCallbackForwardsOnlyOrdinaryFiniteNonzeroDeltas()
     {
         var inputs = new List<CanvasWheelInput>();

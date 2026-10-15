@@ -186,7 +186,8 @@ internal sealed class CanvasPresentationPointerCallback
         bool controlKey,
         bool metaKey,
         bool shiftKey,
-        long captureGeneration = 0)
+        long captureGeneration = 0,
+        bool isTouch = false)
     {
         var input = new CanvasPointerInput(
             kind,
@@ -202,13 +203,15 @@ internal sealed class CanvasPresentationPointerCallback
             controlKey,
             metaKey,
             shiftKey,
-            captureGeneration);
+            captureGeneration,
+            isTouch);
         return Volatile.Read(ref _disabled) == 0 &&
             Enum.IsDefined(kind) &&
             pointerId >= 0 &&
             button >= -1 &&
             buttons >= 0 &&
             captureGeneration >= 0 &&
+            (kind < CanvasPointerEventKind.TouchPanStart || isTouch && captureGeneration > 0) &&
             input.IsFinite
                 ? _onPointerInput(input)
                 : Task.CompletedTask;

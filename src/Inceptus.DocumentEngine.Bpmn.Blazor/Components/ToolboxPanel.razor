@@ -149,6 +149,9 @@
     [Parameter]
     public string? DomIdPrefix { get; set; }
 
+    [Parameter]
+    public BpmnModelerDisplayMode DisplayMode { get; set; }
+
     [Parameter, EditorRequired]
     public ToolboxCatalog Catalog { get; set; } = ToolboxCatalog.Empty;
 
@@ -204,6 +207,7 @@
     protected override void OnParametersSet()
     {
         base.OnParametersSet();
+        _presentation.SynchronizeDisplayMode(DisplayMode);
         if (!ReferenceEquals(_reconciledCatalog, Catalog))
         {
             _presentation.Reconcile(VisibleGroups.Select(static entry => entry.Group.GroupId));

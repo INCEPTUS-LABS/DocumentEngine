@@ -111,7 +111,7 @@ public sealed class SolutionArchitectureTests
     {
         var buildProperties = XDocument.Load(Path.Combine(RepositoryRoot, "Directory.Build.props"));
 
-        Assert.Equal("0.1.11", ReadElementValue(buildProperties, "Version"));
+        Assert.Equal("0.1.12", ReadElementValue(buildProperties, "Version"));
         Assert.Equal("Robert Prokopczuk", ReadElementValue(buildProperties, "Authors"));
 
         var releaseTargets = XDocument.Load(Path.Combine(RepositoryRoot, "Directory.Build.targets"));
@@ -557,6 +557,7 @@ public sealed class SolutionArchitectureTests
             "Inceptus.DocumentEngine.Contracts.Canvas2D.Canvas2DSceneContributorRegistration",
             "Inceptus.DocumentEngine.Contracts.Canvas2D.Canvas2DSceneDiagnosticCodes",
             "Inceptus.DocumentEngine.Contracts.Canvas2D.Canvas2DSceneGeometry",
+            "Inceptus.DocumentEngine.Contracts.Canvas2D.Canvas2DSceneExportMetadata",
             "Inceptus.DocumentEngine.Contracts.Canvas2D.Canvas2DSceneGeometryKind",
             "Inceptus.DocumentEngine.Contracts.Canvas2D.Canvas2DSceneItem",
             "Inceptus.DocumentEngine.Contracts.Canvas2D.Canvas2DSceneLayer",
@@ -912,6 +913,17 @@ public sealed class SolutionArchitectureTests
             "Inceptus.DocumentEngine.Canvas2D.EditingSession.EditingSessionState",
             "Inceptus.DocumentEngine.Canvas2D.EditingSession.EditingSessionStateChangedEventArgs",
             "Inceptus.DocumentEngine.Canvas2D.EditingSession.EditingSessionStatus",
+            "Inceptus.DocumentEngine.Canvas2D.Export.Canvas2DGraphicalExporter",
+            "Inceptus.DocumentEngine.Canvas2D.Export.GraphicalExportArtifact",
+            "Inceptus.DocumentEngine.Canvas2D.Export.GraphicalExportFormat",
+            "Inceptus.DocumentEngine.Canvas2D.Export.GraphicalExportOptions",
+            "Inceptus.DocumentEngine.Canvas2D.Export.GraphicalExportPreparationResult",
+            "Inceptus.DocumentEngine.Canvas2D.Export.GraphicalExportPreparer",
+            "Inceptus.DocumentEngine.Canvas2D.Export.GraphicalExportResources",
+            "Inceptus.DocumentEngine.Canvas2D.Export.GraphicalExportResult",
+            "Inceptus.DocumentEngine.Canvas2D.Export.GraphicalExportStatus",
+            "Inceptus.DocumentEngine.Canvas2D.Export.PreparedGraphicalScene",
+            "Inceptus.DocumentEngine.Canvas2D.Export.SvgGraphicalExporter",
             "Inceptus.DocumentEngine.Canvas2D.HitTesting.Canvas2DSceneHitTestConfiguration",
             "Inceptus.DocumentEngine.Canvas2D.HitTesting.Canvas2DSceneHitTestResult",
             "Inceptus.DocumentEngine.Canvas2D.HitTesting.Canvas2DSceneHitTestService",
@@ -977,6 +989,7 @@ public sealed class SolutionArchitectureTests
             "Inceptus.DocumentEngine.Bpmn.Blazor.Components.InceptusBpmnModeler",
             "Inceptus.DocumentEngine.Bpmn.Blazor.Components.ToolboxPanel",
             "Inceptus.DocumentEngine.Bpmn.Blazor.BpmnModelerDocumentChangeKind",
+            "Inceptus.DocumentEngine.Bpmn.Blazor.BpmnModelerDisplayMode",
             "Inceptus.DocumentEngine.Bpmn.Blazor.BpmnModelerOperation",
             "Inceptus.DocumentEngine.Bpmn.Blazor.BpmnModelerReadyEventArgs",
             "Inceptus.DocumentEngine.Bpmn.Blazor.BpmnModelerDocumentChangedEventArgs",

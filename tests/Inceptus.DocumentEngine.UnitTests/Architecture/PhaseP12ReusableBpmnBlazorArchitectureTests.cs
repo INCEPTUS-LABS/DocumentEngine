@@ -44,13 +44,31 @@ public sealed class PhaseP12ReusableBpmnBlazorArchitectureTests
         var styles = File.ReadAllText(Path.Combine(RepositoryRoot, "src",
             "Inceptus.DocumentEngine.Bpmn.Blazor", "Components", "DocumentCanvas.razor.css"));
         Assert.Contains("container: inceptus-workspace / inline-size;", styles, StringComparison.Ordinal);
-        Assert.Contains("@container inceptus-workspace (max-width: 680px)", styles, StringComparison.Ordinal);
+        Assert.Contains("@container inceptus-workspace (max-width: 960px)", styles, StringComparison.Ordinal);
         Assert.DoesNotContain("@media (max-width:", styles, StringComparison.Ordinal);
         var toolbarStart = styles.IndexOf(".editor-toolbar {", StringComparison.Ordinal);
         var toolbarEnd = styles.IndexOf('}', toolbarStart);
         var toolbar = styles[toolbarStart..toolbarEnd];
-        Assert.Contains("flex-wrap: wrap;", toolbar, StringComparison.Ordinal);
+        Assert.Contains("flex-wrap: nowrap;", toolbar, StringComparison.Ordinal);
         Assert.Contains("flex: 0 0 auto;", toolbar, StringComparison.Ordinal);
+        var commandsStart = styles.IndexOf(".editor-toolbar-commands {", StringComparison.Ordinal);
+        var commands = styles[commandsStart..styles.IndexOf('}', commandsStart)];
+        Assert.Contains("flex-wrap: wrap;", commands, StringComparison.Ordinal);
+        Assert.Contains("min-width: 0;", commands, StringComparison.Ordinal);
+        var narrow = styles[styles.IndexOf("@container inceptus-workspace", StringComparison.Ordinal)..];
+        Assert.Contains("flex-wrap: nowrap;", narrow, StringComparison.Ordinal);
+        Assert.Contains("overflow-x: auto;", narrow, StringComparison.Ordinal);
+        Assert.Contains("min-height: 44px;", narrow, StringComparison.Ordinal);
+        Assert.Contains("min-width: 44px;", narrow, StringComparison.Ordinal);
+        Assert.Contains(".editor-toolbar .layout-icon-action,", narrow, StringComparison.Ordinal);
+        Assert.Contains(".editor-toolbar .display-mode-toggle {", narrow, StringComparison.Ordinal);
+        var iconsStart = styles.IndexOf(".layout-controls .layout-icon-action,", StringComparison.Ordinal);
+        Assert.True(iconsStart >= 0);
+        var icons = styles[iconsStart..styles.IndexOf('}', iconsStart)];
+        Assert.Contains(".editor-toolbar .display-mode-toggle {", icons, StringComparison.Ordinal);
+        Assert.Contains("width: 2.25rem;", icons, StringComparison.Ordinal);
+        Assert.Contains("height: 2.25rem;", icons, StringComparison.Ordinal);
+        Assert.Contains("min-width: 2.25rem;", icons, StringComparison.Ordinal);
     }
 
     [Fact]

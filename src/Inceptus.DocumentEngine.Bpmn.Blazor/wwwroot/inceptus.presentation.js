@@ -151,6 +151,12 @@ class CanvasPointerObserver {
     #nextCaptureGeneration = 1;
     #lastCapturedInput = null;
     #lastSurfaceInput = null;
+    #touches = new Map();
+    #touchPan = null;
+    #touchFrame = null;
+    #touchMovePending = null;
+    #touchSuppressed = false;
+    #suppressTouchActivation = false;
     #onPointerDown;
     #onPointerMove;
     #onPointerUp;
@@ -210,8 +216,9 @@ class CanvasPointerObserver {
 
         const last = this.#lastCapturedInput;
         const cancellation = last
-            ? { ...last, kind: 3, button: -1, buttons: 0 }
+            ? { ...last, kind: this.#touchPan ? 10 : 3, button: -1, buttons: 0 }
             : null;
+        this.#flushTouchMove();
         this.#releaseCapture(captureGeneration);
         if (cancellation) {
             this.#enqueue(cancellation);
@@ -261,9 +268,19 @@ class CanvasPointerObserver {
     }
 
     #captureDown(event) {
+        if (event?.pointerType === "touch") {
+            this.#captureTouchDown(event);
+            return;
+        }
+        if (this.#touches.size > 0) return;
+        this.#suppressTouchActivation = false;
+        this.#captureSingleDown(event);
+    }
+
+    #captureSingleDown(event) {
         if (!this.#canCapture(event) || !event.isPrimary ||
             (event.button !== 0 && event.button !== 1) ||
-            this.#capturedPointerId !== null) {
+            this.#capturedPointerId !== null || this.#pending.length >= 60) {
             return;
         }
 
@@ -297,10 +314,23 @@ class CanvasPointerObserver {
         const capturedInput = { ...input, captureGeneration };
         this.#lastCapturedInput = capturedInput;
         this.#lastSurfaceInput = capturedInput;
+        if (input.isTouch) this.#touches.set(input.pointerId, capturedInput);
         this.#enqueue(capturedInput);
     }
 
     #captureMove(event) {
+        if (this.#touches.has(event?.pointerId)) {
+            const input = this.#createInput(1, event);
+            if (!input) return;
+            this.#touches.set(event.pointerId, input);
+            if (this.#touchSuppressed) return;
+            if (this.#touchPan) {
+                this.#emitTouchPan(8);
+                return;
+            }
+        } else if (event?.pointerType === "touch" || this.#touches.size > 0) {
+            return;
+        }
         if (!this.#canCapture(event) || !event.isPrimary ||
             (this.#capturedPointerId === null && event.buttons !== 0) ||
             (this.#capturedPointerId !== null &&
@@ -312,6 +342,10 @@ class CanvasPointerObserver {
     }
 
     #captureBoundary(kind, event) {
+        if (this.#touches.has(event?.pointerId)) {
+            this.#captureTouchBoundary(kind, event);
+            return;
+        }
         if (!this.#canCapture(event) ||
             event.pointerId !== this.#capturedPointerId) {
             return;
@@ -322,6 +356,10 @@ class CanvasPointerObserver {
     }
 
     #captureLeave(event) {
+        if (this.#touches.has(event?.pointerId)) {
+            if (!this.#canvas.hasPointerCapture(event.pointerId)) this.#captureTouchBoundary(3, event);
+            return;
+        }
         if (this.#capturedPointerId !== null || !this.#canCapture(event) ||
             !event.isPrimary) {
             return;
@@ -338,15 +376,20 @@ class CanvasPointerObserver {
         // Losing browser focus terminates surface input, including an uncaptured hover.
         // Managed interaction decides which transient operation to retire.
         const last = this.#lastCapturedInput ?? this.#lastSurfaceInput;
+        this.#flushTouchMove();
         this.#lastSurfaceInput = null;
         this.#canvas.style.cursor = "default";
         this.#releaseCapture();
         if (last) {
-            this.#enqueue({ ...last, kind: 3, button: -1, buttons: 0 });
+            this.#enqueue({ ...last, kind: last.kind >= 7 ? 10 : 3, button: -1, buttons: 0 });
         }
     }
 
     #captureLostPointerCapture(event) {
+        if (this.#touches.has(event?.pointerId)) {
+            this.#captureTouchBoundary(3, event);
+            return;
+        }
         if (!this.#canCapture(event) ||
             event.pointerId !== this.#capturedPointerId) {
             return;
@@ -368,7 +411,8 @@ class CanvasPointerObserver {
         // Native suppression is scoped to this editor canvas. Object resolution and all
         // context policy remain in the managed interaction path.
         event.preventDefault?.();
-        if (this.#capturedPointerId !== null) {
+        if (this.#capturedPointerId !== null || this.#touches.size > 0 ||
+            this.#suppressTouchActivation || this.#pending.length >= 60) {
             return;
         }
 
@@ -398,7 +442,8 @@ class CanvasPointerObserver {
 
     #captureDoubleClick(event) {
         if (!this.#canCapture(event) || event.button !== 0 ||
-            this.#capturedPointerId !== null) {
+            this.#capturedPointerId !== null || this.#touches.size > 0 ||
+            this.#suppressTouchActivation || this.#pending.length >= 60) {
             return;
         }
 
@@ -435,32 +480,30 @@ class CanvasPointerObserver {
 
     #captureWheel(event) {
         if (!this.#canCapture(event) || event.ctrlKey || event.metaKey ||
+            this.#canvas.dataset?.viewportInputEnabled === "false" ||
+            event.defaultPrevented || this.#capturedPointerId !== null || this.#touches.size > 0 ||
             !Number.isFinite(event.deltaX) || !Number.isFinite(event.deltaY) ||
             !Number.isSafeInteger(event.deltaMode) || event.deltaMode < 0 ||
             event.deltaMode > 2 || (event.deltaX === 0 && event.deltaY === 0)) {
             return;
         }
 
-        // This listener is deliberately non-passive and Canvas-scoped. Overlay and sibling UI
-        // elements are not descendants of the Canvas, so their normal scrolling is isolated.
+        const input = { wheel: true, deltaX: event.deltaX, deltaY: event.deltaY, deltaMode: event.deltaMode };
+        const last = this.#pending.at(-1);
+        // Do not combine reversals: the managed viewport clamps at the Document origin.
+        const combines = last?.wheel && last.deltaMode === input.deltaMode &&
+            last.deltaX * input.deltaX >= 0 && last.deltaY * input.deltaY >= 0 &&
+            Number.isFinite(last.deltaX + input.deltaX) && Number.isFinite(last.deltaY + input.deltaY);
+        if (!combines && this.#pending.length >= 60) return;
+        // Only accepted canvas input owns native scrolling. Modified, conflicting and
+        // backpressured input retains its browser fallback; sibling UI is never observed.
         event.preventDefault?.();
-        const callback = this.#dotNetReference;
-        if (!callback) {
-            return;
-        }
-
-        try {
-            void callback.invokeMethodAsync(
-                "OnCanvasWheelInput",
-                event.deltaX,
-                event.deltaY,
-                event.deltaMode,
-                false,
-                false).catch(() => {
-                    // Component disposal may race an already-forwarded browser event.
-                });
-        } catch {
-            // A synchronously disposed interop reference is isolated from browser input.
+        event.stopPropagation?.();
+        if (combines) {
+            last.deltaX += input.deltaX;
+            last.deltaY += input.deltaY;
+        } else {
+            this.#enqueue(input);
         }
     }
 
@@ -491,7 +534,8 @@ class CanvasPointerObserver {
             controlKey: Boolean(event.ctrlKey),
             metaKey: Boolean(event.metaKey),
             shiftKey: Boolean(event.shiftKey),
-            captureGeneration
+            captureGeneration,
+            isTouch: event.pointerType === "touch"
         };
         if (![input.clientX, input.clientY, input.canvasLeft, input.canvasTop].every(Number.isFinite) ||
             !Number.isSafeInteger(input.pointerId) || input.pointerId < 0 ||
@@ -514,13 +558,21 @@ class CanvasPointerObserver {
         }
 
         const pointerId = this.#capturedPointerId;
+        const pointerIds = new Set(this.#touches.keys());
+        if (pointerId !== null) pointerIds.add(pointerId);
         this.#capturedPointerId = null;
         this.#captureGeneration = 0;
         this.#lastCapturedInput = null;
-        if (pointerId === null || !this.#canvas) {
-            return;
-        }
+        this.#touches.clear();
+        this.#touchPan = null;
+        this.#touchSuppressed = false;
+        if (this.#touchFrame !== null) cancelAnimationFrame(this.#touchFrame);
+        this.#touchFrame = null;
+        this.#touchMovePending = null;
+        for (const id of pointerIds) this.#releaseNativeCapture(id);
+    }
 
+    #releaseNativeCapture(pointerId) {
         try {
             if (typeof this.#canvas.hasPointerCapture !== "function" ||
                 this.#canvas.hasPointerCapture(pointerId)) {
@@ -531,15 +583,103 @@ class CanvasPointerObserver {
         }
     }
 
+    #captureTouchDown(event) {
+        if (!this.#canCapture(event) || event.button !== 0 || this.#touches.has(event.pointerId)) return;
+        if (this.#touches.size >= 16) { this.#captureFocusLoss(); return; }
+        if (this.#touches.size === 0) {
+            this.#suppressTouchActivation = false;
+            this.#captureSingleDown(event);
+            return;
+        }
+        const input = this.#createInput(0, event);
+        if (!input) return;
+        try { this.#canvas.setPointerCapture(event.pointerId); }
+        catch { this.#captureFocusLoss(); return; }
+        this.#touches.set(event.pointerId, input);
+        if (this.#touchSuppressed) return;
+        if (this.#touches.size !== 2) {
+            this.#finishTouchPan(10);
+            return;
+        }
+        if (!Number.isSafeInteger(this.#nextCaptureGeneration)) { this.#captureFocusLoss(); return; }
+        this.#captureGeneration = this.#nextCaptureGeneration++;
+        this.#touchPan = { ...this.#lastCapturedInput, captureGeneration: this.#captureGeneration };
+        this.#suppressTouchActivation = true;
+        this.#emitTouchPan(7);
+    }
+
+    #emitTouchPan(kind, enqueue = true) {
+        const [first, second] = this.#touches.values();
+        const bounds = this.#canvas.getBoundingClientRect();
+        const input = { ...this.#touchPan, kind,
+            clientX: first.clientX / 2 + second.clientX / 2,
+            clientY: first.clientY / 2 + second.clientY / 2,
+            canvasLeft: bounds.left, canvasTop: bounds.top };
+        this.#touchPan = input;
+        this.#lastCapturedInput = input;
+        this.#lastSurfaceInput = input;
+        if (!enqueue) return;
+        if (kind !== 8) { this.#enqueue(input); return; }
+        // Both contacts may report separately in the same browser frame. Deliver their
+        // final midpoint together, including when they move apart around a fixed center.
+        this.#touchMovePending = input;
+        if (this.#touchFrame === null) {
+            this.#touchFrame = requestAnimationFrame(() => {
+                this.#touchFrame = null;
+                this.#flushTouchMove();
+            });
+        }
+    }
+
+    #flushTouchMove() {
+        if (this.#touchFrame !== null) cancelAnimationFrame(this.#touchFrame);
+        this.#touchFrame = null;
+        const input = this.#touchMovePending;
+        this.#touchMovePending = null;
+        if (input) this.#enqueue(input);
+    }
+
+    #finishTouchPan(kind) {
+        this.#flushTouchMove();
+        if (this.#touchPan) this.#enqueue({ ...this.#touchPan, kind, button: -1, buttons: 0 });
+        this.#touchPan = null;
+        this.#touchSuppressed = true;
+        this.#capturedPointerId = null;
+        this.#captureGeneration = 0;
+        this.#lastCapturedInput = null;
+        this.#lastSurfaceInput = null;
+    }
+
+    #captureTouchBoundary(kind, event) {
+        if (this.#touchPan) {
+            if (kind === 2) {
+                const input = this.#createInput(kind, event);
+                if (input) this.#touches.set(event.pointerId, input);
+                this.#emitTouchPan(8, false);
+            }
+            this.#finishTouchPan(kind === 2 ? 9 : 10);
+        } else if (!this.#touchSuppressed) {
+            this.#captureInput(kind, event);
+            this.#releaseCapture();
+            return;
+        }
+        this.#touches.delete(event.pointerId);
+        this.#releaseNativeCapture(event.pointerId);
+        if (this.#touches.size === 0) this.#touchSuppressed = false;
+    }
+
     #enqueue(input) {
         if (this.#disposed || !this.#started) {
             return;
         }
 
         const last = this.#pending.at(-1);
-        if (input.kind === 1 && last?.kind === 1 &&
-            input.pointerId === last.pointerId) {
+        if ((input.kind === 1 || input.kind === 8) && last?.kind === input.kind &&
+            input.pointerId === last.pointerId && input.captureGeneration === last.captureGeneration) {
             this.#pending[this.#pending.length - 1] = input;
+        } else if ((input.kind === 1 || input.kind === 8) && this.#pending.length >= 64) {
+            // Reserve boundary capacity. A terminal sample still carries the final position.
+            return;
         } else {
             this.#pending.push(input);
         }
@@ -562,6 +702,11 @@ class CanvasPointerObserver {
                 }
 
                 try {
+                    if (input.wheel) {
+                        await callback.invokeMethodAsync("OnCanvasWheelInput", input.deltaX,
+                            input.deltaY, input.deltaMode, false, false);
+                        continue;
+                    }
                     await callback.invokeMethodAsync(
                         "OnCanvasPointerInput",
                         input.kind,
@@ -577,7 +722,8 @@ class CanvasPointerObserver {
                         input.controlKey,
                         input.metaKey,
                         input.shiftKey,
-                        input.captureGeneration);
+                        input.captureGeneration,
+                        Boolean(input.isTouch));
                 } catch {
                     // Component disposal may race a pointer callback already dispatched by the
                     // browser. The next ordered input remains independently deliverable.

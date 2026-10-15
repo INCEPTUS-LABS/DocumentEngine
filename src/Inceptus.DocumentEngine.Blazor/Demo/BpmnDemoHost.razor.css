@@ -483,7 +483,18 @@
     margin: 0.2rem 0;
 }
 
-.demo-host { height: 100dvh; display: grid; grid-template-rows: auto minmax(0, 1fr); position: relative; }
+.demo-host { height: 100vh; height: 100dvh; display: grid; grid-template-rows: auto minmax(0, 1fr); position: relative; }
+
+.demo-host[data-display-mode="maximized"] {
+    position: fixed;
+    z-index: 50;
+    inset: 0;
+    grid-template-rows: minmax(0, 1fr);
+    padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
+             env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+}
+
+.host-toolbar[hidden] { display: none; }
 
 .host-toolbar { padding: .35rem .75rem; gap: .75rem; }
 

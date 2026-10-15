@@ -5,9 +5,12 @@
 <CascadingValue Value="_facade" IsFixed="true">
     <div class="@RootClass"
          style="@Style"
+         data-display-mode="@_displayMode.ToString().ToLowerInvariant()"
          @attributes="AdditionalAttributes">
         <CascadingValue Name="ModelerUICulture" Value="CultureInfo.CurrentUICulture">
-            <DocumentCanvas @ref="_canvas" />
+            <CascadingValue Value="DisplayPresentation">
+                <DocumentCanvas @ref="_canvas" />
+            </CascadingValue>
         </CascadingValue>
     </div>
 </CascadingValue>

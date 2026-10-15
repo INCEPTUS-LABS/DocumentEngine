@@ -31,7 +31,7 @@ public partial class BpmnDemoHost
                 toolState: editor.ToolState, temporaryFeedback: editor.TemporaryFeedback.Where(feedback =>
                     feedback.SpatialResize?.Phase != Canvas2DSpatialResizePhase.Hover)),
             session.ModelProfileState, session.ModelProfileViewState, session.ModelProfileElementViewState,
-            state.PropertiesFormOpen, state.ValidationInFlight, _standardInProgress,
+            state.PropertiesFormOpen, state.ValidationInFlight, _standardInProgress || _graphicalExportInProgress,
             _nativeDocumentImportInProgress, _nativeDocumentExportInProgress, _publicationDialogOpen, _publishInProgress);
 
         // Selection, hover, viewport and scene identity do not change site actions.

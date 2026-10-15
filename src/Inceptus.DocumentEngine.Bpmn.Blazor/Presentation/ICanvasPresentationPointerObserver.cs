@@ -67,6 +67,10 @@ internal enum CanvasPointerEventKind
     Leave,
     ContextMenu,
     DoubleClick,
+    TouchPanStart,
+    TouchPanMove,
+    TouchPanEnd,
+    TouchPanCancel,
 }
 
 internal readonly record struct CanvasPointerInput(
@@ -83,7 +87,8 @@ internal readonly record struct CanvasPointerInput(
     bool ControlKey,
     bool MetaKey,
     bool ShiftKey,
-    long CaptureGeneration = 0)
+    long CaptureGeneration = 0,
+    bool IsTouch = false)
 {
     internal bool IsFinite =>
         double.IsFinite(ClientX) &&

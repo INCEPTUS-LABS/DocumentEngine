@@ -118,7 +118,93 @@ globalThis.document = {
 
 const modulePath = path.resolve(
     "src/Inceptus.DocumentEngine.Canvas2D/wwwroot/inceptus.canvas2d.js");
-const { createRenderer } = await import(pathToFileURL(modulePath));
+const { createRenderer, createGraphicalExport } = await import(pathToFileURL(modulePath));
+
+test("graphical PNG uses a detached canvas, scale, white background and ordinary primitives", async () => {
+    const created = [];
+    const previous = document.createElement;
+    const liveSize = [canvas.width, canvas.height];
+    document.createElement = name => {
+        assert.equal(name, "canvas");
+        const detached = new FakeCanvas(new FakeContext());
+        detached.toBlob = (callback, type) => {
+            assert.equal(type, "image/png");
+            callback(new Blob([new Uint8Array([137, 80, 78, 71])]));
+        };
+        created.push(detached);
+        return detached;
+    };
+    const exporter = createGraphicalExport();
+    try {
+        operations.length = 0;
+        const bytes = await exporter.png({ ...versions(), viewportTransform: matrix(-4000, -2000), items: [
+            { ...rectangle("far", 1), geometryBounds: { x: 4000, y: 2000, width: 100, height: 50 } },
+            { ...rectangle("label", 3), geometryKind: 3, content: "A & B" }
+        ] }, 296, 196, 2, { images: {}, fonts: {}, defaultFontFamily: "sans-serif" });
+        assert.deepEqual([...bytes], [137, 80, 78, 71]);
+        assert.equal(created.length, 1);
+        assert.deepEqual([created[0].width, created[0].height], [296, 196]);
+        assert.deepEqual([canvas.width, canvas.height], liveSize);
+        assert.ok(operations.some(op => op[0] === "fillRect" && op[1] === 4000));
+        assert.ok(operations.some(op => op[0] === "fillText" && op[1] === "A & B"));
+        assert.equal(created[0].context.fillStyle, "white");
+        assert.equal(created[0].context.globalCompositeOperation, "destination-over");
+    } finally { exporter.dispose(); document.createElement = previous; }
+    assert.equal(created[0].width, 0);
+});
+
+test("graphical export rejects unsafe resources and oversized canvases before allocation", async () => {
+    const oldBase = document.baseURI;
+    const previous = document.createElement;
+    document.baseURI = "https://editor.example/";
+    document.createElement = () => { throw new Error("Must not allocate"); };
+    const exporter = createGraphicalExport();
+    try {
+        for (const uri of ["https://remote.example/x.png", "javascript:alert(1)", "data:image/svg+xml;base64,PHN2Zy8+"])
+            await assert.rejects(exporter.resources([{ reference: "x", uri }], []), /origin|embedded/);
+        for (const [width, height] of [[16385, 10], [9000, 9000], [Infinity, 1], [-1, 1]])
+            await assert.rejects(exporter.png({}, width, height, 2, {}), /dimensions|memory/);
+    } finally { exporter.dispose(); document.createElement = previous; document.baseURI = oldBase; }
+});
+
+test("graphical PNG waits for image decode and disposal cancels a stalled export", async () => {
+    const previous = document.createElement;
+    document.createElement = () => new FakeCanvas(new FakeContext());
+    let complete;
+    pendingImageLoad = new Promise(resolve => { complete = resolve; });
+    const exporter = createGraphicalExport();
+    try {
+        const pending = exporter.png({ ...versions(), viewportTransform: matrix(), items: [
+            { ...rectangle("image", 1), geometryKind: 4, content: "image" }
+        ] }, 100, 100, 2, { images: { image: "data:image/png;base64,AA==" }, fonts: {}, defaultFontFamily: "sans-serif" });
+        await new Promise(resolve => setImmediate(resolve));
+        exporter.dispose();
+        await assert.rejects(pending, /cancelled|timed out/);
+        complete();
+        await Promise.resolve();
+    } finally { pendingImageLoad = null; exporter.dispose(); document.createElement = previous; }
+});
+
+test("graphical PNG reports encoder and image failures without touching the live renderer", async () => {
+    const previous = document.createElement;
+    document.createElement = () => {
+        const detached = new FakeCanvas(new FakeContext());
+        detached.toBlob = callback => callback(null);
+        return detached;
+    };
+    try {
+        const first = createGraphicalExport();
+        try { await assert.rejects(first.png({ ...versions(), viewportTransform: matrix(), items: [] }, 50, 50, 1,
+            { images: {}, fonts: {}, defaultFontFamily: "sans-serif" }), /encoding/); }
+        finally { first.dispose(); }
+        const second = createGraphicalExport();
+        rejectedImageUri = "broken-image";
+        try { await assert.rejects(second.png({ ...versions(), viewportTransform: matrix(), items: [
+            { ...rectangle("image", 1), geometryKind: 4, content: "image" }
+        ] }, 50, 50, 1, { images: { image: rejectedImageUri }, fonts: {}, defaultFontFamily: "sans-serif" }), /rendering/); }
+        finally { second.dispose(); }
+    } finally { rejectedImageUri = null; document.createElement = previous; }
+});
 
 const delayedFont = {
     fontIdentity: "font:delayed", fontVersion: "1", fontFamily: "Delayed",

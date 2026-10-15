@@ -20,6 +20,7 @@ public partial class BpmnDemoHost
 {
     [Parameter] public IBpmnDocumentEditor? Editor { get; set; }
     private InceptusBpmnModeler? _modeler;
+    private BpmnModelerDisplayMode _displayMode;
     private ElementReference _settingsButton;
     private InceptusBpmnModeler? SettingsModeler => _modeler ?? Editor as InceptusBpmnModeler;
 
@@ -131,6 +132,7 @@ public partial class BpmnDemoHost
     private string _publicationDescriptionDraft = string.Empty;
     private ElementReference _publicationCodeInput;
     private bool CanUseNativeDocumentTransfer =>
+        !_graphicalExportInProgress &&
         !_standardInProgress &&
         _host?.CaptureEditorContext()?.CanReplaceDocument == true &&
         !_nativeDocumentImportInProgress &&
@@ -177,6 +179,7 @@ public partial class BpmnDemoHost
             : null;
 
     private bool CanValidate =>
+        !_graphicalExportInProgress &&
         !_standardInProgress &&
         _state is
         {

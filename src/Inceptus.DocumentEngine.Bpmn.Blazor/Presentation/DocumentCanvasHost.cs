@@ -2611,6 +2611,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable, IBpmnDocume
             ModelerNotifications?.Dispose();
             _documentNotifications?.Dispose();
             _viewportPanGesture = null;
+            _touchPlacementPress = null;
             _lifetime.Cancel();
             _disposeTask = task = DisposeCoreAsync();
         }
@@ -2651,6 +2652,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable, IBpmnDocume
 
                 controller = _toolboxPlacementController;
                 session = _session;
+                _touchPlacementPress = null;
             }
 
             if (_interactionController is { } interaction && session?.CaptureState().EditorState.ActiveGesture is not null)
@@ -2741,6 +2743,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable, IBpmnDocume
                 pointerObserver = _pointerObserver;
                 viewportPanGesture = _viewportPanGesture;
                 _viewportPanGesture = null;
+                _touchPlacementPress = null;
             }
 
             if (viewportPanGesture is not null &&
@@ -2842,6 +2845,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable, IBpmnDocume
             _viewportPanGesture = null;
             _observedActiveGestureCaptureGeneration = 0;
             _consumedPlacementPointerId = null;
+            _touchPlacementPress = null;
             changed = _contextMenu is not null ||
                 _propertiesFormOpen ||
                 _propertiesTargetVisualStateId is not null ||
@@ -3408,6 +3412,12 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable, IBpmnDocume
                 _activePointerCaptureGeneration = input.CaptureGeneration;
             }
 
+            if (await TryHandleTouchPanUnderGateAsync(input, session, controller, placementController)
+                    .ConfigureAwait(false))
+            {
+                return;
+            }
+
             if (TryConsumePlacementPointerBoundary(input))
             {
                 if (input.Kind == CanvasPointerEventKind.Cancel)
@@ -3578,14 +3588,24 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable, IBpmnDocume
                     return;
                 }
 
-                if (input.Kind == CanvasPointerEventKind.Down &&
+                // A touch placement commits only on release: a second contact must be able
+                // to claim viewport translation before any persistent creation occurs.
+                if (input.IsTouch && input.Kind == CanvasPointerEventKind.Down &&
+                    placementController?.IsPlacementActive == true)
+                {
+                    _touchPlacementPress = new(input, session.CaptureState(), placementController.ActiveItemId!);
+                    return;
+                }
+
+                if ((input.Kind == CanvasPointerEventKind.Down && !input.IsTouch ||
+                     IsCurrentTouchPlacement(input, session, placementController)) &&
                     input.IsPrimary &&
                     input.Button == 0 &&
                     placementController?.IsPlacementActive == true)
                 {
                     lock (_sync)
                     {
-                        _consumedPlacementPointerId = input.PointerId;
+                        _consumedPlacementPointerId = input.IsTouch ? null : input.PointerId;
                         _placementPointerCssPoint = cssPoint;
                     }
 
@@ -3762,6 +3782,10 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable, IBpmnDocume
         {
             lock (_sync)
             {
+                if (input.Kind is CanvasPointerEventKind.Up or CanvasPointerEventKind.Cancel)
+                {
+                    _touchPlacementPress = null;
+                }
                 _activePointerInputKind = null;
                 _activePointerId = null;
                 _activePointerCaptureGeneration = 0;
@@ -4378,7 +4402,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable, IBpmnDocume
             var browserBoundaryAlreadyReleasedCapture = activeGestureDisappeared &&
                 _activePointerId is not null &&
                 _activePointerInputKind is
-                    CanvasPointerEventKind.Up or CanvasPointerEventKind.Cancel;
+                    CanvasPointerEventKind.Up or CanvasPointerEventKind.Cancel or CanvasPointerEventKind.TouchPanStart;
             releasePointerCapture = activeGestureDisappeared &&
                 !browserBoundaryAlreadyReleasedCapture &&
                 previousCaptureGeneration > 0;
@@ -4401,7 +4425,7 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable, IBpmnDocume
             expectedCaptureGeneration = previousCaptureGeneration;
             var activeBrowserBoundaryOwnsFinalCursor =
                 _activePointerInputKind is
-                    CanvasPointerEventKind.Up or CanvasPointerEventKind.Cancel;
+                    CanvasPointerEventKind.Up or CanvasPointerEventKind.Cancel or CanvasPointerEventKind.TouchPanStart;
             var documentRevisionChanged = _observedDocumentRevision is not null &&
                 _observedDocumentRevision != eventArgs.State.DocumentRevision;
             var placementContextChanged = PlacementContextChanged(eventArgs.State);
@@ -5647,7 +5671,8 @@ internal sealed partial class DocumentCanvasHost : IAsyncDisposable, IBpmnDocume
     private sealed record ViewportPanGesture(
         long PointerId,
         long CaptureGeneration,
-        PointD LastCssPoint);
+        PointD LastCssPoint,
+        bool IsTouch = false);
 }
 
 internal sealed record DocumentCanvasHostState(

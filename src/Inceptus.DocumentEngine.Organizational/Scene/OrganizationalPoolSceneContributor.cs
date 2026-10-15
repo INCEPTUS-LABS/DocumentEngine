@@ -485,6 +485,7 @@ public sealed partial class OrganizationalPoolSceneContributor :
                 dashPattern: [6d, 4d],
                 opacity: 0.55d),
             hitTestPolicy: Canvas2DHitTestPolicy.None,
+            metadata: [Canvas2DSceneExportMetadata.Excluded],
             bounds: bounds);
     }
 

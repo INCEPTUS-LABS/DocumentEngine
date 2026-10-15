@@ -119,6 +119,7 @@ public sealed partial class DocumentCanvasHostTests
     [InlineData("standard")]
     [InlineData("import")]
     [InlineData("export")]
+    [InlineData("graphical-export")]
     [InlineData("publish")]
     [InlineData("publication-dialog")]
     [InlineData("session")]
@@ -160,6 +161,7 @@ public sealed partial class DocumentCanvasHostTests
                 "standard" => "_standardInProgress",
                 "import" => "_nativeDocumentImportInProgress",
                 "export" => "_nativeDocumentExportInProgress",
+                "graphical-export" => "_graphicalExportInProgress",
                 "publish" => "_publishInProgress",
                 "publication-dialog" => "_publicationDialogOpen",
                 _ => null

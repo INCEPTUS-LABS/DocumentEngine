@@ -26,7 +26,7 @@ public sealed partial class DocumentCanvasHostTests
         await renderer.ShowAsync(ready);
         var handlers = renderer.ButtonHandlers();
         var inputs = renderer.FileInputIds();
-        Assert.Equal(7, handlers.Length);
+        Assert.Equal(9, handlers.Length);
         Assert.Equal(2, inputs.Length);
         for (var i = 0; i < 5; i++)
         {

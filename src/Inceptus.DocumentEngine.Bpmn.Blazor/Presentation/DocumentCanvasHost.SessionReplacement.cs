@@ -241,6 +241,7 @@ internal sealed partial class DocumentCanvasHost
                 _activePointerId = null;
                 _activePointerCaptureGeneration = 0;
                 _consumedPlacementPointerId = null;
+                _touchPlacementPress = null;
                 _viewportPanGesture = null;
                 _successfulPresentationGeneration = candidateState.Generation;
                 _surfaceRenderPending = false;

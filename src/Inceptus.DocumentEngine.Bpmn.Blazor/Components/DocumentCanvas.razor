@@ -99,11 +99,13 @@
              aria-label="@Text["Accessibility_DocumentPresentation"]">
         <div class="document-editor-layout">
             <ToolboxPanel Catalog="@ToolboxCatalog"
+                          DisplayMode="@(DisplayPresentation?.Mode ?? BpmnModelerDisplayMode.Normal)"
                           DomIdPrefix="@_domIdPrefix"
                           SelectedItemId="@_toolboxSelection.SelectedItemId"
                           SelectedItemIdChanged="SelectToolboxItemAsync" />
             <div class="document-editor-workspace">
         <div class="editor-toolbar" role="toolbar" aria-label="@Text["Accessibility_EditorToolbar"]">
+            <div class="editor-toolbar-commands">
             @if (PresentationViewChoices.Length > 1)
             {
                 <label class="presentation-view-selector" for="@DomId("presentation-view")">
@@ -220,16 +222,36 @@
             </div>
         </div>
 
+            <button id="@DomId("display-mode-toggle")" class="display-mode-toggle"
+                    type="button" title="@DisplayModeLabel" aria-label="@DisplayModeLabel"
+                    aria-pressed="@(IsMaximized ? "true" : "false")"
+                    @onclick="ToggleDisplayModeAsync" @onclick:stopPropagation>
+                <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" focusable="false"
+                     fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    @if (IsMaximized)
+                    {
+                        <path d="M3 3l6 6M9 3v6H3M21 21l-6-6M15 21v-6h6" />
+                    }
+                    else
+                    {
+                        <path d="M9 9L3 3M3 9V3h6M15 15l6 6M15 21h6v-6" />
+                    }
+                </svg>
+            </button>
+        </div>
+
         <div id="@ContainerElementId" class="document-canvas-surface">
             <ElementToolbox State="@(_newDiagramConfirmationOpen ? null : _state?.ElementToolbox)"
                             Properties="OpenElementToolboxPropertiesAsync" AutoPoints="AutoPointsAsync"
                             Delete="DeleteToolboxElementAsync" Create="SmartCreateAsync" Dismiss="DismissElementToolbox" />
             <canvas id="@CanvasElementId"
+                    data-viewport-input-enabled="@ViewportInputEnabled"
                     class="@CanvasClass(CanvasElementId)"
                     tabindex="@CanvasTabIndex(CanvasElementId)"
                     aria-hidden="@CanvasAriaHidden(CanvasElementId)"
                     aria-label="@Text["Accessibility_RenderedDiagram"]"></canvas>
             <canvas id="@StandbyCanvasElementId"
+                    data-viewport-input-enabled="@ViewportInputEnabled"
                     class="@CanvasClass(StandbyCanvasElementId)"
                     tabindex="@CanvasTabIndex(StandbyCanvasElementId)"
                     aria-hidden="@CanvasAriaHidden(StandbyCanvasElementId)"
@@ -669,6 +691,13 @@
 </main>
 
 @code {
+    [CascadingParameter]
+    internal BpmnModelerDisplayPresentation? DisplayPresentation { get; set; }
+
+    private bool IsMaximized => DisplayPresentation?.Mode == BpmnModelerDisplayMode.Maximized;
+    private string DisplayModeLabel => Text[IsMaximized ? "Toolbar_RestoreDrawingArea" : "Toolbar_MaximizeDrawingArea"];
+    private Task ToggleDisplayModeAsync() => DisplayPresentation?.Toggle.InvokeAsync() ?? Task.CompletedTask;
+
     [CascadingParameter(Name = "ModelerUICulture")]
     private System.Globalization.CultureInfo? RenderCulture { get; set; }
 
@@ -730,6 +759,14 @@
 
     private string CanvasAriaHidden(string canvasElementId) =>
         IsActiveCanvas(canvasElementId) ? "false" : "true";
+
+    private string ViewportInputEnabled => !_disposed && !_newDiagramConfirmationOpen &&
+        _propertiesDraft is null && _modelViewPropertiesDraft is null &&
+        _state is { IsInitialized: true, IsDisposed: false, PropertiesFormOpen: false,
+            ModelViewPropertiesFormOpen: false, ContextMenu: null,
+            Session: { IsClosed: false, CurrentScene: not null, EditorState.ActiveGesture: null } session } &&
+        session.Status is EditingSessionStatus.Ready or EditingSessionStatus.Rebuilding
+            ? "true" : "false";
 
     private string SceneStatusValue => _state switch
     {

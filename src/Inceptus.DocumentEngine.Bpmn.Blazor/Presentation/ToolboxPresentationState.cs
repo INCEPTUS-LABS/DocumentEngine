@@ -12,6 +12,7 @@ internal enum ToolboxViewMode
 internal sealed class ToolboxPresentationState
 {
     private ImmutableHashSet<ToolboxGroupId> _knownGroupIds = [];
+    private ToolboxViewMode? _viewModeBeforeMaximizing;
 
     internal ToolboxViewMode ViewMode { get; private set; } = ToolboxViewMode.Expanded;
 
@@ -51,4 +52,18 @@ internal sealed class ToolboxPresentationState
     internal void ToggleViewMode() => ViewMode = ViewMode == ToolboxViewMode.Expanded
         ? ToolboxViewMode.Compact
         : ToolboxViewMode.Expanded;
+
+    internal void SynchronizeDisplayMode(BpmnModelerDisplayMode displayMode)
+    {
+        if (displayMode == BpmnModelerDisplayMode.Maximized && _viewModeBeforeMaximizing is null)
+        {
+            _viewModeBeforeMaximizing = ViewMode;
+            ViewMode = ToolboxViewMode.Compact;
+        }
+        else if (displayMode == BpmnModelerDisplayMode.Normal && _viewModeBeforeMaximizing is { } previous)
+        {
+            ViewMode = previous;
+            _viewModeBeforeMaximizing = null;
+        }
+    }
 }

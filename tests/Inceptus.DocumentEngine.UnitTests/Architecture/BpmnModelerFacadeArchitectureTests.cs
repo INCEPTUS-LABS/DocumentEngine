@@ -43,6 +43,8 @@ public sealed class BpmnModelerFacadeArchitectureTests
             parameters[nameof(InceptusBpmnModeler.OperationFailed)].PropertyType);
         Assert.Equal(typeof(string), parameters[nameof(InceptusBpmnModeler.Class)].PropertyType);
         Assert.Equal(typeof(string), parameters[nameof(InceptusBpmnModeler.Style)].PropertyType);
+        Assert.Equal(typeof(BpmnModelerDisplayMode), parameters[nameof(InceptusBpmnModeler.DisplayMode)].PropertyType);
+        Assert.Equal(typeof(EventCallback<BpmnModelerDisplayMode>), parameters[nameof(InceptusBpmnModeler.DisplayModeChanged)].PropertyType);
         Assert.True(parameters[nameof(InceptusBpmnModeler.AdditionalAttributes)]
             .GetCustomAttribute<ParameterAttribute>()!.CaptureUnmatchedValues);
         Assert.All(parameters.Values,
