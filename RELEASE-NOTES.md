@@ -2,62 +2,15 @@
 
 ## 0.1.14
 
-- Prepares the aligned seven-package family locally after the committed editor
-  and PublishedProcess improvements. Version 0.1.13 is intentionally skipped.
-  Public source provenance and NuGet publication remain separate release steps.
-- Reduces the Properties Description field to nine rows while retaining multiline
-  editing, responsive layout and Apply/Cancel behavior. Adds Smart Edit **Open
-  SubProcess** for eligible SubProcesses through the existing scope navigation
-  and navigation History, preserving document state and other editor behavior.
-- Adds optional **Include Pools**, default OFF, through `BpmnPublishingOptions`.
-  Published diagrams can retain captured Pool/Lane boundaries and headers.
-  **Initial View** offers **Use current Editor view** and **Fit entire diagram**.
-  Existing two-argument publishing calls retain Fit Entire defaults; the reference
-  Publish dialog defaults to Current Editor view and rejects unavailable or stale
-  captures. Initial framing responds to viewport size; manual pan/zoom survives
-  later resizing. These choices remain outside Document persistence and History.
-- Animates supported Message Flows from Message Throw to Message Catch or Activity,
-  and from completing Activities to supported receivers. Blue communication
-  diamonds are distinct from orange Sequence Flow tokens and follow frozen routes,
-  including Manual bends. Message arrival occurs at the target; Message Flows do
-  not participate in Sequence Flow gateway synchronization.
-- Enables a message-receiving Activity on its first Sequence Flow activation
-  without producing output merely for enabling. Messages received before enabling
-  remain pending; an enabled receiver drains pending messages into a fixed batch.
-  After the processing delay, N messages produce N ordinary outputs and N messages
-  on each supported outgoing Message Flow. Messages arriving during processing
-  form a later batch. Enablement persists until interruption/reset; logical timing
-  and event ordering are independent of animation frame frequency.
-- Adds Boundary Timer fallback for eligible empty receiver waiting cycles, with
-  supported durations clamped to 1–5 seconds and a 3-second presentation fallback.
-  Message arrival cancels the timer. Boundary Signal fires automatically once per
-  eligible empty cycle and has priority over Timer. Interrupting boundaries clear
-  receiver enablement while retaining queued messages; noninterrupting boundaries
-  retain enablement. Successful Activity output disables all attached boundaries
-  for that cycle, cancels timers and emits no automatic Boundary Message
-  notification or later idle Signal. A fresh explicit Sequence Flow activation
-  can reopen an eligible boundary waiting cycle; idle state alone cannot.
-- Corrects converging Exclusive Gateways to PassThrough: each incoming token can
-  continue without waiting for another branch. Parallel Gateways still consume
-  one token from every input and emit one on every output. Nonparallel splits
-  retain random single-output selection without conditions; other supported
-  nonparallel joins retain the simplified pairwise merge rule.
-- Establishes `PublishedProcessSimulationRules.md` as the authoritative
-  DEVELOPMENT execution specification, with the mandatory `AGENTS.md` reference
-  and permanent managed/JavaScript regression coverage. Internal documentation
-  and governance files remain excluded from PUBLIC source exports.
-- Retains .NET 10, all seven package IDs, dependency policies, MIT license/icon
-  metadata, Project URL, portable symbols and Source Link configuration. Native
-  Inceptus.Document formatVersion 2 and PublishedProcess formatVersion 1 remain
-  unchanged. Existing publishing overloads remain available; options add
-  presentation control and generated metadata supplies the matching viewer.
-- Retains canonical Message Flow endpoint/Participant restrictions. Pool and
-  Participant endpoints are graphical-only for animation; incoming Boundary
-  Message delivery and document-level Collaboration publication are unsupported.
-  Unsupported animation routes produce authoring diagnostics, not viewer banners.
-  No message payload, correlation engine or broker is introduced. PublishedProcess
-  remains a lightweight animation model, not a complete BPMN execution engine or
-  SimulationEngine. Regenerate existing ZIPs to obtain the new embedded runtime.
+- Extends the seven-package DocumentEngine family with BPMN Editor improvements, configurable PublishedProcess presentation and enhanced process animation. Version 0.1.13 was intentionally skipped.
+- Reduces the Properties Description field to nine rows while retaining multiline editing, responsive layout and Apply/Cancel behavior. Adds Smart Edit **Open SubProcess** for eligible SubProcesses through the existing scope navigation and navigation History, preserving document state and other editor behavior.
+- Adds optional **Include Pools**, default OFF, through `BpmnPublishingOptions`. Published diagrams can retain captured Pool/Lane boundaries and headers. **Initial View** offers **Use current Editor view** and **Fit entire diagram**. Existing two-argument publishing calls retain Fit Entire defaults; the reference Publish dialog defaults to Current Editor view and rejects unavailable or stale captures. Initial framing responds to viewport size; manual pan/zoom survives later resizing. These choices remain outside Document persistence and History.
+- Animates supported Message Flows from Message Throw to Message Catch or Activity, and from completing Activities to supported receivers. Blue communication diamonds are distinct from orange Sequence Flow tokens and follow frozen routes, including Manual bends. Message arrival occurs at the target; Message Flows do not participate in Sequence Flow gateway synchronization.
+- Enables a message-receiving Activity on its first Sequence Flow activation without producing output merely for enabling. Messages received before enabling remain pending; an enabled receiver drains pending messages into a fixed batch. After the processing delay, N messages produce N ordinary outputs and N messages on each supported outgoing Message Flow. Messages arriving during processing form a later batch. Enablement persists until interruption/reset; logical timing and event ordering are independent of animation frame frequency.
+- Adds Boundary Timer fallback for eligible empty receiver waiting cycles, with supported durations clamped to 1–5 seconds and a 3-second presentation fallback. Message arrival cancels the timer. Boundary Signal fires automatically once per eligible empty cycle and has priority over Timer. Interrupting boundaries clear receiver enablement while retaining queued messages; noninterrupting boundaries retain enablement. Successful Activity output disables all attached boundaries for that cycle, cancels timers and emits no automatic Boundary Message notification or later idle Signal. A fresh explicit Sequence Flow activation can reopen an eligible boundary waiting cycle; idle state alone cannot.
+- Corrects converging Exclusive Gateways to PassThrough: each incoming token can continue without waiting for another branch. Parallel Gateways still consume one token from every input and emit one on every output. Nonparallel splits retain random single-output selection without conditions; other supported nonparallel joins retain the simplified pairwise merge rule.
+- Retains .NET 10, all seven package IDs, dependency policies, MIT license/icon metadata, Project URL, portable symbols and Source Link configuration. Native Inceptus.Document formatVersion 2 and PublishedProcess formatVersion 1 remain unchanged. Existing publishing overloads remain available; options add presentation control and generated metadata supplies the matching viewer.
+- Retains existing Message Flow endpoint/Participant restrictions. Pool and Participant endpoints are graphical-only for animation; incoming Boundary Message delivery and document-level Collaboration publication are unsupported. Unsupported animation routes produce authoring diagnostics, not viewer banners. No message payload, correlation engine or broker is introduced. PublishedProcess remains a lightweight animation model, not a complete BPMN execution engine or SimulationEngine. Regenerate existing ZIPs to obtain the new embedded runtime.
 
 ## 0.1.12
 
