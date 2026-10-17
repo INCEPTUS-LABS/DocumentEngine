@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Text.Json.Serialization;
 using Inceptus.DocumentEngine.Contracts.Publishing;
 
 namespace Inceptus.DocumentEngine.Canvas2D.Publishing;
@@ -6,6 +7,9 @@ namespace Inceptus.DocumentEngine.Canvas2D.Publishing;
 public sealed record PublishedPoint(double X, double Y);
 
 public sealed record PublishedRect(double X, double Y, double Width, double Height);
+
+/// <summary>Optional opening region in document coordinates; absence retains full-content fitting.</summary>
+public sealed record PublishedInitialView(PublishedRect VisibleRegion);
 
 public sealed record PublishedMatrix(
     double M11,
@@ -98,4 +102,11 @@ public sealed record PublishedProcessSnapshot(
     PublishedSource Source,
     PublishedPresentation Presentation,
     PublishedTokenGraph TokenGraph,
-    PublishedRuntimeConfiguration Runtime);
+    PublishedRuntimeConfiguration Runtime)
+{
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public PublishedInitialView? InitialView { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public PublishedExecutionMetadata? Execution { get; init; }
+}

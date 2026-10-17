@@ -123,12 +123,15 @@ public sealed partial class DocumentCanvasHostTests
         Assert.Same(before, AttachedDocument(session).CaptureSnapshot());
     }
 
-    [Fact]
-    public async Task A22MessageFlowInNormalProcessHasExplicitPublicationRejection()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A22ActivityMessageSupportDoesNotBypassOtherPublicationChecks(bool includePools)
     {
         await using var host = A22ConnectionHost(new ToolboxSelectionState());
         await host.InitializeAsync("a22-publish-message", "container");
         var session = Session(host);
+        await SaveDefaultPublicationAsync(session);
         var document = AttachedDocument(session);
         Assert.True((await session.ExecuteAsync(new CreateBpmnMessageFlowCommand(document.DocumentId, document.Revision,
             new("a22:publish:message"), new("a22:publish:visual"), A22ViewTaskId, A22ToolPeerTask,
@@ -138,9 +141,12 @@ public sealed partial class DocumentCanvasHostTests
         var state = session.CaptureState();
         var captured = await session.CapturePresentationAsync(state.ModelProfileViewState, state.ModelProfileElementViewState);
         Assert.True(captured.Succeeded);
-        var result = new PublishedProcessPackageBuilder(new BpmnPublishedTokenRoleClassifier()).Build(captured.Capture!);
+        var result = new Inceptus.Bpmn.Integration.PublishingPackageGenerator().Generate(before, captured.Capture!,
+            new Inceptus.Bpmn.Integration.BpmnPublishingOptions { IncludePools = includePools });
         Assert.False(result.Succeeded);
-        Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Code == BpmnPublishedTokenRoleClassifier.CollaborationUnsupported);
+        Assert.DoesNotContain(result.Diagnostics, diagnostic => diagnostic.Code == "PUBLISH_MESSAGE_ENDPOINT_UNSUPPORTED");
+        Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Severity == Inceptus.DocumentEngine.Contracts.Diagnostics.DiagnosticSeverity.Error);
+        Assert.DoesNotContain(result.Diagnostics, diagnostic => diagnostic.Code == BpmnPublishedTokenRoleClassifier.CollaborationUnsupported);
         Assert.Null(result.Package);
         Assert.Same(before, document.CaptureSnapshot());
     }

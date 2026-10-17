@@ -171,7 +171,7 @@
 }
 
 .properties-form .properties-long-form-editor {
-    min-height: 11rem;
+    min-height: 0;
     max-height: none;
 }
 

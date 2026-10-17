@@ -262,4 +262,10 @@
   <data name="Toolbar_AlignVertical" xml:space="preserve"><value>Align vertically to first selected element</value></data>
   <data name="Toolbar_MaximizeDrawingArea" xml:space="preserve"><value>Maximize drawing area</value></data>
   <data name="Toolbar_RestoreDrawingArea" xml:space="preserve"><value>Restore drawing area</value></data>
+  <data name="Publication_IncludePools" xml:space="preserve"><value>Include Pools in published diagram</value></data>
+  <data name="ElementToolbox_OpenSubProcess" xml:space="preserve"><value>Open SubProcess</value></data>
+  <data name="Publication_InitialView" xml:space="preserve"><value>Initial View</value></data>
+  <data name="Publication_CurrentEditorView" xml:space="preserve"><value>Use current Editor view</value></data>
+  <data name="Publication_FitEntireDiagram" xml:space="preserve"><value>Fit entire diagram</value></data>
+  <data name="Publication_PublishWarnings" xml:space="preserve"><value>Published with warnings</value></data>
 </root>

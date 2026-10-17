@@ -1,4 +1,5 @@
 using Inceptus.DocumentEngine.Contracts.Geometry;
+using Inceptus.Bpmn.Integration;
 using Inceptus.DocumentEngine.Canvas2D.Rendering;
 using System.Collections.Immutable;
 using Inceptus.DocumentEngine.Bpmn.Blazor;
@@ -130,6 +131,8 @@ public partial class BpmnDemoHost
     private string _publicationCodeDraft = string.Empty;
     private string _publicationTitleDraft = string.Empty;
     private string _publicationDescriptionDraft = string.Empty;
+    private bool _publicationIncludePools;
+    private BpmnPublishingInitialViewMode _publicationInitialViewMode = BpmnPublishingInitialViewMode.CurrentEditorView;
     private ElementReference _publicationCodeInput;
     private bool CanUseNativeDocumentTransfer =>
         !_graphicalExportInProgress &&
@@ -339,9 +342,11 @@ public partial class BpmnDemoHost
         _publicationCodeDraft = publication?.Code ?? string.Empty;
         _publicationTitleDraft = publication?.Title ?? string.Empty;
         _publicationDescriptionDraft = publication?.Description ?? string.Empty;
+        _publicationIncludePools = false;
+        _publicationInitialViewMode = BpmnPublishingInitialViewMode.CurrentEditorView;
         _publicationDialogOpen = true;
         _publicationDialogFocusPending = true;
-        _publishOperationStatus = _publishOperationDiagnostics.IsEmpty ? "editing" : "failed";
+        _publishOperationStatus = PublicationFeedbackStatus("editing");
     }
 
     private void CancelPublicationDialog()
@@ -354,7 +359,7 @@ public partial class BpmnDemoHost
             }
 
             DiscardPublicationDialogDraft();
-            _publishOperationStatus = _publishOperationDiagnostics.IsEmpty ? "idle" : "failed";
+            _publishOperationStatus = PublicationFeedbackStatus("idle");
         }
     }
 
@@ -371,6 +376,7 @@ public partial class BpmnDemoHost
         DocumentId sourceDocumentId;
         DocumentRevision sourceRevision;
         DocumentPublicationSnapshot publication;
+        BpmnPublishingOptions options;
         CancellationTokenSource operation;
         lock (_lifecycleSync)
         {
@@ -391,6 +397,7 @@ public partial class BpmnDemoHost
             sourceSessionVersion = _publicationSourceSessionVersion;
             sourceDocumentId = documentId;
             sourceRevision = revision;
+            options = new BpmnPublishingOptions { IncludePools = _publicationIncludePools, InitialViewMode = _publicationInitialViewMode };
             DiscardPublicationDialogDraft();
             operation = CancellationTokenSource.CreateLinkedTokenSource(_componentLifetime.Token);
             _publishOperationCancellation = operation;
@@ -419,6 +426,7 @@ public partial class BpmnDemoHost
                     sourceDocumentId,
                     sourceRevision,
                     publication,
+                    options,
                     operation.Token)
                 : await Operations.SavePublicationAsync(
                     sourceSessionVersion,
@@ -464,6 +472,14 @@ public partial class BpmnDemoHost
                     _state = CaptureHostState(host);
                     ClearPublishOperationError();
                     _publishOperationStatus = "idle";
+                    if (publish && !result.Diagnostics.IsEmpty)
+                    {
+                        _publishOperationDiagnostics = result.Diagnostics;
+                        _publishOperationErrorCode = result.Diagnostics[0].Code;
+                        _publishOperationErrorMessage = result.Diagnostics[0].Message;
+                        _publishOperationErrorHeading = "Publication_PublishWarnings";
+                        _publishOperationStatus = "warning";
+                    }
                 }
             }
         }
@@ -498,9 +514,7 @@ public partial class BpmnDemoHost
                     _publishInProgress = false;
                     if (!_disposed && _publishOperationStatus is "publishing" or "saving")
                     {
-                        _publishOperationStatus = _publishOperationDiagnostics.IsEmpty
-                            ? "idle"
-                            : "failed";
+                        _publishOperationStatus = PublicationFeedbackStatus("idle");
                     }
                 }
             }
@@ -519,7 +533,7 @@ public partial class BpmnDemoHost
             session.DocumentRevision != _publicationSourceRevision)
         {
             DiscardPublicationDialogDraft();
-            _publishOperationStatus = _publishOperationDiagnostics.IsEmpty ? "idle" : "failed";
+            _publishOperationStatus = PublicationFeedbackStatus("idle");
         }
     }
 
@@ -606,12 +620,15 @@ public partial class BpmnDemoHost
         lock (_lifecycleSync)
         {
             ClearPublishOperationError();
-            if (_publishOperationStatus == "failed")
+            if (_publishOperationStatus is "failed" or "warning")
             {
                 _publishOperationStatus = "idle";
             }
         }
     }
+
+    private string PublicationFeedbackStatus(string emptyStatus) => _publishOperationDiagnostics.IsEmpty
+        ? emptyStatus : _publishOperationDiagnostics.Any(item => item.Severity == DiagnosticSeverity.Error) ? "failed" : "warning";
 
     private bool HasOperationFeedback =>
         _standardFeedbackHeading is not null ||

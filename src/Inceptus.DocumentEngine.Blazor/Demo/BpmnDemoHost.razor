@@ -283,7 +283,7 @@
         @if (_publishOperationErrorMessage is not null)
         {
             <section id="@DomId("publish-error")"
-                     class="presentation-error publish-error"
+                     class="presentation-error publish-error @(_publishOperationStatus == "warning" ? "publish-warning" : string.Empty)"
                      role="alert"
                      aria-labelledby="@DomId("publish-error-title")">
                 <div class="publish-error-header">
@@ -350,6 +350,25 @@
                               @bind="_publicationDescriptionDraft"
                               @bind:event="oninput"></textarea>
                 </div>
+                <label class="publication-option" for="@DomId("publication-include-pools")">
+                    <input id="@DomId("publication-include-pools")" type="checkbox" @bind="_publicationIncludePools" />
+                    @Text["Publication_IncludePools"]
+                </label>
+                <fieldset class="publication-initial-view">
+                    <legend>@Text["Publication_InitialView"]</legend>
+                    <label class="publication-option">
+                        <input type="radio" name="@DomId("publication-initial-view")" value="current"
+                               checked="@(_publicationInitialViewMode == BpmnPublishingInitialViewMode.CurrentEditorView)"
+                               @onchange="() => _publicationInitialViewMode = BpmnPublishingInitialViewMode.CurrentEditorView" />
+                        @Text["Publication_CurrentEditorView"]
+                    </label>
+                    <label class="publication-option">
+                        <input type="radio" name="@DomId("publication-initial-view")" value="fit"
+                               checked="@(_publicationInitialViewMode == BpmnPublishingInitialViewMode.FitEntireDiagram)"
+                               @onchange="() => _publicationInitialViewMode = BpmnPublishingInitialViewMode.FitEntireDiagram" />
+                        @Text["Publication_FitEntireDiagram"]
+                    </label>
+                </fieldset>
                 <div class="publication-dialog-actions">
                     <button id="@DomId("publication-cancel")"
                             type="button"

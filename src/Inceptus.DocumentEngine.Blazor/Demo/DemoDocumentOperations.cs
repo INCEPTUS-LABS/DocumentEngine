@@ -7,6 +7,7 @@ using Inceptus.DocumentEngine.Canvas2D.Publishing;
 using Inceptus.DocumentEngine.Contracts.Diagnostics;
 using Inceptus.DocumentEngine.Contracts.Documents;
 using Inceptus.DocumentEngine.Contracts.Primitives;
+using Inceptus.DocumentEngine.Contracts.Presentation;
 using Inceptus.DocumentEngine.Contracts.Validation;
 using Inceptus.DocumentEngine.Runtime.Validation;
 
@@ -165,8 +166,17 @@ internal sealed partial class DemoDocumentOperations
         return null;
     }
 
-    internal async ValueTask<BpmnModelerFileResult> PublishProcessAsync(CancellationToken cancellationToken = default)
+    internal ValueTask<BpmnModelerFileResult> PublishProcessAsync(CancellationToken cancellationToken = default) =>
+        PublishProcessAsync(new BpmnPublishingOptions(), cancellationToken);
+
+    internal ValueTask<BpmnModelerFileResult> PublishProcessAsync(BpmnPublishingOptions options,
+        CancellationToken cancellationToken = default) =>
+        PublishProcessAsync(options, null, cancellationToken);
+
+    private async ValueTask<BpmnModelerFileResult> PublishProcessAsync(BpmnPublishingOptions options,
+        BpmnEditorContext? expectedView, CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(options);
         if (cancellationToken.IsCancellationRequested) return CancelledFile();
 #pragma warning disable CA1031 // Application failures become bounded feedback, without modifying the document.
         try
@@ -174,6 +184,12 @@ internal sealed partial class DemoDocumentOperations
             var document = _editor.GetDocument();
             if (!document.Succeeded) return FileFailure(BpmnModelerOperationStatus.Unavailable,
                 "CANVAS_PUBLISH_UNAVAILABLE", "Publish is unavailable while the editor is not ready.");
+            if (options.InitialViewMode == BpmnPublishingInitialViewMode.CurrentEditorView)
+            {
+                expectedView ??= _editor.CaptureEditorContext();
+                if (!TryPrepareEditorView(options, expectedView, out options) ||
+                    !expectedView!.Document.Equals(document.Snapshot)) return InitialViewUnavailable();
+            }
             DocumentValidation = _validator.Validate(document.Snapshot!);
             if (!DocumentValidation.IsStructurallyValid)
                 return new(BpmnModelerOperationStatus.Rejected, null, DocumentValidation.Diagnostics);
@@ -188,10 +204,13 @@ internal sealed partial class DemoDocumentOperations
                     (capture?.Diagnostics ?? []).Insert(0, Error("CANVAS_PUBLISH_PREPARATION_FAILED", "Could not prepare the current process presentation for publication. Please retry.")));
             if (!document.Snapshot!.Equals(capture.Capture.Document))
                 return FileFailure(BpmnModelerOperationStatus.Unavailable, "CANVAS_PUBLISH_UNAVAILABLE", "The document changed during publication.");
-            var generated = _publisher.Generate(document.Snapshot, capture.Capture);
+            if (expectedView is not null && (!SameEditorView(expectedView, _editor.CaptureEditorContext(), document.Snapshot) ||
+                expectedView.Presentation.PresentationContext != capture.Capture.PresentationContext))
+                return InitialViewUnavailable();
+            var generated = _publisher.Generate(document.Snapshot, capture.Capture, options);
             cancellationToken.ThrowIfCancellationRequested();
             return generated.Succeeded && generated.Package is { } package
-                ? new(BpmnModelerOperationStatus.Succeeded, new BpmnModelerFileArtifact(PublishFileName, PublishContentType, package.Archive), [])
+                ? new(BpmnModelerOperationStatus.Succeeded, new BpmnModelerFileArtifact(PublishFileName, PublishContentType, package.Archive), generated.Diagnostics)
                 : new(generated.Diagnostics.Any(static diagnostic => diagnostic.Code == "PUBLISH_PACKAGE_BUILD_FAILED")
                     ? BpmnModelerOperationStatus.Failed : BpmnModelerOperationStatus.Rejected, null, generated.Diagnostics);
         }
@@ -203,21 +222,76 @@ internal sealed partial class DemoDocumentOperations
 
     internal ValueTask<DemoPublicationResult> SavePublicationAsync(long attachmentVersion, DocumentId documentId,
         DocumentRevision revision, DocumentPublicationSnapshot publication, CancellationToken cancellationToken = default) =>
-        UpdatePublicationAsync(attachmentVersion, documentId, revision, publication, false, cancellationToken);
+        UpdatePublicationAsync(attachmentVersion, documentId, revision, publication, null, cancellationToken);
 
     internal ValueTask<DemoPublicationResult> PublishPublicationAsync(long attachmentVersion, DocumentId documentId,
         DocumentRevision revision, DocumentPublicationSnapshot publication, CancellationToken cancellationToken = default) =>
-        UpdatePublicationAsync(attachmentVersion, documentId, revision, publication, true, cancellationToken);
+        PublishPublicationAsync(attachmentVersion, documentId, revision, publication, new BpmnPublishingOptions(), cancellationToken);
+
+    internal ValueTask<DemoPublicationResult> PublishPublicationAsync(long attachmentVersion, DocumentId documentId,
+        DocumentRevision revision, DocumentPublicationSnapshot publication, BpmnPublishingOptions options,
+        CancellationToken cancellationToken = default) =>
+        UpdatePublicationAsync(attachmentVersion, documentId, revision, publication, options, cancellationToken);
 
     private async ValueTask<DemoPublicationResult> UpdatePublicationAsync(long attachmentVersion, DocumentId documentId,
-        DocumentRevision revision, DocumentPublicationSnapshot publication, bool publish, CancellationToken cancellationToken)
+        DocumentRevision revision, DocumentPublicationSnapshot publication, BpmnPublishingOptions? options, CancellationToken cancellationToken)
     {
+        if (cancellationToken.IsCancellationRequested)
+            return new(BpmnModelerOperationStatus.Cancelled, false, [], []);
+        BpmnEditorContext? view = null;
+        if (options?.InitialViewMode == BpmnPublishingInitialViewMode.CurrentEditorView)
+        {
+            view = _editor.CaptureEditorContext();
+            if (!TryPrepareEditorView(options, view, out var prepared) || view!.AttachmentVersion != attachmentVersion ||
+                view.Document.DocumentId != documentId || view.Document.Revision != revision)
+                return new(BpmnModelerOperationStatus.Unavailable, false, [], InitialViewUnavailable().Diagnostics);
+            options = prepared;
+        }
         var saved = await _editor.UpdatePublicationAsync(attachmentVersion, documentId, revision, publication, cancellationToken).ConfigureAwait(false);
         var changed = saved.Snapshot?.Revision != revision && saved.Succeeded;
-        if (!saved.Succeeded || !publish) return new(saved.Status, changed, [], saved.Diagnostics);
-        var package = await PublishProcessAsync(cancellationToken).ConfigureAwait(false);
+        if (!saved.Succeeded || options is null) return new(saved.Status, changed, [], saved.Diagnostics);
+        if (view is not null)
+        {
+            // Only the existing publication-metadata command may advance this captured view's revision.
+            var expectedRevision = Equals(view.Document.Publication, publication) ? revision : revision.Increment();
+            var current = _editor.CaptureEditorContext();
+            if (saved.Snapshot is not { } snapshot || snapshot.Revision != expectedRevision ||
+                !Equals(snapshot.Publication, publication) || !SameEditorView(view, current, snapshot))
+                return new(BpmnModelerOperationStatus.Unavailable, changed, [], InitialViewUnavailable().Diagnostics);
+            options = options with { EditorView = options.EditorView! with { Revision = snapshot.Revision } };
+            view = current;
+        }
+        var package = await PublishProcessAsync(options, view, cancellationToken).ConfigureAwait(false);
         return new(package.Status, changed, package.Artifact?.Content ?? [], package.Diagnostics);
     }
+
+    private static bool TryPrepareEditorView(BpmnPublishingOptions options, BpmnEditorContext? context,
+        out BpmnPublishingOptions prepared)
+    {
+        prepared = options;
+        if (context is not { CanReplaceDocument: true, SurfaceSize: { CssWidth: > 0, CssHeight: > 0 } } ||
+            context.Presentation.Status != EditingSessionStatus.Ready ||
+            context.Presentation.PresentationContext is not ProcessScopePresentationContext process ||
+            context.Presentation.EditorState.Viewport.VisibleDocumentRegion is not { IsEmpty: false } region)
+            return false;
+        var view = new BpmnPublishingEditorView(context.Document.DocumentId, context.Document.Revision, process.ScopeId, region);
+        if (options.EditorView is not null && options.EditorView != view) return false;
+        prepared = options with { EditorView = view };
+        return true;
+    }
+
+    private static bool SameEditorView(BpmnEditorContext expected, BpmnEditorContext? current, DocumentSnapshot document) =>
+        current is { CanReplaceDocument: true } && current.AttachmentVersion == expected.AttachmentVersion &&
+        current.Document.Equals(document) && current.Presentation.Status == EditingSessionStatus.Ready &&
+        current.SurfaceSize == expected.SurfaceSize &&
+        current.Presentation.PresentationContext == expected.Presentation.PresentationContext &&
+        current.Presentation.EditorState.Viewport.Equals(expected.Presentation.EditorState.Viewport) &&
+        current.Presentation.ModelProfileViewState.Equals(expected.Presentation.ModelProfileViewState) &&
+        current.Presentation.ModelProfileElementViewState.Equals(expected.Presentation.ModelProfileElementViewState);
+
+    private static BpmnModelerFileResult InitialViewUnavailable() => FileFailure(BpmnModelerOperationStatus.Unavailable,
+        "CANVAS_PUBLISH_INITIAL_VIEW_UNAVAILABLE",
+        "The current Editor view is unavailable or changed during publication. Wait for the process view to finish drawing and retry, or select Fit entire diagram.");
 
     private static BpmnModelerFileResult CancelledFile() => new(BpmnModelerOperationStatus.Cancelled, null, []);
     private static BpmnModelerFileResult FileFailure(BpmnModelerOperationStatus status, string code, string message) => new(status, null, [Error(code, message)]);

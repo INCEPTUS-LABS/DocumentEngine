@@ -87,18 +87,3 @@ html, body, .published-process {
 }
 
 #process-canvas[data-panning="true"] { cursor: grabbing; }
-
-.viewer-status {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  margin: 0;
-  padding: .7rem 1rem;
-  border-radius: .45rem;
-  color: #334155;
-  background: rgba(248, 250, 252, .94);
-  box-shadow: 0 .25rem 1rem rgba(15, 23, 42, .14);
-  transform: translate(-50%, -50%);
-}
-
-.viewer-status[hidden] { display: none; }

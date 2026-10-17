@@ -10,16 +10,13 @@ namespace Inceptus.DocumentEngine.Bpmn.Publishing;
 /// Maps the supported BPMN semantic family and unambiguous active-scope topology into the
 /// intentionally small Publish animation vocabulary.
 /// </summary>
-public sealed class BpmnPublishedTokenRoleClassifier : IPublishedTokenRoleClassifier
+public sealed partial class BpmnPublishedTokenRoleClassifier : IPublishedTokenRoleClassifier, IPublishedExecutionPolicy
 {
     public const string CollaborationUnsupported = "PUBLISH_COLLABORATION_UNSUPPORTED";
     public ImmutableArray<Diagnostic> ValidateRelationship(SemanticRelationshipSnapshot relationship)
     {
         ArgumentNullException.ThrowIfNull(relationship);
-        return relationship.TypeId == BpmnSemanticTypes.MessageFlow
-            ? [new(CollaborationUnsupported, DiagnosticSeverity.Error,
-                "Process publication does not support Message Flow communication between Participants.", relationship.Id.Value)]
-            : [];
+        return [];
     }
 
     public PublishedTokenRoleClassification Classify(
@@ -60,8 +57,11 @@ public sealed class BpmnPublishedTokenRoleClassifier : IPublishedTokenRoleClassi
         {
             if (request.IncomingConnectorCount >= 2 && request.OutgoingConnectorCount == 1)
             {
+                // An exclusive join forwards each arrival independently; it never synchronizes inputs.
                 return PublishedTokenRoleClassification.Success(
-                    PublishedTokenRole.MergeInvariant);
+                    typeId == BpmnSemanticTypes.ExclusiveGateway
+                        ? PublishedTokenRole.PassThrough
+                        : PublishedTokenRole.MergeInvariant);
             }
 
             if (request.IncomingConnectorCount == 1 && request.OutgoingConnectorCount >= 2)

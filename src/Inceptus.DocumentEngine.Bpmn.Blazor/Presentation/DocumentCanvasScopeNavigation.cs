@@ -10,6 +10,13 @@ internal sealed record DocumentCanvasScopeNavigationContextAction(
     DocumentScopeId TargetScopeId,
     string Label);
 
+internal sealed record DocumentCanvasElementScopeNavigationRequest(
+    long DocumentSessionVersion,
+    DocumentId DocumentId,
+    DocumentRevision Revision,
+    DocumentScopeId SourceScopeId,
+    DocumentCanvasScopeNavigationContextAction Action);
+
 internal sealed record DocumentCanvasScopeBreadcrumbSegment(
     DocumentScopeId ScopeId,
     string Label,

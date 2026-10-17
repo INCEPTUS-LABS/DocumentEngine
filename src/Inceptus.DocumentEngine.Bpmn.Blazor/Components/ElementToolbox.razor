@@ -12,6 +12,10 @@
          @onpointerdown:stopPropagation @onpointerup:stopPropagation @onclick:stopPropagation @onwheel:stopPropagation
          @onkeydown="KeyDown" @onkeydown:stopPropagation>
         <button @ref="_propertiesButton" type="button" title="@Text["ElementToolbox_PropertiesHint"]" aria-label="@Text["ElementToolbox_Properties"]" @onclick="Properties"><span aria-hidden="true">⚙</span></button>
+        @if (state.OpenSubProcessScopeId is not null)
+        {
+            <button type="button" title="@Text["ElementToolbox_OpenSubProcess"]" aria-label="@Text["ElementToolbox_OpenSubProcess"]" @onclick="() => OpenSubProcess.InvokeAsync(state)"><svg width="23" height="23" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M13 4h7v16h-7M3 12h12m-5-5 5 5-5 5"/></svg></button>
+        }
         <button type="button" title="@Text["ElementToolbox_AutoPoints"]" aria-label="@Text["ElementToolbox_AutoPoints"]" disabled="@(!state.CanAutoPoints)" @onclick="AutoPoints"><svg width="23" height="23" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m6 6 12 12M6 18 18 6"/><circle cx="5" cy="5" r="3"/><circle cx="19" cy="5" r="3"/><circle cx="5" cy="19" r="3"/><circle cx="19" cy="19" r="3"/></svg></button>
         <button type="button" class="destructive" title="@Text["ElementToolbox_Delete"]" aria-label="@Text["ElementToolbox_Delete"]" disabled="@(!state.CanDelete)" @onclick="Delete"><svg width="23" height="23" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 9v9m4-9v9"/></svg></button>
     </div>
@@ -45,6 +49,7 @@
     [CascadingParameter(Name = "ModelerUICulture")] private CultureInfo? RenderCulture { get; set; }
     [Parameter] public ElementToolboxState? State { get; set; }
     [Parameter] public EventCallback Properties { get; set; }
+    [Parameter] public EventCallback<ElementToolboxState> OpenSubProcess { get; set; }
     [Parameter] public EventCallback AutoPoints { get; set; }
     [Parameter] public EventCallback Delete { get; set; }
     [Parameter] public EventCallback<ToolboxItemId> Create { get; set; }
@@ -54,14 +59,14 @@
     private ToolboxItemId? _restoreFocus;
     private ElementToolboxState? _previousState;
     private string? _previousCulture;
-    private (EventCallback Properties, EventCallback AutoPoints, EventCallback Delete,
+    private (EventCallback Properties, EventCallback<ElementToolboxState> OpenSubProcess, EventCallback AutoPoints, EventCallback Delete,
         EventCallback<ToolboxItemId> Create, EventCallback Dismiss) _previousCallbacks;
     private bool _renderRequired;
 
     protected override void OnParametersSet()
     {
         var culture = (RenderCulture ?? CultureInfo.CurrentUICulture).Name;
-        var callbacks = (Properties, AutoPoints, Delete, Create, Dismiss);
+        var callbacks = (Properties, OpenSubProcess, AutoPoints, Delete, Create, Dismiss);
         _renderRequired = State != _previousState || culture != _previousCulture || !callbacks.Equals(_previousCallbacks);
         _previousState = State;
         _previousCulture = culture;

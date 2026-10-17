@@ -21,7 +21,12 @@ namespace Inceptus.DocumentEngine.Bpmn.Blazor.Presentation;
 
 public sealed record ElementToolboxState(VisualStateId VisualId, RectD Anchor, PointD ActionsPosition,
     PointD CreationPosition, double CreationWidth, bool CanAutoPoints, bool CanDelete,
-    ImmutableArray<ToolboxItemDefinition> Candidates);
+    ImmutableArray<ToolboxItemDefinition> Candidates)
+{
+    public DocumentScopeId? OpenSubProcessScopeId => NavigationRequest?.Action.TargetScopeId;
+    public double ActionsWidth => OpenSubProcessScopeId is null ? 124d : 162d;
+    internal DocumentCanvasElementScopeNavigationRequest? NavigationRequest { get; init; }
+}
 
 internal sealed partial class DocumentCanvasHost
 {
@@ -90,21 +95,41 @@ internal sealed partial class DocumentCanvasHost
         if (!anchor.Intersects(new RectD(0, 0, surface.CssWidth, surface.CssHeight))) return _elementToolbox = null;
         var width = Math.Min(424, Math.Max(0, surface.CssWidth - 16));
         var center = (top.X + bottom.X) / 2;
-        var actions = new PointD(Math.Clamp(center - 62, 8, Math.Max(8, surface.CssWidth - 132)),
-            Math.Clamp(top.Y - 54, 8, Math.Max(8, surface.CssHeight - 54)));
-        // At the top edge there may be no room above the node. Keep its body visible by moving the toolbar beside it.
-        if (new RectD(actions.X, actions.Y, 124, 48).Intersects(anchor))
-            actions = new PointD(Math.Clamp(bottom.X + 12, 8, Math.Max(8, surface.CssWidth - 132)), actions.Y);
+        var navigation = TryResolveScopeNavigationAction(_scopeNavigationCatalog, document, scope, id, out var action)
+            ? new DocumentCanvasElementScopeNavigationRequest(_documentSessionVersion, document.DocumentId, document.Revision, scope, action!)
+            : null;
+        var actionsWidth = navigation is null ? 124d : 162d;
+        PointD ClampActions(double x, double y) => new(
+            Math.Clamp(x, 8, Math.Max(8, surface.CssWidth - actionsWidth - 8)),
+            Math.Clamp(y, 8, Math.Max(8, surface.CssHeight - 56)));
+        var actions = ClampActions(center - actionsWidth / 2, top.Y - 54);
+        // Prefer above, then beside, then below the selected body. Every candidate is clamped
+        // using the actual button count, including at high zoom and narrow viewport edges.
+        foreach (var candidate in new[] { actions, ClampActions(bottom.X + 12, top.Y),
+                     ClampActions(top.X - actionsWidth - 12, top.Y), ClampActions(center - actionsWidth / 2, bottom.Y + 12) })
+        {
+            if (new RectD(candidate.X, candidate.Y, actionsWidth, 48).Intersects(anchor)) continue;
+            actions = candidate;
+            break;
+        }
         var panelHeight = 158d;
         var lowerY = bottom.Y + 12;
         if (lowerY + panelHeight > surface.CssHeight - 8) lowerY = top.Y - panelHeight - 68;
         var lower = new PointD(Math.Clamp(center - width / 2, 8, Math.Max(8, surface.CssWidth - width - 8)),
             Math.Clamp(lowerY, 8, Math.Max(8, surface.CssHeight - panelHeight - 8)));
+        if (new RectD(lower.X, lower.Y, width, panelHeight).Intersects(new RectD(actions.X, actions.Y, actionsWidth, 48)))
+        {
+            var belowActions = actions.Y + 60;
+            var aboveActions = actions.Y - panelHeight - 12;
+            if (belowActions + panelHeight <= surface.CssHeight - 8) lower = new(lower.X, belowActions);
+            else if (aboveActions >= 8) lower = new(lower.X, aboveActions);
+        }
         if (_elementToolbox is not { } previous || previous.VisualId != id || previous.Anchor != anchor ||
             previous.ActionsPosition != actions || previous.CreationPosition != lower || previous.CreationWidth != width ||
             previous.CanAutoPoints != _elementCanAutoPoints || previous.CanDelete != _elementCanDelete ||
-            previous.Candidates != _elementCandidates)
-            _elementToolbox = new(id, anchor, actions, lower, width, _elementCanAutoPoints, _elementCanDelete, _elementCandidates);
+            previous.Candidates != _elementCandidates || previous.NavigationRequest != navigation)
+            _elementToolbox = new(id, anchor, actions, lower, width, _elementCanAutoPoints, _elementCanDelete, _elementCandidates)
+            { NavigationRequest = navigation };
         return _elementToolbox;
     }
 
@@ -164,6 +189,47 @@ internal sealed partial class DocumentCanvasHost
 
     internal ValueTask<HistoryOperationResult?> DeleteToolboxElementAsync(CancellationToken cancellationToken = default) =>
         ExecuteElementToolboxAsync(null, true, cancellationToken);
+
+    internal async ValueTask<EditingSessionOperationResult?> OpenToolboxSubProcessAsync(
+        ElementToolboxState request, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetimeToken);
+        try { await EnterModelerOperationAsync(linked.Token).ConfigureAwait(false); }
+        catch (OperationCanceledException) when (linked.IsCancellationRequested) { return null; }
+        var notify = false;
+        try
+        {
+            EditingSession? session;
+            DocumentCanvasScopeNavigationContextAction? currentAction;
+            lock (_sync)
+            {
+                session = _session;
+                var state = session?.CaptureState();
+                if (request.NavigationRequest is not { } navigation ||
+                    navigation.DocumentSessionVersion != _documentSessionVersion ||
+                    state is not { Status: EditingSessionStatus.Ready, CurrentScene: not null } ||
+                    state.EditorState.ActiveGesture is not null ||
+                    !TryCaptureElementToolboxTarget(state, out var document, out var id, out var scope) ||
+                    navigation.DocumentId != document.DocumentId || navigation.Revision != document.Revision ||
+                    navigation.SourceScopeId != scope || request.VisualId != id || navigation.Action.VisualStateId != id ||
+                    !TryResolveVisualPropertiesTarget(state, document, id, null, GetSpatialRegionId(state, id), out var body, out _) ||
+                    !ElementToolboxScreenBounds(state.CurrentScene, body!.Bounds)
+                        .Intersects(new RectD(0, 0, _surfaceSize!.Value.CssWidth, _surfaceSize.Value.CssHeight)) ||
+                    !TryResolveScopeNavigationAction(_scopeNavigationCatalog, document, scope, id, out currentAction) ||
+                    currentAction != navigation.Action) return null;
+            }
+            var result = await NavigateToScopeUnderGateAsync(session!, currentAction!.TargetScopeId,
+                changed => notify |= changed, linked.Token).ConfigureAwait(false);
+            notify |= result?.Succeeded == true;
+            return result;
+        }
+        finally
+        {
+            await CompleteModelerOperationAsync().ConfigureAwait(false);
+            if (notify) await NotifyStateChangedSafelyAsync().ConfigureAwait(false);
+        }
+    }
 
     private async ValueTask<HistoryOperationResult?> ExecuteElementToolboxAsync(ToolboxItemId? itemId, bool delete, CancellationToken cancellationToken)
     {

@@ -119,7 +119,7 @@
                     </select>
                 </label>
             }
-            <nav class="scope-breadcrumb" aria-label="@Text["Accessibility_ProcessScope"]">
+            <nav @ref="_scopeBreadcrumbElement" class="scope-breadcrumb" tabindex="-1" aria-label="@Text["Accessibility_ProcessScope"]">
                 @for (var index = 0; index < ScopeBreadcrumb.Length; index++)
                 {
                     var segment = ScopeBreadcrumb[index];
@@ -242,7 +242,7 @@
 
         <div id="@ContainerElementId" class="document-canvas-surface">
             <ElementToolbox State="@(_newDiagramConfirmationOpen ? null : _state?.ElementToolbox)"
-                            Properties="OpenElementToolboxPropertiesAsync" AutoPoints="AutoPointsAsync"
+                            Properties="OpenElementToolboxPropertiesAsync" OpenSubProcess="OpenToolboxSubProcessAsync" AutoPoints="AutoPointsAsync"
                             Delete="DeleteToolboxElementAsync" Create="SmartCreateAsync" Dismiss="DismissElementToolbox" />
             <canvas id="@CanvasElementId"
                     data-viewport-input-enabled="@ViewportInputEnabled"
@@ -555,7 +555,7 @@
                                             <textarea id="@PropertiesFieldControlId(field.FieldId)"
                                                       data-property-field-id="@field.FieldId.Value"
                                                       class="properties-long-form-editor"
-                                                      rows="10"
+                                                      rows="9"
                                                       value="@field.EditorValue"
                                                       readonly="@(!field.CanEdit)"
                                                       disabled="@_propertiesApplying"
@@ -2398,6 +2398,17 @@
         if (_host is not { } host) return;
         await host.SmartCreateAsync(itemId, _componentLifetime.Token);
         RefreshHostState(host);
+    }
+
+    private ElementReference _scopeBreadcrumbElement;
+
+    private async Task OpenToolboxSubProcessAsync(ElementToolboxState request)
+    {
+        if (_disposed || _host is not { } host) return;
+        var result = await host.OpenToolboxSubProcessAsync(request, _componentLifetime.Token);
+        RefreshHostState(host);
+        if (!_disposed && result?.Succeeded == true)
+            await _scopeBreadcrumbElement.FocusAsync(preventScroll: true);
     }
 
     private async Task AutoPointsAsync()

@@ -23,8 +23,9 @@ public sealed class PhaseL5ContextPropertiesArchitectureTests
         var longForm = Between(styles, ".properties-form .properties-field-long-form {", "}");
         Assert.Contains("width: 100%", longForm, StringComparison.Ordinal);
         var editor = Between(styles, ".properties-form .properties-long-form-editor {", "}");
-        Assert.Contains("min-height: 11rem", editor, StringComparison.Ordinal);
+        Assert.Contains("min-height: 0", editor, StringComparison.Ordinal);
         Assert.Contains("max-height: none", editor, StringComparison.Ordinal);
+        Assert.Contains("resize: vertical", styles, StringComparison.Ordinal);
     }
 
     [Fact]

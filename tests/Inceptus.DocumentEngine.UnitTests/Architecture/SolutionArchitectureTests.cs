@@ -111,7 +111,7 @@ public sealed class SolutionArchitectureTests
     {
         var buildProperties = XDocument.Load(Path.Combine(RepositoryRoot, "Directory.Build.props"));
 
-        Assert.Equal("0.1.12", ReadElementValue(buildProperties, "Version"));
+        Assert.Equal("0.1.14", ReadElementValue(buildProperties, "Version"));
         Assert.Equal("Robert Prokopczuk", ReadElementValue(buildProperties, "Authors"));
 
         var releaseTargets = XDocument.Load(Path.Combine(RepositoryRoot, "Directory.Build.targets"));
@@ -785,12 +785,18 @@ public sealed class SolutionArchitectureTests
             "Inceptus.DocumentEngine.Contracts.Projection.ProjectionSourceTrace",
             "Inceptus.DocumentEngine.Contracts.Projection.ProjectionStatus",
             "Inceptus.DocumentEngine.Contracts.Projection.RelationshipProjectionRuleInput",
+            "Inceptus.DocumentEngine.Contracts.Publishing.IPublishedExecutionPolicy",
             "Inceptus.DocumentEngine.Contracts.Publishing.IPublishedNodeDataMapper",
             "Inceptus.DocumentEngine.Contracts.Publishing.IPublishedTokenRoleClassifier",
+            "Inceptus.DocumentEngine.Contracts.Publishing.PublishedAttachedTrigger",
+            "Inceptus.DocumentEngine.Contracts.Publishing.PublishedCommunicationRoute",
+            "Inceptus.DocumentEngine.Contracts.Publishing.PublishedExecutionDescription",
+            "Inceptus.DocumentEngine.Contracts.Publishing.PublishedExecutionMetadata",
             "Inceptus.DocumentEngine.Contracts.Publishing.PublishedNodeData",
             "Inceptus.DocumentEngine.Contracts.Publishing.PublishedTokenRole",
             "Inceptus.DocumentEngine.Contracts.Publishing.PublishedTokenRoleClassification",
             "Inceptus.DocumentEngine.Contracts.Publishing.PublishedTokenRoleClassificationRequest",
+            "Inceptus.DocumentEngine.Contracts.Publishing.PublishedTriggerKind",
             "Inceptus.DocumentEngine.Contracts.Routing.IRoutingAlgorithm",
             "Inceptus.DocumentEngine.Contracts.Routing.IRoutingInputPreparer",
             "Inceptus.DocumentEngine.Contracts.Routing.PreparedRoutingInput",
@@ -940,6 +946,7 @@ public sealed class SolutionArchitectureTests
             "Inceptus.DocumentEngine.Canvas2D.Publishing.EditingSessionPresentationCapture",
             "Inceptus.DocumentEngine.Canvas2D.Publishing.EditingSessionPresentationCaptureResult",
             "Inceptus.DocumentEngine.Canvas2D.Publishing.EditingSessionPresentationCaptureStatus",
+            "Inceptus.DocumentEngine.Canvas2D.Publishing.PublishedInitialView",
             "Inceptus.DocumentEngine.Canvas2D.Publishing.PublishedMatrix",
             "Inceptus.DocumentEngine.Canvas2D.Publishing.PublishedPoint",
             "Inceptus.DocumentEngine.Canvas2D.Publishing.PublishedPublication",

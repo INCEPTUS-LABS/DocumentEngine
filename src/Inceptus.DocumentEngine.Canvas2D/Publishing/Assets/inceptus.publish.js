@@ -52,29 +52,52 @@ function connectorDurationMs(points, speedPxPerSecond, minimumDurationMs) {
 }
 
 class PublishedViewport {
-    constructor(contentBounds, width, height, padding = VIEW_PADDING) {
+    constructor(contentBounds, width, height, padding = VIEW_PADDING, initialView = null) {
         validateRect(contentBounds);
         this.contentBounds = Object.freeze({ ...contentBounds });
+        this.initialRegion = initialView == null ? null : Object.freeze({ ...validateInitialRegion(initialView) });
+        this.userAdjusted = false;
+        this.width = width;
+        this.height = height;
         this.scale = 1;
         this.offsetX = 0;
         this.offsetY = 0;
-        this.fit(width, height, padding);
+        this.resize(width, height, padding);
     }
 
     fit(width, height, padding = VIEW_PADDING) {
+        this.frameRegion(this.contentBounds, width, height, padding, 1);
+    }
+
+    frameRegion(region, width, height, padding, minimumDimension = 0) {
         requireSurface(width, height);
         const usableWidth = Math.max(1, width - (padding * 2));
         const usableHeight = Math.max(1, height - (padding * 2));
         this.scale = clamp(
             Math.min(
-                usableWidth / Math.max(1, this.contentBounds.width),
-                usableHeight / Math.max(1, this.contentBounds.height)),
+                usableWidth / Math.max(minimumDimension, region.width),
+                usableHeight / Math.max(minimumDimension, region.height)),
             MIN_SCALE,
             MAX_SCALE);
         this.offsetX = (width / 2) -
-            ((this.contentBounds.x + (this.contentBounds.width / 2)) * this.scale);
+            ((region.x + (region.width / 2)) * this.scale);
         this.offsetY = (height / 2) -
-            ((this.contentBounds.y + (this.contentBounds.height / 2)) * this.scale);
+            ((region.y + (region.height / 2)) * this.scale);
+    }
+
+    resize(width, height, padding = VIEW_PADDING) {
+        requireSurface(width, height);
+        if (this.userAdjusted) {
+            const center = this.toDocument(this.width / 2, this.height / 2);
+            this.offsetX = width / 2 - center.x * this.scale;
+            this.offsetY = height / 2 - center.y * this.scale;
+        } else if (this.initialRegion) {
+            this.frameRegion(this.initialRegion, width, height, 0);
+        } else {
+            this.fit(width, height, padding);
+        }
+        this.width = width;
+        this.height = height;
     }
 
     pan(deltaX, deltaY) {
@@ -83,6 +106,7 @@ class PublishedViewport {
         }
         this.offsetX += deltaX;
         this.offsetY += deltaY;
+        if (deltaX !== 0 || deltaY !== 0) this.userAdjusted = true;
     }
 
     zoomAt(factor, screenX, screenY) {
@@ -93,6 +117,7 @@ class PublishedViewport {
         this.scale = clamp(this.scale * factor, MIN_SCALE, MAX_SCALE);
         this.offsetX = screenX - (documentPoint.x * this.scale);
         this.offsetY = screenY - (documentPoint.y * this.scale);
+        if (factor !== 1) this.userAdjusted = true;
     }
 
     toDocument(screenX, screenY) {
@@ -135,6 +160,16 @@ class PublishedTokenRuntime {
         this.parallelQueues = new Map();
         this.nextTokenId = 1;
         this.startedTokenCount = 0;
+        this.execution = process.execution ?? null;
+        this.senders = new Set(this.execution?.senderIds ?? []);
+        this.catches = new Set(this.execution?.catchIds ?? []);
+        this.communication = new Map((this.execution?.communicationRoutes ?? []).map(route => [route.connectorId, route]));
+        this.triggers = this.execution?.attachedTriggers ?? [];
+        this.receivers = new Map((this.execution?.receiverIds ?? []).map(id => [id, this.#emptyReceiver()]));
+        this.activityOutputs = {};
+        this.boundaryActivations = {};
+        this.deliveredSignals = 0;
+        this.clock = -Infinity;
     }
 
     start(atMs = this.now()) {
@@ -151,6 +186,7 @@ class PublishedTokenRuntime {
         if (!start || start.role !== "start" || !this.presentationNodes.has(startId)) {
             throw new Error("The selected node is not a published Start.");
         }
+        if (this.execution) this.#advance(atMs, false);
         const token = this.#newToken(startId, atMs);
         this.startedTokenCount++;
         this.#enterNode(token, startId, null, atMs, 0);
@@ -159,6 +195,12 @@ class PublishedTokenRuntime {
 
     tick(atMs = this.now()) {
         requireTime(atMs);
+        if (this.execution) {
+            // An input event may run after a frame timestamp was sampled but before its
+            // callback. Render that frame at the latest logical time; never rewind input.
+            this.#advance(Math.max(atMs, this.clock), true);
+            return this.captureState();
+        }
         for (let pass = 0; pass < 128; pass++) {
             let changed = false;
             for (const token of [...this.tokens.values()]) {
@@ -211,6 +253,7 @@ class PublishedTokenRuntime {
                 .sort((left, right) => left.sequence - right.sequence)
                 .map(token => ({
                     id: token.id,
+                    ...(this.execution ? { kind: token.kind } : {}),
                     state: token.state,
                     nodeId: token.nodeId,
                     connectorId: token.connectorId,
@@ -221,7 +264,17 @@ class PublishedTokenRuntime {
                     position: { ...token.position }
                 })),
             mergeWaiting: waiting,
-            parallelWaiting
+            parallelWaiting,
+            ...(this.execution ? {
+                deliveredSignalCount: this.deliveredSignals,
+                activityOutputCounts: { ...this.activityOutputs },
+                boundaryActivationCounts: { ...this.boundaryActivations },
+                receivers: Object.fromEntries([...this.receivers].map(([id, state]) => [id, {
+                    enabled: state.enabled, pendingCount: state.pending.length,
+                    processingCount: state.batch?.ids.length ?? 0, idleCycle: state.cycle,
+                    timerDeadline: state.timer?.at ?? null
+                }]))
+            } : {})
         };
     }
 
@@ -231,13 +284,20 @@ class PublishedTokenRuntime {
         this.parallelQueues.clear();
         this.nextTokenId = 1;
         this.startedTokenCount = 0;
+        for (const id of this.receivers.keys()) this.receivers.set(id, this.#emptyReceiver());
+        this.activityOutputs = {};
+        this.boundaryActivations = {};
+        this.deliveredSignals = 0;
+        this.clock = -Infinity;
     }
 
     #newToken(nodeId, atMs) {
+        if (this.execution && this.tokens.size >= 10000) throw new Error("Published animation capacity exceeded.");
         const token = {
             id: `token-${this.nextTokenId}`,
             sequence: this.nextTokenId++,
             state: "node",
+            kind: "sequence",
             nodeId,
             connectorId: null,
             incomingConnectorId: null,
@@ -261,6 +321,24 @@ class PublishedTokenRuntime {
         token.incomingConnectorId = incomingConnectorId;
         token.enteredAt = atMs;
         token.position = center(presentationNode.bounds);
+        if (this.receivers.has(nodeId)) {
+            const receiver = this.receivers.get(nodeId);
+            this.tokens.delete(token.id);
+            if (!receiver.enabled || receiver.boundariesClosed) {
+                receiver.enabled = true;
+                receiver.boundariesClosed = false;
+                receiver.idle = false;
+                receiver.settleAt = atMs;
+            }
+            return;
+        }
+        if (this.senders.has(nodeId) && node.role === "passThrough") {
+            this.#sendMessages(nodeId, 1, atMs, depth);
+            if (node.outgoingConnectorIds.length === 0) {
+                this.tokens.delete(token.id);
+                return;
+            }
+        }
         switch (node.role) {
             case "start":
             case "passThrough":
@@ -301,6 +379,10 @@ class PublishedTokenRuntime {
     #beginConnector(token, connectorId, atMs, depth) {
         const edge = this.connectors.get(connectorId);
         if (!edge) throw new Error(`Published connector '${connectorId}' is missing.`);
+        if (this.execution && (edge.sourceElementId !== token.nodeId ||
+            (token.kind === "communication") !== (this.communication.get(connectorId)?.canDeliver === true))) {
+            throw new Error("Published connector does not match its activation source or kind.");
+        }
         const length = routeLength(edge.points);
         const duration = connectorDurationMs(
             edge.points,
@@ -314,8 +396,170 @@ class PublishedTokenRuntime {
         token.routeLength = length;
         token.position = { ...edge.points[0] };
         if (duration === 0) {
-            this.#enterNode(token, edge.targetElementId, edge.id, atMs, depth + 1);
+            this.#arrive(token, edge, atMs, depth + 1);
         }
+    }
+
+    #arrive(token, edge, atMs, depth) {
+        if (token.kind !== "communication") {
+            this.#enterNode(token, edge.targetElementId, edge.id, atMs, depth);
+            return;
+        }
+        if (!this.communication.get(edge.id)?.canDeliver || !this.senders.has(edge.sourceElementId)) {
+            throw new Error("Published communication delivery is unsupported.");
+        }
+        this.deliveredSignals++;
+        token.kind = "sequence";
+        const receiver = this.receivers.get(edge.targetElementId);
+        if (receiver) {
+            token.state = "receiver-pending";
+            token.nodeId = edge.targetElementId;
+            token.connectorId = null;
+            token.position = center(this.presentationNodes.get(token.nodeId).bounds);
+            receiver.pending.push(token.id);
+            receiver.timer = null;
+            receiver.settleAt = atMs;
+        } else if (this.catches.has(edge.targetElementId)) {
+            this.#enterNode(token, edge.targetElementId, null, atMs, depth);
+        } else throw new Error("Published communication receiver is missing.");
+    }
+
+    #emptyReceiver() {
+        return { enabled: false, pending: [], batch: null, timer: null, idle: false, cycle: 0, settleAt: null, boundariesClosed: false };
+    }
+
+    #due(token) {
+        return token.state === "travelling" ? token.travelStartedAt + token.travelDurationMs :
+            token.state === "activity-delay" ? token.enteredAt + this.process.runtime.activityDelayMs : Infinity;
+    }
+
+    #advance(atMs, inclusive) {
+        if (atMs < this.clock) throw new Error("Published animation time cannot move backwards.");
+        let iterations = 0;
+        while (true) {
+            let due = Infinity;
+            for (const token of this.tokens.values()) due = Math.min(due, this.#due(token));
+            for (const state of this.receivers.values()) {
+                due = Math.min(due, state.settleAt ?? Infinity, state.batch?.at ?? Infinity, state.timer?.at ?? Infinity);
+            }
+            if (!Number.isFinite(due) || due > atMs || (!inclusive && due === atMs)) break;
+            if (++iterations > 10000) throw new Error("Published animation contains an unbounded immediate cycle.");
+            // Deliver all arrivals at this logical instant before evaluating idle deadlines.
+            // Zero-length continuations are resolved synchronously by the existing route path.
+            for (const token of [...this.tokens.values()]) {
+                if (this.tokens.has(token.id) && token.state === "travelling" && this.#due(token) <= due) {
+                    this.#arrive(token, this.connectors.get(token.connectorId), due, 0);
+                }
+            }
+            for (const token of [...this.tokens.values()]) {
+                if (this.tokens.has(token.id) && token.state === "activity-delay" && this.#due(token) <= due) {
+                    const owner = token.nodeId;
+                    this.#completed(owner, [token], due);
+                }
+            }
+            for (const [id, state] of this.receivers) {
+                if (state.batch && state.batch.at <= due) {
+                    const ids = state.batch.ids;
+                    state.batch = null;
+                    this.#completed(id, ids.map(tokenId => this.tokens.get(tokenId)), due);
+                    state.settleAt = due;
+                }
+            }
+            for (const [id, state] of this.receivers) {
+                if (state.settleAt !== null && state.settleAt <= due) {
+                    state.settleAt = null;
+                    this.#settle(id, state, due);
+                }
+            }
+            for (const [id, state] of this.receivers) {
+                if (state.timer && state.timer.at <= due && state.enabled && !state.boundariesClosed && state.idle &&
+                    !state.batch && state.pending.length === 0) {
+                    const trigger = state.timer.trigger;
+                    state.timer = null;
+                    this.#fireTrigger(trigger, due);
+                }
+            }
+        }
+        this.clock = atMs;
+        for (const token of this.tokens.values()) {
+            if (token.state === "travelling") {
+                const progress = Math.min(1, Math.max(0, (atMs - token.travelStartedAt) / token.travelDurationMs));
+                token.position = interpolateRoute(this.connectors.get(token.connectorId).points, token.routeLength * progress);
+            }
+        }
+    }
+
+    #settle(id, state, atMs) {
+        if (!state.enabled || state.batch) return;
+        if (state.pending.length) {
+            state.idle = false;
+            state.boundariesClosed = false;
+            state.timer = null;
+            const ids = state.pending.splice(0);
+            state.batch = { ids, at: atMs + this.process.runtime.activityDelayMs };
+            for (const tokenId of ids) {
+                const token = this.tokens.get(tokenId);
+                token.state = "receiver-processing";
+                token.enteredAt = atMs;
+            }
+        } else if (!state.idle && !state.boundariesClosed) {
+            state.idle = true;
+            state.cycle++;
+            const signal = this.triggers.find(trigger => trigger.ownerId === id && trigger.kind === "idleSignal");
+            const timer = this.triggers.find(trigger => trigger.ownerId === id && trigger.kind === "idleTimer");
+            if (signal) {
+                state.timer = null;
+                this.#fireTrigger(signal, atMs);
+            } else if (timer) state.timer = { trigger: timer, at: atMs + timer.delayMs };
+        }
+    }
+
+    #completed(id, tokens, atMs) {
+        const count = tokens.length;
+        if (!count) return;
+        // Close the completed cycle before following even zero-length outputs. A new
+        // Sequence activation may then open a fresh cycle without reviving the old one.
+        const receiver = this.receivers.get(id);
+        if (receiver) {
+            receiver.boundariesClosed = true;
+            receiver.timer = null;
+            receiver.idle = false;
+        }
+        this.activityOutputs[id] = (this.activityOutputs[id] ?? 0) + count;
+        for (const token of tokens) this.#takeOnlyOutgoing(token, id, atMs, 0);
+        this.#sendMessages(id, count, atMs, 0);
+    }
+
+    #sendMessages(nodeId, count, atMs, depth) {
+        if (!this.senders.has(nodeId)) return;
+        for (const [id, route] of this.communication) {
+            if (!route.canDeliver || this.connectors.get(id).sourceElementId !== nodeId) continue;
+            for (let index = 0; index < count; index++) {
+                const signal = this.#newToken(nodeId, atMs);
+                signal.kind = "communication";
+                this.#beginConnector(signal, id, atMs, depth + 1);
+            }
+        }
+    }
+
+    #fireTrigger(trigger, atMs) {
+        if (this.receivers.get(trigger.ownerId)?.boundariesClosed) return;
+        this.boundaryActivations[trigger.nodeId] = (this.boundaryActivations[trigger.nodeId] ?? 0) + 1;
+        // Apply interruption before following a route which might explicitly re-enable its owner.
+        if (trigger.interrupting) {
+            const state = this.receivers.get(trigger.ownerId);
+            if (state) {
+                state.enabled = false;
+                state.timer = null;
+                state.idle = false;
+                state.settleAt = null;
+            }
+            for (const token of this.tokens.values()) {
+                if (token.nodeId === trigger.ownerId && token.state === "activity-delay") this.tokens.delete(token.id);
+            }
+        }
+        const token = this.#newToken(trigger.nodeId, atMs);
+        this.#takeOnlyOutgoing(token, trigger.nodeId, atMs, 0);
     }
 
     #waitAtMerge(token, node, incomingConnectorId, atMs, depth) {
@@ -401,7 +645,7 @@ class PublishedProcessViewer {
         this.process = process;
         this.runtime = new PublishedTokenRuntime(process, options);
         this.controls = controls;
-        this.viewport = new PublishedViewport(process.presentation.contentBounds, 1, 1);
+        this.viewport = new PublishedViewport(process.presentation.contentBounds, 1, 1, VIEW_PADDING, process.initialView);
         this.pointerId = null;
         this.pointerX = 0;
         this.pointerY = 0;
@@ -453,7 +697,7 @@ class PublishedProcessViewer {
         this.cssWidth = width;
         this.cssHeight = height;
         this.dpr = dpr;
-        this.viewport.fit(width, height);
+        this.viewport.resize(width, height);
     }
 
     zoomFromCenter(factor) {
@@ -573,7 +817,7 @@ function drawPublishedProcess(context, process, runtimeState, viewport, width, h
             viewport.scale, 0, 0, viewport.scale,
             viewport.offsetX, viewport.offsetY);
         for (const item of process.presentation.items) drawItem(context, item);
-        for (const token of runtimeState.tokens) drawToken(context, token.position, viewport.scale);
+        for (const token of runtimeState.tokens) drawToken(context, token.position, viewport.scale, token.kind);
     } finally {
         context.restore();
     }
@@ -582,6 +826,12 @@ function drawPublishedProcess(context, process, runtimeState, viewport, width, h
 function startPublishedViewer() {
     const canvas = document.getElementById("process-canvas");
     const status = document.getElementById("viewer-status");
+    // Clear the optional banner in older HTML shells as well. Authoring diagnostics
+    // must not become publication content, including when bootstrap validation fails.
+    if (status) {
+        status.textContent = "";
+        status.hidden = true;
+    }
     try {
         const process = globalThis.__INCEPTUS_PUBLISHED_PROCESS__;
         const viewer = new PublishedProcessViewer(canvas, process, {
@@ -590,11 +840,8 @@ function startPublishedViewer() {
             zoomInButton: document.getElementById("zoom-in"),
             zoomOutButton: document.getElementById("zoom-out")
         });
-        status.hidden = true;
         return viewer;
     } catch {
-        status.textContent = "This published process could not be displayed.";
-        status.hidden = false;
         return null;
     }
 }
@@ -657,13 +904,20 @@ function drawItem(context, item) {
     }
 }
 
-function drawToken(context, position, scale) {
+function drawToken(context, position, scale, kind) {
     context.save();
     try {
         context.beginPath();
-        context.arc(position.x, position.y, TOKEN_RADIUS / scale, 0, Math.PI * 2);
-        context.fillStyle = "#f97316";
-        context.strokeStyle = "#7c2d12";
+        if (kind === "communication") {
+            const radius = (TOKEN_RADIUS + 2) / scale;
+            context.moveTo(position.x, position.y - radius);
+            context.lineTo(position.x + radius, position.y);
+            context.lineTo(position.x, position.y + radius);
+            context.lineTo(position.x - radius, position.y);
+            context.closePath();
+        } else context.arc(position.x, position.y, TOKEN_RADIUS / scale, 0, Math.PI * 2);
+        context.fillStyle = kind === "communication" ? "#0284c7" : "#f97316";
+        context.strokeStyle = kind === "communication" ? "#0c4a6e" : "#7c2d12";
         context.lineWidth = 2 / scale;
         context.shadowColor = "rgba(15, 23, 42, .3)";
         context.shadowBlur = 5 / scale;
@@ -683,6 +937,80 @@ function validateProcess(process) {
         !process.runtime) {
         throw new TypeError("Unsupported published process data.");
     }
+    if (process.initialView != null) validateInitialRegion(process.initialView);
+    if (process.execution != null) validateExecution(process);
+}
+
+function validateExecution(process) {
+    const execution = process.execution;
+    for (const key of ["senderIds", "catchIds", "receiverIds", "communicationRoutes", "attachedTriggers", "warnings"]) {
+        if (!Array.isArray(execution[key])) throw new TypeError("Incomplete published execution metadata.");
+    }
+    if (!execution.warnings.every(value => typeof value === "string")) throw new TypeError("Invalid publication warnings.");
+    const uniqueMap = (items, key) => {
+        const map = new Map();
+        for (const item of items) {
+            const id = key(item);
+            if (typeof id !== "string" || !id || map.has(id)) throw new TypeError("Duplicate or invalid published identity.");
+            map.set(id, item);
+        }
+        return map;
+    };
+    const nodes = uniqueMap(process.tokenGraph.nodes, node => node.id);
+    const visible = uniqueMap(process.presentation.nodes, node => node.id);
+    const edges = uniqueMap(process.presentation.connectors, edge => edge.id);
+    const routes = uniqueMap(execution.communicationRoutes, route => route.connectorId);
+    for (const [key, roles] of [["senderIds", ["passThrough", "activityDelay"]], ["catchIds", ["passThrough"]], ["receiverIds", ["activityDelay"]]]) {
+        uniqueMap(execution[key], id => id);
+        for (const id of execution[key]) if (!roles.includes(nodes.get(id)?.role)) throw new TypeError("Invalid published activation role.");
+    }
+    for (const edge of edges.values()) requireRoute(edge.points);
+    for (const node of nodes.values()) {
+        if (!visible.has(node.id)) throw new TypeError("Execution node has no presentation.");
+        for (const [list, endpoint] of [[node.incomingConnectorIds, "targetElementId"], [node.outgoingConnectorIds, "sourceElementId"]]) {
+            if (!Array.isArray(list) || new Set(list).size !== list.length) throw new TypeError("Invalid token adjacency.");
+            for (const id of list) if (!edges.has(id) || routes.has(id) || edges.get(id)[endpoint] !== node.id) {
+                throw new TypeError("Communication routes cannot enter token adjacency.");
+            }
+        }
+    }
+    for (const route of routes.values()) {
+        const edge = edges.get(route.connectorId);
+        if (!edge || typeof route.canDeliver !== "boolean" || (route.canDeliver &&
+            (!execution.senderIds.includes(edge.sourceElementId) ||
+                (!execution.catchIds.includes(edge.targetElementId) && !execution.receiverIds.includes(edge.targetElementId))))) {
+            throw new TypeError("Invalid communication endpoints.");
+        }
+    }
+    const triggerKeys = new Set();
+    uniqueMap(execution.attachedTriggers, trigger => trigger.nodeId);
+    for (const trigger of execution.attachedTriggers) {
+        const key = `${trigger.ownerId}/${trigger.kind}`;
+        const node = nodes.get(trigger.nodeId);
+        if (triggerKeys.has(key) || nodes.get(trigger.ownerId)?.role !== "activityDelay" ||
+            node?.role !== "passThrough" || node.incomingConnectorIds.length !== 0 || node.outgoingConnectorIds.length !== 1 ||
+            typeof trigger.interrupting !== "boolean" || !["idleTimer", "idleSignal", "completion"].includes(trigger.kind) ||
+            (trigger.kind === "idleTimer" && (!Number.isFinite(trigger.delayMs) || trigger.delayMs <= 0 || trigger.delayMs > Number.MAX_SAFE_INTEGER))) {
+            throw new TypeError("Invalid attached activation definition.");
+        }
+        triggerKeys.add(key);
+    }
+    if (!Number.isFinite(process.runtime.activityDelayMs) || process.runtime.activityDelayMs < 0 ||
+        !Number.isFinite(process.runtime.tokenSpeedPxPerSecond) || process.runtime.tokenSpeedPxPerSecond <= 0 ||
+        !Number.isFinite(process.runtime.minimumConnectorDurationMs) || process.runtime.minimumConnectorDurationMs < 0) {
+        throw new TypeError("Invalid published timing configuration.");
+    }
+}
+
+function validateInitialRegion(initialView) {
+    const region = initialView?.visibleRegion;
+    validateRect(region);
+    if (region.width <= 0 || region.height <= 0 ||
+        ![region.x + region.width, region.y + region.height,
+            (region.x + region.width / 2) * MAX_SCALE, (region.y + region.height / 2) * MAX_SCALE].every(Number.isFinite)) {
+        throw new TypeError("The initial visible region must be positive and finite within supported zoom limits.");
+    }
+    return region;
 }
 
 function validateRect(value) {

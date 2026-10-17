@@ -1,7 +1,7 @@
 # Inceptus Document Engine
 
 A reusable BPMN modeler with immutable native documents and a standalone process
-presentation export. This README describes the locally prepared **0.1.12** release
+presentation export. This README describes the locally prepared **0.1.14** release
 candidate targeting **net10.0**; public publication is a separate step.
 
 [Open BPMN Editor](https://bpmn-editor.inceptus.online)
@@ -30,8 +30,8 @@ transitively; hosts using only editing still need only the Bpmn.Blazor reference
 The validated hosting model is a **standalone Blazor WebAssembly application** on .NET 10. Configure a feed containing the reviewed candidate before adding the package:
 
 ```xml
-<PackageReference Include="Inceptus.DocumentEngine.Bpmn.Blazor" Version="0.1.12" />
-<PackageReference Include="Inceptus.Bpmn.Integration" Version="0.1.12" />
+<PackageReference Include="Inceptus.DocumentEngine.Bpmn.Blazor" Version="0.1.14" />
+<PackageReference Include="Inceptus.Bpmn.Integration" Version="0.1.14" />
 ```
 
 Register the modeler in the application's `Program.cs`. The extension namespace is `Microsoft.Extensions.DependencyInjection`:
@@ -101,6 +101,12 @@ supports switching compatible concrete Task, intermediate Event, Boundary Event
 and Gateway types while preserving identity and compatible state. Invalid
 switches are rejected without changing the document.
 
+Properties uses a nine-row Description field with multiline editing and the
+existing Apply/Cancel and History behavior. Smart Edit offers **Open SubProcess**
+for an eligible selected SubProcess, using the existing scope navigation,
+breadcrumb return and navigation History. These controls belong to the packaged
+editor; hosts do not need a separate Properties or Smart Edit implementation.
+
 Message Flow connects different effective Participants in the supported Pool
 diagram. A standalone Pool supplies its own communication identity; Pools
 assigned to the same Participant are presented as adjoining Lanes. Supported
@@ -135,8 +141,7 @@ External hosts capture with `CapturePresentationAsync()` and use the public
 `Canvas2DGraphicalExporter` with `GraphicalExportOptions` and their editor's font
 and image configuration. `GraphicalExportPreparer` shares preparation across
 formats; `SvgGraphicalExporter` also supports managed-only SVG generation. The
-host owns menus, downloads and operation feedback. See the
-[graphical export integration guide](docs/integration/graphical-export.md).
+host owns menus, downloads and operation feedback.
 
 The editor's internal **Maximize drawing area / Restore drawing area** toggle
 uses `BpmnModelerDisplayMode.Normal` / `Maximized`. Bind `DisplayMode` and
@@ -144,15 +149,14 @@ uses `BpmnModelerDisplayMode.Normal` / `Maximized`. Bind `DisplayMode` and
 its container to the available viewport. Keep the same editor mounted. The
 packaged component automatically selects Compact toolbox mode on entry and
 restores the previous mode on exit, preserving document, selection, zoom, pan
-and History. See the [host layout example](docs/integration/drawing-area.md).
+and History.
 
 Two touchscreen contacts pan by their midpoint at fixed zoom; wheel/touchpad
 input uses ordered, bounded delivery and compatible-event coalescing. Gesture
 takeover safely cancels conflicting editing previews. One-finger touch placement
 commits on release, while mouse placement retains its existing behavior. Panning
 does not modify the document or History. Hosts receive this through the packaged
-CSS/JavaScript and should not add a second gesture handler. See the
-[touch interaction guide](docs/integration/two-finger-panning.md).
+CSS/JavaScript and should not add a second gesture handler.
 
 Physical mobile-device, touchscreen and laptop-touchpad acceptance has **not**
 been performed. It remains deferred until public package publication and
@@ -440,9 +444,40 @@ backward-reader compatibility for documents using them. No v1 migration is inclu
 
 `PublishingPackageGenerator.Generate(document, presentation)` creates the existing self-contained ZIP from a canonical document and matching immutable presentation capture. The capture preserves active scope and transient visibility, which are intentionally absent from the document. The generator does not need an editor instance, perform downloads or edit metadata. The reference host's Publication dialog can save changed valid metadata through one persistent editor command **before** generating the artifact; a later publication rejection does not undo that save.
 
-Document-level Collaboration presentations and Process views containing Message
-Flow are rejected with diagnostics: communication links are not executable
-Sequence Flow in this viewer.
+Document-level Collaboration publication remains unsupported. Process views may
+include valid Message Flows between different effective Participants. Receive
+Tasks cannot send and Send Tasks cannot receive. Pool/Participant endpoints and
+incoming Boundary Message Event delivery are graphical-only for animation and
+return authoring warnings. Invalid canonical endpoints still prevent publication.
+Communication links never become executable Sequence Flow.
+
+The existing two-argument `Generate` overload remains available and uses Pools
+OFF and Fit Entire. The options overload controls each generated artifact:
+
+```csharp
+var options = new BpmnPublishingOptions
+{
+    IncludePools = true,
+    InitialViewMode = BpmnPublishingInitialViewMode.FitEntireDiagram,
+};
+var result = new PublishingPackageGenerator().Generate(document, presentation, options);
+// Inspect result.Succeeded and result.Diagnostics before downloading result.Package.
+```
+
+For `BpmnPublishingInitialViewMode.CurrentEditorView`, supply an `EditorView` of
+type `BpmnPublishingEditorView(DocumentId, Revision, ScopeId, VisibleRegion)`.
+Obtain the document-coordinate `VisibleRegion` from the live
+`CaptureEditorContext().Presentation.EditorState.Viewport.VisibleDocumentRegion`,
+with the matching document/revision and active `ProcessScopePresentationContext`.
+Require a ready editor and nonempty surface/region. A detached publishing Scene
+is not the editor viewport authority. Guard the attachment version, document,
+scope, viewport, surface and visibility through asynchronous capture and reject
+stale or unavailable context; do not silently fall back to Fit Entire.
+If saving publication metadata advances revision, accept only that expected
+metadata command and recheck the same attachment/view against the returned
+snapshot before generating. The reference dialog defaults to Current Editor view;
+hosts can offer both modes independently of Include Pools. Changing either option
+does not persist document data or enter History.
 
 The artifact remains **Inceptus.PublishedProcess, formatVersion 1**, with these entries:
 
@@ -456,13 +491,64 @@ styles.css
 
 `process.data.js` contains the same PublishedProcess object as `process.json`. Classic scripts and static bootstrap data allow static HTTP hosting and direct-file startup without fetching JSON at runtime. Keep the generated files together with their matching viewer. The standalone output needs no authoring host, source checkout, Blazor, .NET or WASM runtime. Browser/security policy may restrict local `file://` access.
 
-Publication metadata and element descriptions are captured as data. Descriptions are not displayed by the viewer. Node geometry and connector routes are frozen. Pools are treated as expanded for publication, and Pool/Unassigned graphics are omitted. Diagram editing is unavailable; pointer drag and wheel/touchpad pan, and +/- controls zoom the model.
+Publication metadata and element descriptions are captured as data. Descriptions are not displayed by the viewer. Node geometry and connector routes are frozen. Pool graphics are omitted by default; `IncludePools` can include representable captured Pool/Lane graphics without including the Unassigned region. Initial View changes framing only: existing API calls fit the complete diagram, while the internal Publish dialog defaults to the current Editor view. Diagram editing is unavailable; pointer drag and wheel/touchpad pan, and +/- controls zoom the model.
 
-Publication supports **one or more Start-role nodes** in the active scope. Reachable paths from every Start are included without cloning shared identities. Each clicked Start activates exactly one token at that node; repeated clicks create independent activations. With multiple Starts the global convenience button is disabled and guides the user to click a Start in the diagram. Zero Starts or an invalid supported path produces blocking diagnostics. Supporting several Starts does not relax individual node/connector validation or introduce process-instance correlation.
+Initial framing adapts to the viewer viewport. After the user pans or zooms,
+resizing preserves that manual view. Include Pools retains captured boundaries
+and headers without reconstructing Pool geometry or changing token execution.
 
-The marketing/demo viewer retains lightweight token behavior: Activity waits 2000 ms per token; SplitInvariant chooses one outgoing branch; MergeInvariant consumes tokens from two distinct inputs and emits one; ParallelSynchronize waits for every input, consumes one from each and emits on every output; End consumes tokens. This is not a production process execution or Simulation Engine.
+Publication requires **one or more Start-role nodes** in the active scope.
+Reachable paths from every Start are included without cloning shared identities;
+existing node and connector validation remains authoritative. With multiple Starts,
+the user selects a Start in the diagram; the toolbar does not choose one or start
+all of them. Repeated activations create independent tokens sharing gateway queues.
 
-Host Publish failures remain visible outside the closed Publication dialog, with returned reasons and affected identities when available. Successful retry or session replacement clears obsolete feedback. Feedback is transient and does not enter Document History or persistent Issues.
+The generated execution metadata describes supported message routes, receiver
+Activities and attached boundary triggers for the embedded runtime:
+
+- Ordinary Activities process each Sequence Flow activation for 2 seconds before
+  producing one ordinary output. A visible SubProcess behaves as an Activity;
+  the viewer does not execute its nested contents.
+- Message Throw sends on each supported outgoing Message Flow and continues its
+  Sequence Flow when present. Each Activity completion sends on every supported
+  outgoing Message Flow alongside its ordinary output. Blue diamonds follow the
+  complete frozen route, including Manual bends; delivery occurs at the receiver.
+  Message Catch immediately continues for each arriving message without enabling.
+- A message-receiving Activity is enabled once by Sequence Flow; enabling alone
+  produces no output. Messages received beforehand remain queued. An enabled idle
+  receiver takes all pending messages into a fixed batch: N messages produce N
+  ordinary outputs and N messages on each outgoing Message Flow after 2 seconds.
+  Arrivals during processing form a later batch. Enablement survives successful
+  output until reset or an interrupting boundary; later batches need no new token.
+- An eligible empty receiver waiting cycle can fire Boundary Timer once, using a
+  supported duration clamped to 1–5 seconds or a 3-second presentation fallback.
+  Message arrival cancels its timer. Boundary Signal fires automatically once,
+  without an external signal, and takes priority over Timer. `CancelActivity=true`
+  disables the receiver while retaining pending messages; false keeps it enabled.
+  Ordinary Activities without incoming Message Flow have no idle fallback cycle.
+- Successful Activity output disables every attached boundary for that cycle,
+  cancels timers and produces no automatic Boundary Message notification or later
+  idle Signal. Idle state alone does not rearm boundaries. A fresh explicit
+  Sequence Flow activation can reopen an eligible receiver waiting cycle.
+- Exclusive joins pass each incoming token through immediately. Parallel Gateways
+  consume one token from every input and emit one on every output. Nonparallel
+  splits choose one random output without evaluating conditions; other supported
+  nonparallel joins use simplified pairwise merging of distinct inputs. Message
+  Flows never contribute gateway inputs.
+
+Orange Sequence Flow tokens and blue messages use frozen path length at 300
+diagram units per second, with a 150 ms minimum for nonzero routes. Zero-length
+continuations are immediate. Logical timestamps determine ordering independently
+of rendering frequency; a message arriving at the timer deadline wins. Runtime
+reset clears execution state without changing input data. Bounded token and
+iteration guards protect the viewer from runaway diagrams.
+
+The viewer uses a custom presentation animation model. It has no message payload,
+correlation engine, broker or external transport and does not implement complete
+BPMN execution semantics or the future SimulationEngine. Regenerate old ZIPs to
+obtain this runtime: each archive contains its own immutable data and viewer.
+
+Host Publish failures and warnings remain visible outside the closed Publication dialog, with returned reasons and affected identities when available. Successful retry or session replacement clears obsolete feedback. These diagnostics belong to the editor and are not copied into the published model or shown by its viewer. Feedback is transient and does not enter Document History or persistent Issues.
 
 ## Advanced and implementation-facing surfaces
 

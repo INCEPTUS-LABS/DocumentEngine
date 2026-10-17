@@ -16,6 +16,7 @@ const {
     PublishedTokenRuntime,
     PublishedViewport,
     connectorDurationMs,
+    drawPublishedProcess,
     interpolateRoute,
     routeLength,
     startPublishedViewer
@@ -71,6 +72,350 @@ function activityProcess() {
     return publishedProcess(nodes, connectors);
 }
 
+function communicationProcess({ catchEvent = false, triggers = [], messagePoints = [point(0, 0), point(0, 0)] } = {}) {
+    const nodes = [
+        tokenNode("send-start", "start", [], ["send"]),
+        tokenNode("throw", "passThrough", ["send"], ["local"]),
+        tokenNode("receive", catchEvent ? "passThrough" : "activityDelay", catchEvent ? [] : ["enable"], ["output"]),
+        tokenNode("end", "end", ["local", "output", ...triggers.map(trigger => trigger.nodeId + "-out")], [])
+    ];
+    const edges = [
+        connector("send", "send-start", "throw", [point(0, 0), point(0, 0)]),
+        connector("message", "throw", "receive", messagePoints),
+        connector("local", "throw", "end", [point(0, 0), point(300, 0)]),
+        connector("output", "receive", "end", [point(0, 0), point(300, 0)])
+    ];
+    if (!catchEvent) {
+        nodes.push(tokenNode("enable-start", "start", [], ["enable"]));
+        edges.push(connector("enable", "enable-start", "receive", [point(0, 0), point(0, 0)]));
+    }
+    for (const trigger of triggers) {
+        nodes.push(tokenNode(trigger.nodeId, "passThrough", [], [trigger.nodeId + "-out"]));
+        edges.push(connector(trigger.nodeId + "-out", trigger.nodeId, "end", [point(0, 0), point(300, 0)]));
+    }
+    const process = publishedProcess(nodes, edges);
+    process.execution = {
+        senderIds: ["throw"], catchIds: catchEvent ? ["receive"] : [], receiverIds: catchEvent ? [] : ["receive"],
+        communicationRoutes: [{ connectorId: "message", canDeliver: true }],
+        attachedTriggers: triggers.map(trigger => ({ ownerId: "receive", interrupting: false, delayMs: null, ...trigger })),
+        warnings: []
+    };
+    return process;
+}
+
+function addOutgoingMessage(process, senderId) {
+    process.tokenGraph.nodes.push(tokenNode("relay-catch", "passThrough", [], ["relay-out"]));
+    process.tokenGraph.nodes.find(node => node.id === "end").incomingConnectorIds.push("relay-out");
+    process.presentation.nodes.push({ id: "relay-catch", bounds: { x: 300, y: 200, width: 40, height: 30 } });
+    process.presentation.connectors.push(
+        connector("relay-message", senderId, "relay-catch", [point(0, 0), point(300, 0)]),
+        connector("relay-out", "relay-catch", "end", [point(300, 0), point(300, 0)]));
+    if (!process.execution.senderIds.includes(senderId)) process.execution.senderIds.push(senderId);
+    process.execution.catchIds.push("relay-catch");
+    process.execution.communicationRoutes.push({ connectorId: "relay-message", canDeliver: true });
+    return process;
+}
+
+test("Activity completion sends on every outgoing Message Flow alongside its Sequence output, never on entry", () => {
+    const process = addOutgoingMessage(communicationProcess({ catchEvent: true,
+        messagePoints: [point(0, 0), point(600, 0)] }), "throw");
+    process.tokenGraph.nodes.find(node => node.id === "throw").role = "activityDelay";
+    const runtime = new PublishedTokenRuntime(process);
+    runtime.activateStart("send-start", 0);
+    runtime.activateStart("send-start", 500);
+    assert.equal(runtime.tick(1999).tokens.filter(token => token.kind === "communication").length, 0);
+    const first = runtime.tick(2000);
+    assert.equal(first.activityOutputCounts.throw, 1);
+    for (const id of ["local", "message", "relay-message"]) {
+        assert.equal(first.tokens.filter(token => token.connectorId === id).length, 1);
+    }
+    const second = runtime.tick(2500);
+    assert.equal(second.activityOutputCounts.throw, 2);
+    for (const id of ["local", "message", "relay-message"]) {
+        assert.equal(second.tokens.filter(token => token.connectorId === id).length, 2);
+    }
+    assert.equal(runtime.tick(4500).deliveredSignalCount, 4);
+    assert.equal(runtime.tick(5500).activeTokenCount, 0);
+});
+
+for (const count of [0, 1, 3, 5]) {
+    for (const interrupting of [false, true]) {
+        test(`Receiver completion sends ${count} messages and suppresses boundaries; interrupting=${interrupting}`, () => {
+            const process = addOutgoingMessage(communicationProcess({ triggers: [
+                { nodeId: "notify", kind: "completion", interrupting }
+            ] }), "receive");
+            const runtime = new PublishedTokenRuntime(process);
+            runtime.activateStart("enable-start", 0);
+            assert.equal(runtime.tick(0).tokens.filter(token => token.connectorId === "relay-message").length, 0);
+            for (let index = 0; index < count; index++) runtime.activateStart("send-start", 10);
+            assert.equal(runtime.tick(2009).tokens.filter(token => token.connectorId === "relay-message").length, 0);
+            const completed = runtime.tick(2010);
+            assert.equal(completed.activityOutputCounts.receive ?? 0, count);
+            assert.equal(completed.tokens.filter(token => token.connectorId === "output").length, count);
+            assert.equal(completed.tokens.filter(token => token.connectorId === "relay-message").length, count);
+            assert.equal(completed.boundaryActivationCounts.notify ?? 0, 0);
+            assert.equal(completed.receivers.receive.enabled, true);
+            assert.equal(runtime.tick(3010).deliveredSignalCount, count * 2);
+        });
+    }
+}
+
+test("Reset during an Activity delay cancels both Sequence and Message outputs", () => {
+    const process = communicationProcess({ catchEvent: true });
+    process.tokenGraph.nodes.find(node => node.id === "throw").role = "activityDelay";
+    const runtime = new PublishedTokenRuntime(process);
+    runtime.activateStart("send-start", 0);
+    runtime.tick(1999);
+    runtime.reset();
+    const state = runtime.tick(5000);
+    assert.equal(state.deliveredSignalCount, 0);
+    assert.equal(state.activeTokenCount, 0);
+    assert.deepEqual(state.activityOutputCounts, {});
+});
+
+test("Communication follows the complete frozen route and each catch activation continues independently", () => {
+    const process = communicationProcess({ catchEvent: true, messagePoints: [point(0, 0), point(300, 0), point(300, 300)] });
+    const runtime = new PublishedTokenRuntime(process);
+    runtime.activateStart("send-start", 0);
+    runtime.activateStart("send-start", 250);
+    const halfway = runtime.tick(1500);
+    assert.deepEqual(halfway.tokens.find(token => token.kind === "communication").position, point(300, 150));
+    assert.equal(halfway.deliveredSignalCount, 0);
+    const arrived = runtime.tick(2000);
+    assert.equal(arrived.deliveredSignalCount, 1);
+    assert.equal(arrived.tokens.filter(token => token.connectorId === "output").length, 1);
+    assert.equal(runtime.tick(2250).deliveredSignalCount, 2);
+    assert.equal(runtime.tick(3250).activeTokenCount, 0);
+    assert.deepEqual(runtime.captureState().mergeWaiting, {});
+});
+
+for (const [enable, count] of [[false, 3], [true, 0], [true, 1], [true, 3], [true, 5]]) {
+    for (const messagesFirst of [false, true]) {
+        test(`Receiver count: enabled=${enable}, messages=${count}, messagesFirst=${messagesFirst}`, () => {
+            const runtime = new PublishedTokenRuntime(communicationProcess());
+            if (enable && !messagesFirst) runtime.activateStart("enable-start", 0);
+            for (let index = 0; index < count; index++) runtime.activateStart("send-start", 0);
+            if (enable && messagesFirst) runtime.activateStart("enable-start", 0);
+            const state = runtime.tick(2000);
+            assert.equal(state.activityOutputCounts.receive ?? 0, enable ? count : 0);
+            assert.equal(state.receivers.receive.pendingCount, enable ? 0 : count);
+            assert.equal(state.receivers.receive.enabled, enable);
+            assert.equal(state.deliveredSignalCount, count);
+        });
+    }
+}
+
+test("Receiver stays enabled and repeated enabling never creates output or duplicates processing", () => {
+    const runtime = new PublishedTokenRuntime(communicationProcess());
+    runtime.activateStart("enable-start", 0);
+    runtime.activateStart("enable-start", 100);
+    assert.equal(runtime.tick(200).activityOutputCounts.receive ?? 0, 0);
+    runtime.activateStart("send-start", 300);
+    assert.equal(runtime.tick(2300).activityOutputCounts.receive, 1);
+    runtime.activateStart("send-start", 4000);
+    assert.equal(runtime.tick(6000).activityOutputCounts.receive, 2);
+});
+
+for (const count of [0, 1, 2, 5, 10]) {
+    test(`No boundary notification after a pending-message batch of ${count}`, () => {
+        const runtime = new PublishedTokenRuntime(communicationProcess({ triggers: [{ nodeId: "notify", kind: "completion" }] }));
+        runtime.activateStart("enable-start", 0);
+        for (let index = 0; index < count; index++) runtime.activateStart("send-start", 0);
+        const state = runtime.tick(2000);
+        assert.equal(state.activityOutputCounts.receive ?? 0, count);
+        assert.equal(state.boundaryActivationCounts.notify ?? 0, 0);
+        assert.equal(state.tokens.filter(token => token.connectorId === "notify-out").length, 0);
+        assert.equal(runtime.tick(5000).boundaryActivationCounts.notify ?? 0, 0);
+    });
+}
+
+test("Messages during processing form a second fixed batch, independent of animation frame frequency", () => {
+    function run(fine) {
+        const runtime = new PublishedTokenRuntime(addOutgoingMessage(
+            communicationProcess({ triggers: [{ nodeId: "notify", kind: "completion" }] }), "receive"));
+        runtime.activateStart("enable-start", 0);
+        runtime.activateStart("send-start", 0);
+        runtime.tick(0);
+        for (let index = 0; index < 3; index++) runtime.activateStart("send-start", 500);
+        if (fine) for (let time = 500; time < 4000; time += 50) runtime.tick(time);
+        return runtime.tick(4000);
+    }
+    assert.deepEqual(run(false), run(true));
+    assert.equal(run(false).activityOutputCounts.receive, 4);
+    assert.equal(run(false).boundaryActivationCounts.notify ?? 0, 0);
+    assert.equal(run(false).deliveredSignalCount, 5);
+    assert.equal(run(false).tokens.filter(token => token.connectorId === "relay-message").length, 3);
+});
+
+test("Idle timer stays cancelled after output and only a fresh activation rearms waiting", () => {
+    const runtime = new PublishedTokenRuntime(communicationProcess({ triggers: [{ nodeId: "timer", kind: "idleTimer", delayMs: 100 }] }));
+    runtime.activateStart("enable-start", 0);
+    assert.equal(runtime.tick(0).receivers.receive.timerDeadline, 100);
+    runtime.activateStart("send-start", 90);
+    assert.equal(runtime.tick(100).boundaryActivationCounts.timer ?? 0, 0);
+    assert.equal(runtime.tick(2090).receivers.receive.timerDeadline, null);
+    assert.equal(runtime.tick(2190).boundaryActivationCounts.timer ?? 0, 0);
+    assert.equal(runtime.tick(10000).boundaryActivationCounts.timer ?? 0, 0);
+    runtime.activateStart("send-start", 11000);
+    assert.equal(runtime.tick(13100).boundaryActivationCounts.timer ?? 0, 0);
+    runtime.activateStart("enable-start", 14000);
+    assert.equal(runtime.tick(14000).receivers.receive.timerDeadline, 14100);
+    assert.equal(runtime.tick(14100).boundaryActivationCounts.timer, 1);
+});
+
+test("Message delivery at the timer deadline wins deterministically", () => {
+    const runtime = new PublishedTokenRuntime(communicationProcess({ triggers: [{ nodeId: "timer", kind: "idleTimer", delayMs: 100 }] }));
+    runtime.activateStart("enable-start", 0);
+    runtime.tick(0);
+    runtime.activateStart("send-start", 100);
+    assert.equal(runtime.tick(100).boundaryActivationCounts.timer ?? 0, 0);
+    assert.equal(runtime.tick(2100).activityOutputCounts.receive, 1);
+    assert.equal(runtime.tick(10000).boundaryActivationCounts.timer ?? 0, 0);
+});
+
+for (const interrupting of [false, true]) {
+    test(`All boundaries stay disabled after output across successive batches; interrupting=${interrupting}`, () => {
+        const process = addOutgoingMessage(communicationProcess({ triggers: [
+            { nodeId: "timer", kind: "idleTimer", delayMs: 100, interrupting },
+            { nodeId: "signal", kind: "idleSignal", interrupting },
+            { nodeId: "notify", kind: "completion", interrupting }
+        ] }), "receive");
+        const runtime = new PublishedTokenRuntime(process);
+        runtime.activateStart("enable-start", 0);
+        runtime.activateStart("send-start", 0);
+        runtime.tick(0);
+        runtime.activateStart("send-start", 100);
+        runtime.activateStart("send-start", 100);
+        const result = runtime.tick(10000);
+        assert.equal(result.activityOutputCounts.receive, 3);
+        assert.equal(result.deliveredSignalCount, 6);
+        assert.deepEqual(result.boundaryActivationCounts, {});
+        assert.equal(result.receivers.receive.enabled, true);
+        assert.equal(result.receivers.receive.timerDeadline, null);
+        runtime.reset();
+        runtime.activateStart("enable-start", 0);
+        assert.equal(runtime.tick(0).boundaryActivationCounts.signal, 1);
+    });
+}
+
+test("A zero-length output reactivating its owner starts a fresh boundary cycle", () => {
+    const process = communicationProcess({ triggers: [{ nodeId: "timer", kind: "idleTimer", delayMs: 100 }] });
+    const output = process.presentation.connectors.find(edge => edge.id === "output");
+    output.targetElementId = "receive";
+    output.points = [point(0, 0), point(0, 0)];
+    process.tokenGraph.nodes.find(node => node.id === "end").incomingConnectorIds = ["local", "timer-out"];
+    process.tokenGraph.nodes.find(node => node.id === "receive").incomingConnectorIds.push("output");
+    const runtime = new PublishedTokenRuntime(process);
+    runtime.activateStart("enable-start", 0);
+    runtime.activateStart("send-start", 0);
+    const result = runtime.tick(2000);
+    assert.equal(result.activityOutputCounts.receive, 1);
+    assert.equal(result.receivers.receive.timerDeadline, 2100);
+    assert.equal(runtime.tick(2100).boundaryActivationCounts.timer, 1);
+});
+
+test("Signal wins over Timer while waiting and cannot fire after successful output", () => {
+    const runtime = new PublishedTokenRuntime(communicationProcess({ triggers: [
+        { nodeId: "signal", kind: "idleSignal" }, { nodeId: "timer", kind: "idleTimer", delayMs: 100 }
+    ] }));
+    runtime.activateStart("enable-start", 0);
+    assert.equal(runtime.tick(0).boundaryActivationCounts.signal, 1);
+    for (const time of [1, 100, 1000]) {
+        const state = runtime.tick(time);
+        assert.equal(state.boundaryActivationCounts.signal, 1);
+        assert.equal(state.boundaryActivationCounts.timer ?? 0, 0);
+        assert.equal(state.receivers.receive.timerDeadline, null);
+    }
+    runtime.activateStart("send-start", 1100);
+    const later = runtime.tick(10000);
+    assert.equal(later.boundaryActivationCounts.signal, 1);
+    runtime.activateStart("enable-start", 11000);
+    assert.equal(runtime.tick(11000).boundaryActivationCounts.signal, 2);
+    assert.equal(later.boundaryActivationCounts.timer ?? 0, 0);
+});
+
+for (const kind of ["idleTimer", "idleSignal"]) {
+    test(`Interrupting ${kind} disables reception, retains pending messages, and allows explicit reenabling`, () => {
+        const runtime = new PublishedTokenRuntime(communicationProcess({ triggers: [
+            { nodeId: "boundary", kind, delayMs: kind === "idleTimer" ? 100 : null, interrupting: true }
+        ] }));
+        runtime.activateStart("enable-start", 0);
+        runtime.tick(2000);
+        assert.equal(runtime.captureState().receivers.receive.enabled, false);
+        runtime.activateStart("send-start", 2100);
+        runtime.activateStart("send-start", 2100);
+        assert.equal(runtime.tick(3000).receivers.receive.pendingCount, 2);
+        runtime.activateStart("enable-start", 3100);
+        const completed = runtime.tick(5100);
+        assert.equal(completed.activityOutputCounts.receive, 2);
+        assert.equal(completed.receivers.receive.pendingCount, 0);
+    });
+}
+
+test("Reset removes pending messages, processing batches, deadlines and boundary counters", () => {
+    const runtime = new PublishedTokenRuntime(communicationProcess({ triggers: [{ nodeId: "timer", kind: "idleTimer", delayMs: 100 }] }));
+    runtime.activateStart("enable-start", 0);
+    runtime.tick(0);
+    runtime.reset();
+    assert.deepEqual(runtime.tick(1000).boundaryActivationCounts, {});
+    runtime.activateStart("send-start", 1100);
+    runtime.reset();
+    runtime.activateStart("enable-start", 0);
+    runtime.activateStart("send-start", 0);
+    runtime.tick(0);
+    runtime.reset();
+    const state = runtime.tick(10000);
+    assert.equal(state.activeTokenCount, 0);
+    assert.equal(state.receivers.receive.pendingCount, 0);
+    assert.equal(state.receivers.receive.processingCount, 0);
+    assert.deepEqual(state.activityOutputCounts, {});
+    assert.deepEqual(state.boundaryActivationCounts, {});
+});
+
+test("Visual-only communication is preserved but cannot deliver or become Sequence topology", () => {
+    const process = communicationProcess();
+    process.execution.communicationRoutes[0].canDeliver = false;
+    const runtime = new PublishedTokenRuntime(process);
+    runtime.activateStart("send-start", 0);
+    runtime.activateStart("enable-start", 0);
+    assert.equal(runtime.tick(10000).deliveredSignalCount, 0);
+    assert.equal(runtime.captureState().activityOutputCounts.receive ?? 0, 0);
+    assert.equal(process.presentation.connectors.find(edge => edge.id === "message").targetElementId, "receive");
+});
+
+test("Message metadata rejects stale identities, incorrect endpoint roles, topology leakage and invalid timers", () => {
+    const mutations = [
+        process => process.execution.communicationRoutes[0].connectorId = "missing",
+        process => process.execution.senderIds[0] = "receive",
+        process => process.execution.senderIds.push("end"),
+        process => process.tokenGraph.nodes.find(node => node.id === "receive").incomingConnectorIds.push("message"),
+        process => process.execution.attachedTriggers[0].delayMs = NaN,
+        process => process.execution.attachedTriggers[0].ownerId = "end",
+        process => process.execution.attachedTriggers.push({ ...process.execution.attachedTriggers[0] })
+    ];
+    for (const mutate of mutations) {
+        const process = communicationProcess({ triggers: [{ nodeId: "timer", kind: "idleTimer", delayMs: 100 }] });
+        mutate(process);
+        assert.throws(() => new PublishedTokenRuntime(process), TypeError);
+    }
+});
+
+test("Throw may send without a local continuation and ordinary Activities retain independent execution clocks", () => {
+    const process = communicationProcess({ catchEvent: true });
+    process.tokenGraph.nodes.find(node => node.id === "throw").outgoingConnectorIds = [];
+    const runtime = new PublishedTokenRuntime(process);
+    runtime.activateStart("send-start", 0);
+    assert.equal(runtime.tick(0).deliveredSignalCount, 1);
+    assert.equal(runtime.tick(1000).activeTokenCount, 0);
+    const ordinary = activityProcess();
+    ordinary.execution = { senderIds: [], catchIds: [], receiverIds: [], communicationRoutes: [], attachedTriggers: [], warnings: [] };
+    const regular = new PublishedTokenRuntime(ordinary);
+    regular.start(0);
+    regular.start(500);
+    assert.equal(regular.tick(2000).activityOutputCounts.activity, 1);
+    assert.equal(regular.tick(2500).activityOutputCounts.activity, 2);
+});
+
 function multipleStartProcess() {
     const nodes = [
         tokenNode("entry:a", "start", [], ["a-activity"]),
@@ -116,11 +461,11 @@ function clickPublishedNode(viewer, nodeId) {
     viewer.canvas.dispatch("click", event);
 }
 
-function mergeProcess(randomValues) {
+function mergeProcess(randomValues, role = "mergeInvariant") {
     const nodes = [
         tokenNode("start", "start", [], ["start-split"]),
         tokenNode("split", "splitInvariant", ["start-split"], ["a", "b", "c"]),
-        tokenNode("merge", "mergeInvariant", ["a", "b", "c"], ["merge-end"]),
+        tokenNode("merge", role, ["a", "b", "c"], ["merge-end"]),
         tokenNode("end", "end", ["merge-end"], [])
     ];
     const connectors = [
@@ -234,7 +579,7 @@ function withViewerStartupEnvironment(process, action) {
         } else {
             globalThis.__INCEPTUS_PUBLISHED_PROCESS__ = process;
         }
-        return action({ canvas, startButton, startGuidance, status, zoomInButton, zoomOutButton });
+        return action({ canvas, startButton, startGuidance, status, zoomInButton, zoomOutButton, elements });
     } finally {
         globalThis.window = originalWindow;
         globalThis.document = originalDocument;
@@ -309,13 +654,13 @@ test("Targetless Start is a singleton convenience and never selects among multip
     assert.equal(single.captureState().startedTokenCount, 2);
 });
 
-test("Zero-Start published input fails during startup with a bounded diagnostic", () => {
+test("Zero-Start published input fails without displaying diagnostics", () => {
     const process = activityProcess();
     process.tokenGraph.nodes.find(node => node.id === "start").role = "passThrough";
     withViewerStartupEnvironment(process, ({ status, canvas }) => {
         assert.equal(startPublishedViewer(), null);
-        assert.equal(status.hidden, false);
-        assert.equal(status.textContent, "This published process could not be displayed.");
+        assert.equal(status.hidden, true);
+        assert.equal(status.textContent, "");
         assert.equal(canvas.listeners.size, 0);
     });
 });
@@ -525,6 +870,42 @@ test("Split Invariant emits on exactly one deterministic random branch", () => {
     assert.equal(runtime.captureState().activeTokenCount, 1);
 });
 
+test("Exclusive join pass-through forwards the first arrival from any input without waiting", () => {
+    for (const branch of [0, 0.4, 0.8]) {
+        const runtime = mergeProcess([branch], "passThrough");
+        const tokenId = runtime.start(0);
+        const state = runtime.captureState();
+        assert.equal(state.activeTokenCount, 1);
+        assert.equal(state.tokens[0].id, tokenId);
+        assert.equal(state.tokens[0].connectorId, "merge-end");
+        assert.equal(state.tokens[0].travelStartedAt, 0);
+        assert.deepEqual(state.mergeWaiting, {});
+        assert.equal(runtime.tick(1000).activeTokenCount, 0);
+    }
+});
+
+test("Exclusive join pass-through preserves repeated arrivals from the same input", () => {
+    const runtime = mergeProcess([0, 0], "passThrough");
+    const ids = [runtime.start(0), runtime.start(250)];
+    const state = runtime.captureState();
+    assert.deepEqual(state.tokens.map(token => token.id), ids);
+    assert.deepEqual(state.tokens.map(token => token.connectorId), ["merge-end", "merge-end"]);
+    assert.deepEqual(state.tokens.map(token => token.travelStartedAt), [0, 250]);
+    assert.deepEqual(state.mergeWaiting, {});
+    assert.equal(runtime.tick(1000).activeTokenCount, 1);
+    assert.equal(runtime.tick(1250).activeTokenCount, 0);
+});
+
+test("Exclusive join pass-through never combines simultaneous arrivals from different inputs", () => {
+    const runtime = mergeProcess([0, 0.4, 0.8], "passThrough");
+    const ids = [runtime.start(0), runtime.start(0), runtime.start(0)];
+    const state = runtime.captureState();
+    assert.deepEqual(state.tokens.map(token => token.id), ids);
+    assert.equal(state.tokens.every(token => token.connectorId === "merge-end"), true);
+    assert.deepEqual(state.mergeWaiting, {});
+    assert.equal(runtime.tick(1000).activeTokenCount, 0);
+});
+
 test("Merge does not fire for two tokens from the same incoming connector", () => {
     const runtime = mergeProcess([0, 0]);
     runtime.start(0);
@@ -677,6 +1058,145 @@ test("Pan changes only viewport state and leaves frozen geometry intact", () => 
     assert.equal(after.offsetX, original.offsetX + 27);
     assert.equal(after.offsetY, original.offsetY - 13);
     assert.deepEqual(process.presentation, before);
+});
+
+test("Current Editor framing preserves the selected region and center across aspect ratios", () => {
+    const region = { x: 120, y: -80, width: 800, height: 400 };
+    const content = { x: -1000, y: -1000, width: 10000, height: 5000 };
+    const viewport = new PublishedViewport(content, 800, 400, 48, { visibleRegion: region });
+    assert.equal(viewport.scale, 1);
+    assert.equal(viewport.offsetX, -120);
+    assert.equal(viewport.offsetY, 80);
+    viewport.resize(390, 700);
+    assert.equal(viewport.scale, 390 / 800);
+    assert.deepEqual(viewport.toDocument(195, 350), { x: 520, y: 120 });
+    assert.ok(viewport.offsetX + region.x * viewport.scale >= 0);
+    assert.ok(viewport.offsetY + region.y * viewport.scale >= 0);
+    assert.ok(viewport.offsetX + (region.x + region.width) * viewport.scale <= 390);
+    assert.ok(viewport.offsetY + (region.y + region.height) * viewport.scale <= 700);
+    viewport.resize(1600, 800);
+    assert.equal(viewport.scale, 2);
+});
+
+test("Initial framing is bounded and invalid regions fail instead of silently fitting", () => {
+    for (const size of [1e-200, 1e9]) {
+        const viewport = new PublishedViewport({ x: 0, y: 0, width: 100, height: 100 }, 800, 600, 48,
+            { visibleRegion: { x: 1, y: 2, width: size, height: size } });
+        assert.ok(viewport.scale >= .08 && viewport.scale <= 16);
+        assert.ok([viewport.scale, viewport.offsetX, viewport.offsetY].every(Number.isFinite));
+    }
+    for (const region of [null, {}, { x: 0, y: 0, width: 0, height: 1 },
+        { x: NaN, y: 0, width: 1, height: 1 }, { x: 0, y: 0, width: -1, height: 1 },
+        { x: 1e308, y: 0, width: 1e308, height: 1 }]) {
+        const process = activityProcess();
+        process.initialView = { visibleRegion: region };
+        withViewerStartupEnvironment(process, ({ status }) => {
+            assert.equal(startPublishedViewer(), null);
+            assert.equal(status.hidden, true);
+        });
+    }
+});
+
+test("Older packages retain fitting and resize before interaction recalculates content fit", () => {
+    const process = activityProcess();
+    withViewerStartupEnvironment(process, ({ canvas }) => {
+        const viewer = startPublishedViewer();
+        assert.deepEqual(viewer.viewport.capture(), new PublishedViewport(process.presentation.contentBounds, 800, 600).capture());
+        canvas.bounds.width = 390;
+        viewer.resize();
+        assert.deepEqual(viewer.viewport.capture(), new PublishedViewport(process.presentation.contentBounds, 390, 600).capture());
+        viewer.dispose();
+    });
+});
+
+test("Viewer resize after pointer wheel or button interaction preserves logical center and zoom", () => {
+    for (const custom of [false, true]) for (const interaction of ["pointer", "wheel", "zoom"]) {
+        const process = activityProcess();
+        if (custom) process.initialView = { visibleRegion: { x: 10, y: 20, width: 400, height: 300 } };
+        withViewerStartupEnvironment(process, ({ canvas, zoomInButton }) => {
+            const viewer = startPublishedViewer();
+            if (interaction === "zoom") zoomInButton.click();
+            if (interaction === "wheel") canvas.dispatch("wheel", wheelInput(30, -20));
+            if (interaction === "pointer") {
+                canvas.dispatch("pointerdown", { pointerId: 1, button: 0, clientX: 400, clientY: 400 });
+                canvas.dispatch("pointermove", { pointerId: 1, clientX: 440, clientY: 430 });
+                canvas.dispatch("pointerup", { pointerId: 1, clientX: 440, clientY: 430 });
+            }
+            const center = viewer.viewport.toDocument(400, 300);
+            const scale = viewer.viewport.scale;
+            for (const [width, height] of [[390, 700], [1200, 700], [800, 600]]) {
+                canvas.bounds.width = width;
+                canvas.bounds.height = height;
+                viewer.resize();
+                assert.equal(viewer.viewport.scale, scale);
+                const after = viewer.viewport.toDocument(width / 2, height / 2);
+                assert.ok(Math.abs(after.x - center.x) < 1e-9 && Math.abs(after.y - center.y) < 1e-9);
+            }
+            viewer.dispose();
+        });
+    }
+});
+
+test("Current framing leaves Start activation and subsequent token movement unchanged", () => {
+    const process = activityProcess();
+    process.initialView = { visibleRegion: { x: -10, y: -10, width: 200, height: 150 } };
+    const expected = new PublishedTokenRuntime(activityProcess());
+    expected.start(0);
+    withViewerStartupEnvironment(process, () => {
+        const viewer = startPublishedViewer();
+        viewer.runtime.start(0);
+        for (const time of [0, 1000, 2000, 3000, 5000]) {
+            expected.tick(time);
+            viewer.runtime.tick(time);
+            assert.deepEqual(viewer.runtime.captureState(), expected.captureState());
+        }
+        assert.equal(viewer.viewport.userAdjusted, false);
+        viewer.dispose();
+    });
+});
+
+test("Frozen Pool graphics fit, draw behind nodes, and do not change token execution", () => {
+    const plain = activityProcess();
+    const process = structuredClone(plain);
+    const bounds = { x: -76, y: -40, width: 900, height: 550 };
+    const item = (id, geometryKind, geometryBounds, content = null) => ({
+        id, layer: 0, zIndex: 0, geometryKind, geometryBounds, content, points: [],
+        isClosed: false, textAnchor: point(0, 0), textAlignment: 1, textBaseline: 1,
+        transform: { m11: 1, m12: 0, m21: 0, m22: 1, offsetX: 0, offsetY: 0 },
+        clip: null, fill: "#f8fafc", stroke: "#64748b", strokeWidth: 1.5,
+        dashPattern: [], opacity: 1, fontSize: 12, fontFamily: "sans-serif"
+    });
+    const label = item("participant-label", 3, { x: -200, y: -19, width: 400, height: 38 }, "Shared Participant");
+    label.transform = { m11: 0, m12: -1, m21: 1, m22: 0, offsetX: -57, offsetY: 200 };
+    label.clip = bounds;
+    process.presentation.items = [item("pool-background", 0, bounds), label,
+        item("activity-body", 0, process.presentation.nodes[1].bounds)];
+    process.presentation.contentBounds = bounds;
+    const runtime = new PublishedTokenRuntime(process);
+    const baseline = new PublishedTokenRuntime(plain);
+    runtime.start(0);
+    baseline.start(0);
+    const viewport = new PublishedViewport(bounds, 390, 640);
+    assert.ok(viewport.offsetX + bounds.x * viewport.scale >= 0);
+    assert.ok(viewport.offsetY + bounds.y * viewport.scale >= 0);
+    assert.ok(viewport.offsetX + (bounds.x + bounds.width) * viewport.scale <= 390);
+    assert.ok(viewport.offsetY + (bounds.y + bounds.height) * viewport.scale <= 640);
+    const calls = [];
+    const context = new Proxy({}, { get: (target, name) => target[name] ?? ((...args) => calls.push([name, ...args])) });
+    drawPublishedProcess(context, process, runtime.captureState(), viewport, 390, 640);
+    const fills = calls.filter(call => call[0] === "fillRect" || call[0] === "fillText");
+    assert.deepEqual(fills.slice(0, 3), [["fillRect", -76, -40, 900, 550],
+        ["fillText", "Shared Participant", 0, 0], ["fillRect", 100, 40, 40, 30]]);
+    assert.ok(calls.some(call => call[0] === "transform" && call[2] === -1 && call[5] === -57));
+    assert.ok(calls.some(call => call[0] === "clip"));
+    for (const time of [0, 1000, 2000, 2500, 5000]) {
+        runtime.tick(time);
+        baseline.tick(time);
+        assert.deepEqual(runtime.captureState(), baseline.captureState());
+    }
+    assert.deepEqual(process.tokenGraph, plain.tokenGraph);
+    assert.deepEqual(process.presentation.nodes, plain.presentation.nodes);
+    assert.deepEqual(process.presentation.connectors, plain.presentation.connectors);
 });
 
 test("Pointer-correct zoom changes only viewport state", () => {
@@ -848,9 +1368,105 @@ test("Standalone startup uses the static published-process bootstrap", () => {
 
         assert.ok(viewer instanceof PublishedProcessViewer);
         assert.equal(status.hidden, true);
-        assert.equal(status.textContent, "Loading process…");
+        assert.equal(status.textContent, "");
         viewer.dispose();
     });
+});
+
+test("Legacy publication warnings are ignored and supported paths can start", () => {
+    const process = communicationProcess({ catchEvent: true });
+    process.execution.warnings = ["Unsupported sender <script>throw 1</script>"];
+    withViewerStartupEnvironment(process, ({ status, startButton }) => {
+        const viewer = startPublishedViewer();
+        assert.ok(viewer);
+        assert.equal(status.hidden, true);
+        assert.equal(status.textContent, "");
+        startButton.click();
+        assert.equal(viewer.runtime.captureState().startedTokenCount, 1);
+        viewer.dispose();
+    });
+});
+
+test("New standalone shells need no diagnostic status element", () => {
+    withViewerStartupEnvironment(activityProcess(), ({ elements, startButton }) => {
+        elements.delete("viewer-status");
+        const viewer = startPublishedViewer();
+        assert.ok(viewer);
+        startButton.click();
+        assert.equal(viewer.runtime.captureState().startedTokenCount, 1);
+        viewer.dispose();
+    });
+});
+
+test("An older queued animation frame cannot rewind a newly activated Start", () => {
+    withViewerStartupEnvironment(communicationProcess(), ({ canvas }) => {
+        const viewer = new PublishedProcessViewer(canvas, communicationProcess(), {}, { now: () => 101 });
+        viewer.context = new Proxy({}, { get: (target, name) => target[name] ?? (() => {}) });
+        viewer.runtime.activateStart("enable-start");
+        viewer.runtime.activateStart("send-start");
+        viewer.drawFrame(100);
+        assert.equal(viewer.runtime.captureState().activityOutputCounts.receive ?? 0, 0);
+        assert.equal(viewer.runtime.tick(2100).activityOutputCounts.receive ?? 0, 0);
+        assert.equal(viewer.runtime.tick(2101).activityOutputCounts.receive, 1);
+        viewer.drawFrame(2099);
+        assert.equal(viewer.runtime.captureState().activityOutputCounts.receive, 1);
+        viewer.dispose();
+    });
+});
+
+test("Communication diamonds and ordinary circles share the same pan and zoom transform", () => {
+    const process = communicationProcess({ catchEvent: true, messagePoints: [point(0, 0), point(0, 600)] });
+    const runtime = new PublishedTokenRuntime(process);
+    runtime.start(0);
+    runtime.tick(500);
+    const state = runtime.captureState();
+    assert.equal(state.tokens.filter(token => token.kind === "communication").length, 1);
+    for (const width of [390, 1840]) {
+        const viewport = new PublishedViewport(process.presentation.contentBounds, width, 800);
+        viewport.zoomAt(2, width / 2, 400);
+        viewport.pan(87, -42);
+        const calls = [];
+        const colors = [];
+        const context = new Proxy({}, {
+            get: (target, name) => target[name] ?? ((...args) => calls.push([name, ...args])),
+            set: (target, name, value) => { if (name === "fillStyle") colors.push(value); target[name] = value; return true; }
+        });
+        drawPublishedProcess(context, process, state, viewport, width, 800);
+        assert.ok(calls.some(call => call[0] === "transform" && call[1] === viewport.scale && call[5] === viewport.offsetX));
+        assert.equal(calls.filter(call => call[0] === "arc").length, 1);
+        assert.equal(calls.filter(call => call[0] === "lineTo").length, 3);
+        assert.ok(colors.includes("#0284c7"));
+        assert.ok(colors.includes("#f97316"));
+    }
+});
+
+test("Ordinary Activity outputs suppress attached notifications without cancelling concurrent work", () => {
+    const process = communicationProcess({ triggers: [{ nodeId: "notify", kind: "completion", interrupting: true }] });
+    process.execution.receiverIds = [];
+    process.execution.senderIds = [];
+    process.execution.communicationRoutes[0].canDeliver = false;
+    const runtime = new PublishedTokenRuntime(process);
+    runtime.activateStart("enable-start", 0);
+    runtime.activateStart("enable-start", 50);
+    runtime.tick(2050);
+    assert.equal(runtime.captureState().activityOutputCounts.receive, 2);
+    assert.equal(runtime.captureState().boundaryActivationCounts.notify ?? 0, 0);
+});
+
+test("Execution metadata preserves Parallel synchronization and exclusive pass-through", () => {
+    for (const role of ["parallelSynchronize", "passThrough"]) {
+        const process = parallelRuntime(["a", "b"], ["out"]).process;
+        process.tokenGraph.nodes.find(node => node.id === "parallel").role = role;
+        process.execution = { senderIds: [], catchIds: [], receiverIds: [], communicationRoutes: [], attachedTriggers: [], warnings: [] };
+        let branch = 0;
+        const runtime = new PublishedTokenRuntime(process, { random: () => branch++ === 0 ? 0 : 0.75 });
+        runtime.start(0);
+        assert.equal(runtime.captureState().tokens[0].state, role === "passThrough" ? "travelling" : "parallel-wait");
+        runtime.start(0);
+        assert.equal(runtime.captureState().tokens.filter(token => token.state === "travelling").length, role === "passThrough" ? 2 : 1);
+        runtime.tick(2000);
+        assert.equal(runtime.captureState().activeTokenCount, 0);
+    }
 });
 
 test("Description data is inert and does not create viewer UI", () => {
@@ -879,19 +1495,19 @@ test("Description data is inert and does not create viewer UI", () => {
     }
 });
 
-test("Missing bootstrap reports bounded startup failure", () => {
+test("Missing bootstrap fails quietly without publication messages", () => {
     withViewerStartupEnvironment(undefined, ({ status }) => {
         assert.equal(startPublishedViewer(), null);
-        assert.equal(status.hidden, false);
-        assert.equal(status.textContent, "This published process could not be displayed.");
+        assert.equal(status.hidden, true);
+        assert.equal(status.textContent, "");
     });
 });
 
-test("Invalid bootstrap reports bounded startup failure", () => {
+test("Invalid bootstrap fails quietly without publication messages", () => {
     withViewerStartupEnvironment({ format: "unsupported" }, ({ status }) => {
         assert.equal(startPublishedViewer(), null);
-        assert.equal(status.hidden, false);
-        assert.equal(status.textContent, "This published process could not be displayed.");
+        assert.equal(status.hidden, true);
+        assert.equal(status.textContent, "");
     });
 });
 

@@ -39,7 +39,7 @@ public sealed partial class DocumentCanvasHostTests
         using var services = new ServiceCollection().AddLogging().AddInceptusBpmnModeler().BuildServiceProvider();
         var text = services.GetRequiredService<IStringLocalizer<ModelerStrings>>();
         foreach (var key in new[] { "ElementToolbox_Actions", "ElementToolbox_Create", "ElementToolbox_AutoPoints",
-            "ElementToolbox_PropertiesHint", "ElementToolbox_Failed", "Toolbox_Events", "Toolbox_Activities", "Toolbox_Gateways" })
+            "ElementToolbox_PropertiesHint", "ElementToolbox_OpenSubProcess", "ElementToolbox_Failed", "Toolbox_Events", "Toolbox_Activities", "Toolbox_Gateways" })
             Assert.False(text[key].ResourceNotFound, language + ": " + key);
         foreach (var candidate in BpmnSmartNextCatalog.GetCandidates(A24Snapshot(), new("source"), A24Snapshot().SemanticModel.RootScopeId))
             Assert.False(text[ModelerLabels.ToolboxKey(candidate.ItemId.Value)!].ResourceNotFound);

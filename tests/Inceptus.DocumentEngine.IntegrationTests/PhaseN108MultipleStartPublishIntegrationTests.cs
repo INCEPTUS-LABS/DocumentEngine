@@ -108,12 +108,15 @@ public sealed class PhaseN108MultipleStartPublishIntegrationTests
         AssertBootstrapEqualsProcessJson(package);
     }
 
-    [Fact]
-    public async Task ConvergentStartsShareCanonicalMergeAndDownstreamIdentitiesExactlyOnce()
+    [Theory]
+    [InlineData(2)]
+    [InlineData(3)]
+    public async Task ConvergentStartsPublishExclusiveJoinAsPassThroughWithCanonicalIdentities(int startCount)
     {
+        var starts = Enumerable.Range(0, startCount).Select(index => $"start-{index}").ToArray();
         var snapshot = CreateSnapshot(
-            ["start-a", "start-b", "merge", "task-shared", "end-shared"],
-            [("start-a", "merge"), ("start-b", "merge"),
+            [.. starts, "merge", "task-shared", "end-shared"],
+            [.. starts.Select(start => (start, "merge")),
              ("merge", "task-shared"), ("task-shared", "end-shared")]);
         var capture = await CaptureAsync(snapshot);
 
@@ -127,11 +130,16 @@ public sealed class PhaseN108MultipleStartPublishIntegrationTests
             package.Snapshot.Presentation.Connectors.Select(connector => connector.Id));
         var merge = Assert.Single(package.Snapshot.TokenGraph.Nodes, node =>
             node.Id == NodeId("merge").Value);
-        Assert.Equal(PublishedTokenRole.MergeInvariant, merge.Role);
-        Assert.Equal(2, merge.IncomingConnectorIds.Length);
+        Assert.Equal(PublishedTokenRole.PassThrough, merge.Role);
+        Assert.Equal(startCount, merge.IncomingConnectorIds.Length);
         Assert.Single(merge.OutgoingConnectorIds);
-        Assert.Equal(5, package.Snapshot.TokenGraph.Nodes.Select(node => node.Id)
+        Assert.Equal(startCount + 3, package.Snapshot.TokenGraph.Nodes.Select(node => node.Id)
             .Distinct(StringComparer.Ordinal).Count());
+        using var json = JsonDocument.Parse(package.ProcessJson.AsMemory());
+        var serializedJoin = json.RootElement.GetProperty("tokenGraph").GetProperty("nodes")
+            .EnumerateArray().Single(node => node.GetProperty("id").GetString() == merge.Id);
+        Assert.Equal("passThrough", serializedJoin.GetProperty("role").GetString());
+        Assert.Equal(1, package.Snapshot.FormatVersion);
         AssertBootstrapEqualsProcessJson(package);
     }
 

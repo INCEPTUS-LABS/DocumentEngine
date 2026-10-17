@@ -19,10 +19,12 @@ using Inceptus.DocumentEngine.Contracts.Visuals;
 
 namespace Inceptus.DocumentEngine.IntegrationTests;
 
-public sealed class PhaseN104StaticPublishIntegrationTests
+public sealed partial class PhaseN104StaticPublishIntegrationTests
 {
-    [Fact]
-    public async Task A22DocumentViewPublicationIsRejectedBeforeBuildingTheProcessExecutionGraph()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A22DocumentViewPublicationIsRejectedBeforeBuildingTheProcessExecutionGraph(bool includePools)
     {
         var composition = await BpmnModelerTestComposition.DemoFactory.CreateAsync();
         await using var renderer = CreateRenderer();
@@ -54,7 +56,8 @@ public sealed class PhaseN104StaticPublishIntegrationTests
         Assert.Equal(new DocumentPresentationContext(ownerId), documentView.PresentationContext);
 
         // The publication boundary rejects a document view before interpreting any connector as execution flow.
-        var result = new PublishedProcessPackageBuilder(new BpmnPublishedTokenRoleClassifier()).Build(documentView);
+        var result = new Inceptus.Bpmn.Integration.PublishingPackageGenerator().Generate(documentView.Document, documentView,
+            new Inceptus.Bpmn.Integration.BpmnPublishingOptions { IncludePools = includePools });
 
         Assert.False(result.Succeeded);
         Assert.Null(result.Package);
@@ -65,7 +68,7 @@ public sealed class PhaseN104StaticPublishIntegrationTests
     }
 
     [Fact]
-    public async Task CurrentNestedScopePublishesMinimalReachableStartActivityEndPackage()
+    public async Task CurrentNestedScopePublishesReachableSequenceAndAttachedBoundaryPaths()
     {
         var composition = await BpmnModelerTestComposition.DemoFactory.CreateAsync();
         await using var renderer = CreateRenderer();
@@ -108,7 +111,10 @@ public sealed class PhaseN104StaticPublishIntegrationTests
         Assert.Equal(BpmnDemoPipeline.ProcessOrderScopeId.Value,
             package.Snapshot.Source.ScopeId);
         Assert.Equal(before.DocumentRevision.Value, package.Snapshot.Source.Revision);
-        Assert.Equal(3, package.Snapshot.TokenGraph.Nodes.Length);
+        Assert.Equal(5, package.Snapshot.TokenGraph.Nodes.Length);
+        var trigger = Assert.Single(package.Snapshot.Execution!.AttachedTriggers);
+        Assert.Contains(package.Snapshot.TokenGraph.Nodes, node => node.Id == trigger.OwnerId);
+        Assert.Contains(package.Snapshot.TokenGraph.Nodes, node => node.Id == trigger.NodeId);
         Assert.Contains(package.Snapshot.TokenGraph.Nodes,
             node => node.Role == PublishedTokenRole.Start);
         Assert.Contains(package.Snapshot.TokenGraph.Nodes,

@@ -159,6 +159,7 @@ public sealed partial class DocumentCanvasHostTests
         Assert.Contains(compact ? "properties-form-compact" : "properties-form-wide", form, StringComparison.Ordinal);
         Assert.Equal(!compact, form.Contains("properties-field-long-form", StringComparison.Ordinal));
         Assert.Equal(!compact, form.Contains("properties-long-form-editor", StringComparison.Ordinal));
+        if (!compact) Assert.Matches("<textarea[^>]*rows=\"9\"", form);
 
         Assert.True(host.TryCaptureCurrentPropertiesForm(out var current));
         var usesDataGrid = !compact && BpmnTaskSemanticTypes.IsTask(new SemanticTypeId(type));

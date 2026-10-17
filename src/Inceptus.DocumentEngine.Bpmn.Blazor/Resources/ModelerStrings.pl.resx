@@ -262,4 +262,10 @@
   <data name="Toolbar_AlignVertical" xml:space="preserve"><value>Wyrównaj w pionie do pierwszego zaznaczonego elementu</value></data>
   <data name="Toolbar_MaximizeDrawingArea" xml:space="preserve"><value>Maksymalizuj obszar rysowania</value></data>
   <data name="Toolbar_RestoreDrawingArea" xml:space="preserve"><value>Przywróć obszar rysowania</value></data>
+  <data name="Publication_IncludePools" xml:space="preserve"><value>Uwzględnij pule w publikowanym diagramie</value></data>
+  <data name="ElementToolbox_OpenSubProcess" xml:space="preserve"><value>Otwórz podproces</value></data>
+  <data name="Publication_InitialView" xml:space="preserve"><value>Widok początkowy</value></data>
+  <data name="Publication_CurrentEditorView" xml:space="preserve"><value>Użyj bieżącego widoku edytora</value></data>
+  <data name="Publication_FitEntireDiagram" xml:space="preserve"><value>Dopasuj cały diagram</value></data>
+  <data name="Publication_PublishWarnings" xml:space="preserve"><value>Opublikowano z ostrzeżeniami</value></data>
 </root>

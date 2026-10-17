@@ -39,10 +39,10 @@ public sealed record PublishedProcessPackageBuildResult
     public ImmutableArray<Diagnostic> Diagnostics { get; }
 
     internal static PublishedProcessPackageBuildResult Success(
-        PublishedProcessPackage package)
+        PublishedProcessPackage package, IEnumerable<Diagnostic>? diagnostics = null)
     {
         ArgumentNullException.ThrowIfNull(package);
-        return new(package, null);
+        return new(package, diagnostics);
     }
 
     internal static PublishedProcessPackageBuildResult Failure(
@@ -139,9 +139,23 @@ public sealed class PublishedProcessPackageBuilder
     }
 
     public PublishedProcessPackageBuildResult Build(
-        EditingSessionPresentationCapture capture)
+        EditingSessionPresentationCapture capture) => Build(capture, ImmutableHashSet<SemanticElementId>.Empty);
+
+    /// <summary>
+    /// Includes frozen graphics for the requested projected region containers. The caller owns
+    /// domain policy; containers remain presentation-only and do not enter the token graph.
+    /// </summary>
+    public PublishedProcessPackageBuildResult Build(
+        EditingSessionPresentationCapture capture,
+        ImmutableHashSet<SemanticElementId> includedContainerIds) => Build(capture, includedContainerIds, null);
+
+    public PublishedProcessPackageBuildResult Build(
+        EditingSessionPresentationCapture capture,
+        ImmutableHashSet<SemanticElementId> includedContainerIds,
+        PublishedInitialView? initialView)
     {
         ArgumentNullException.ThrowIfNull(capture);
+        ArgumentNullException.ThrowIfNull(includedContainerIds);
         if (capture.PresentationContext is DocumentPresentationContext context)
         {
             return PublishedProcessPackageBuildResult.Failure(
@@ -152,6 +166,14 @@ public sealed class PublishedProcessPackageBuilder
             ]);
         }
         var diagnostics = new List<Diagnostic>();
+        if (initialView is not null && (initialView.VisibleRegion is not { } region ||
+            !double.IsFinite(region.X) || !double.IsFinite(region.Y) ||
+            !double.IsFinite(region.Width) || !double.IsFinite(region.Height) ||
+            region.Width <= 0 || region.Height <= 0 ||
+            !double.IsFinite(region.X + region.Width) || !double.IsFinite(region.Y + region.Height) ||
+            !double.IsFinite((region.X + region.Width / 2) * 16) || !double.IsFinite((region.Y + region.Height / 2) * 16)))
+            diagnostics.Add(new Diagnostic("PUBLISH_INITIAL_VIEW_INVALID", DiagnosticSeverity.Error,
+                "The initial visible region must have finite coordinates and positive dimensions within supported zoom limits."));
         foreach (var edge in capture.ProjectedGraph.Edges)
             if (capture.Document.SemanticModel.TryGetRelationship(edge.Source.SemanticElementId, out var relationship) && relationship is not null)
                 diagnostics.AddRange(_tokenRoleClassifier.ValidateRelationship(relationship));
@@ -166,13 +188,18 @@ public sealed class PublishedProcessPackageBuilder
 #pragma warning disable CA1031 // Package failures are returned as bounded transient diagnostics.
         try
         {
-            var presentationItems = CreatePresentationItems(capture, diagnostics);
+            var execution = (_tokenRoleClassifier as IPublishedExecutionPolicy)?.DescribeExecution(
+                capture.Document,
+                capture.ProjectedGraph.Nodes.Select(node => node.Source.SemanticElementId).ToImmutableHashSet(),
+                capture.ProjectedGraph.Edges.Select(edge => edge.Source.SemanticElementId).ToImmutableHashSet());
+            if (execution is not null) diagnostics.AddRange(execution.Diagnostics);
+            var presentationItems = CreatePresentationItems(capture, includedContainerIds, diagnostics);
             buildStage = "connectors";
             var connectors = CreateConnectors(capture, diagnostics);
             buildStage = "nodes";
             var nodes = CreateNodes(capture, presentationItems, diagnostics);
             buildStage = "token-graph";
-            var tokenNodes = CreateTokenNodes(capture, connectors, diagnostics);
+            var tokenNodes = CreateTokenNodes(capture, connectors, execution?.Metadata, diagnostics);
             if (HasErrors(diagnostics))
             {
                 return PublishedProcessPackageBuildResult.Failure(
@@ -197,14 +224,15 @@ public sealed class PublishedProcessPackageBuilder
                 new PublishedRuntimeConfiguration(
                     DefaultActivityDelayMs,
                     DefaultTokenSpeedPxPerSecond,
-                    DefaultMinimumConnectorDurationMs));
+                    DefaultMinimumConnectorDurationMs))
+            { InitialView = initialView, Execution = RestrictExecution(execution?.Metadata, tokenNodes, connectors) };
             var processJson = JsonSerializer.SerializeToUtf8Bytes(snapshot, JsonOptions)
                 .ToImmutableArray();
             var processDataJavaScript = CreateDataBootstrap(processJson);
             buildStage = "archive";
             var archive = CreateArchive(processJson, processDataJavaScript);
             return PublishedProcessPackageBuildResult.Success(
-                new PublishedProcessPackage(snapshot, processJson, archive));
+                new PublishedProcessPackage(snapshot, processJson, archive), DescribeDiagnostics(capture, diagnostics));
         }
         catch (Exception exception) when (IsNonFatal(exception))
         {
@@ -253,16 +281,21 @@ public sealed class PublishedProcessPackageBuilder
 
     private static ImmutableArray<PublishedPresentationItem> CreatePresentationItems(
         EditingSessionPresentationCapture capture,
+        ImmutableHashSet<SemanticElementId> includedContainerIds,
         List<Diagnostic> diagnostics)
     {
         var items = ImmutableArray.CreateBuilder<PublishedPresentationItem>();
-        var containers = capture.ProjectedGraph.Nodes.Where(static node => node.RegionEnvelope is not null)
-            .Select(static node => node.Id).ToHashSet();
+        var containers = capture.ProjectedGraph.Nodes.Where(static node => node.RegionEnvelope is not null).ToArray();
+        var containerObjects = containers.Select(static node => node.Id).ToHashSet();
+        var includedContainers = containers.Where(node => includedContainerIds.Contains(node.Source.SemanticElementId))
+            .Select(static node => node.Source.SemanticElementId).ToHashSet();
         foreach (var item in capture.Scene.Items
-                     .Where(item => item.Origin.ProjectedObjectId is null || !containers.Contains(item.Origin.ProjectedObjectId))
+                     .Where(item =>
+                         (item.Origin.ProjectedObjectId is { } projected && !containerObjects.Contains(projected)) ||
+                         (item.Origin.SemanticElementId is { } semantic && includedContainers.Contains(semantic) &&
+                          !Canvas2DSceneExportMetadata.IsExcluded(item)))
                      .Where(static item =>
                          item.IsVisible &&
-                         item.Origin.ProjectedObjectId is not null &&
                          (item.Origin.Categories & ExcludedOrigin) == 0)
                      .OrderBy(static item => item.Layer)
                      .ThenBy(static item => item.ZIndex)
@@ -422,8 +455,11 @@ public sealed class PublishedProcessPackageBuilder
     private ImmutableArray<PublishedTokenNode> CreateTokenNodes(
         EditingSessionPresentationCapture capture,
         ImmutableArray<PublishedPresentationConnector> connectors,
+        PublishedExecutionMetadata? execution,
         List<Diagnostic> diagnostics)
     {
+        var communicationIds = execution?.CommunicationRoutes.Select(route => route.ConnectorId).ToHashSet(StringComparer.Ordinal) ?? [];
+        var sequenceConnectors = connectors.Where(connector => !communicationIds.Contains(connector.Id)).ToImmutableArray();
         var publishedNodeIds = capture.Scene.Items
             .Where(static item => item.IsVisible)
             .Select(static item => item.Origin.SemanticElementId?.Value)
@@ -444,10 +480,10 @@ public sealed class PublishedProcessPackageBuilder
                     new PublishedTokenRoleClassificationRequest(
                         node.Source.SemanticElementId,
                         node.Source.SemanticTypeId,
-                        connectors.Count(connector => StringComparer.Ordinal.Equals(
+                        sequenceConnectors.Count(connector => StringComparer.Ordinal.Equals(
                             connector.TargetElementId,
                             nodeId)),
-                        connectors.Count(connector => StringComparer.Ordinal.Equals(
+                        sequenceConnectors.Count(connector => StringComparer.Ordinal.Equals(
                             connector.SourceElementId,
                             nodeId))));
                 return classification.Role == PublishedTokenRole.Start;
@@ -465,8 +501,11 @@ public sealed class PublishedProcessPackageBuilder
             return [];
         }
 
-        var reachableNodeIds = FindReachableNodeIds(startIds, connectors, publishedNodeIds);
-        var tokenConnectors = connectors
+        var deliveryIds = execution?.CommunicationRoutes.Where(route => route.CanDeliver).Select(route => route.ConnectorId).ToHashSet(StringComparer.Ordinal) ?? [];
+        var reachableNodeIds = FindReachableNodeIds(startIds,
+            connectors.Where(connector => !communicationIds.Contains(connector.Id) || deliveryIds.Contains(connector.Id)).ToImmutableArray(),
+            publishedNodeIds, execution?.AttachedTriggers ?? []);
+        var tokenConnectors = sequenceConnectors
             .Where(connector =>
                 reachableNodeIds.Contains(connector.SourceElementId) &&
                 reachableNodeIds.Contains(connector.TargetElementId))
@@ -525,7 +564,8 @@ public sealed class PublishedProcessPackageBuilder
                 continue;
             }
 
-            ValidateRole(node, role, incoming.Length, outgoing.Length, diagnostics);
+            if (!(role == PublishedTokenRole.PassThrough && outgoing.IsEmpty && execution?.SenderIds.Contains(nodeId) == true))
+                ValidateRole(node, role, incoming.Length, outgoing.Length, diagnostics);
             tokenNodes.Add(new PublishedTokenNode(nodeId, role, incoming, outgoing));
         }
 
@@ -535,7 +575,8 @@ public sealed class PublishedProcessPackageBuilder
     private static HashSet<string> FindReachableNodeIds(
         IEnumerable<string> startIds,
         ImmutableArray<PublishedPresentationConnector> connectors,
-        HashSet<string> publishedNodeIds)
+        HashSet<string> publishedNodeIds,
+        ImmutableArray<PublishedAttachedTrigger> triggers)
     {
         var reachable = new HashSet<string>(StringComparer.Ordinal);
         var pending = new Queue<string>();
@@ -553,7 +594,8 @@ public sealed class PublishedProcessPackageBuilder
                              connector.SourceElementId,
                              sourceId))
                          .OrderBy(static connector => connector.Id, StringComparer.Ordinal)
-                         .Select(static connector => connector.TargetElementId))
+                         .Select(static connector => connector.TargetElementId)
+                         .Concat(triggers.Where(trigger => trigger.OwnerId == sourceId).Select(trigger => trigger.NodeId)))
             {
                 if (publishedNodeIds.Contains(targetId) && reachable.Add(targetId))
                 {
@@ -563,6 +605,25 @@ public sealed class PublishedProcessPackageBuilder
         }
 
         return reachable;
+    }
+
+    private static PublishedExecutionMetadata? RestrictExecution(PublishedExecutionMetadata? execution,
+        ImmutableArray<PublishedTokenNode> nodes, ImmutableArray<PublishedPresentationConnector> connectors)
+    {
+        if (execution is null) return null;
+        var ids = nodes.Select(node => node.Id).ToHashSet(StringComparer.Ordinal);
+        var routes = connectors.ToDictionary(connector => connector.Id, StringComparer.Ordinal);
+        return execution with
+        {
+            // Diagnostics belong to the authoring result, never the standalone publication.
+            Warnings = [],
+            SenderIds = execution.SenderIds.Where(ids.Contains).ToImmutableArray(),
+            CatchIds = execution.CatchIds.Where(ids.Contains).ToImmutableArray(),
+            ReceiverIds = execution.ReceiverIds.Where(ids.Contains).ToImmutableArray(),
+            AttachedTriggers = execution.AttachedTriggers.Where(trigger => ids.Contains(trigger.NodeId) && ids.Contains(trigger.OwnerId)).ToImmutableArray(),
+            CommunicationRoutes = execution.CommunicationRoutes.Select(route => route with
+            { CanDeliver = route.CanDeliver && routes.TryGetValue(route.ConnectorId, out var connector) && ids.Contains(connector.SourceElementId) && ids.Contains(connector.TargetElementId) }).ToImmutableArray(),
+        };
     }
 
     private static void ValidateRole(

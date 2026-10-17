@@ -39,6 +39,75 @@ namespace Inceptus.DocumentEngine.UnitTests.Blazor;
 
 public sealed partial class DocumentCanvasHostTests
 {
+    [Theory]
+    [InlineData("en", "Include Pools in published diagram")]
+    [InlineData("pl", "Uwzględnij pule w publikowanym diagramie")]
+    [InlineData("fr", "Inclure les pools dans le diagramme publié")]
+    [InlineData("de", "Pools im veröffentlichten Diagramm anzeigen")]
+    [InlineData("es", "Incluir pools en el diagrama publicado")]
+    public async Task PublishPoolCheckboxIsLocalizedDefaultsOffAndOnlyControlsCurrentZip(string language, string label)
+    {
+        using var culture = new ModelerCultureScope(language);
+        await using var host = CreateHost(new RecordingRenderExecution(), new RecordingSurfaceObserver(new(1400, 900, 1)),
+            compositionFactory: BpmnModelerTestComposition.DemoFactory);
+        await host.InitializeAsync("publish-options", "container");
+        var session = Session(host);
+        await SaveDefaultPublicationAsync(session);
+        var document = AttachedDocument(session);
+        Assert.True((await session.ExecuteAsync(new SetModelProfileAvailabilityCommand(document.DocumentId, document.Revision,
+            [new ModelProfileAvailabilityChange(OrganizationalModelProfile.Id, true)]))).IsCommitted);
+        await session.WaitForIdleAsync();
+        Assert.True((await session.ExecuteAsync(new CreateOrganizationalPoolCommand(document.DocumentId, document.Revision,
+            new("publish:demo-pool"), session.CaptureState().ActiveScopeId, OrganizationalPoolCreationMode.AdoptEligibleUnassigned,
+            "Published Demo Pool"))).IsCommitted);
+        await session.WaitForIdleAsync();
+        var before = document.CaptureSnapshot();
+        var history = session.CaptureState().HistoryStatus;
+        var activator = new DemoPublishComponentActivator(host);
+        var browser = new PublishDownloadRuntime();
+        using var services = PublishComponentServices(activator, browser);
+        await using var renderer = new HtmlRenderer(services, NullLoggerFactory.Instance);
+        var rendered = await renderer.Dispatcher.InvokeAsync(() => renderer.RenderComponentAsync<BpmnDemoHost>(
+            ParameterView.FromDictionary(new Dictionary<string, object?> { [nameof(BpmnDemoHost.Editor)] = host })));
+        await renderer.Dispatcher.InvokeAsync(async () =>
+        {
+            InitializePublishDialog(activator.Component, host);
+            await activator.Component.RefreshAsync();
+        });
+        var markup = WebUtility.HtmlDecode(await renderer.Dispatcher.InvokeAsync(rendered.ToHtmlString));
+        Assert.Contains(label, markup, StringComparison.Ordinal);
+        var checkbox = System.Text.RegularExpressions.Regex.Match(markup, "<input[^>]*-publication-include-pools\"[^>]*>").Value;
+        Assert.NotEmpty(checkbox);
+        Assert.DoesNotContain("checked", checkbox, StringComparison.Ordinal);
+        Assert.True(markup.IndexOf("-publication-description\"", StringComparison.Ordinal) < markup.IndexOf("-publication-include-pools\"", StringComparison.Ordinal));
+        Assert.True(markup.IndexOf("-publication-include-pools\"", StringComparison.Ordinal) < markup.IndexOf("publication-dialog-actions", StringComparison.Ordinal));
+        var option = typeof(BpmnDemoHost).GetField("_publicationIncludePools", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        await renderer.Dispatcher.InvokeAsync(async () =>
+        {
+            option.SetValue(activator.Component, true);
+            await InvokePublishComponentAsync(activator.Component, "SavePublicationDraftAsync");
+        });
+        Assert.Equal(0, browser.DownloadCount);
+        Assert.Same(before, document.CaptureSnapshot());
+        foreach (var include in new[] { false, true })
+        {
+            await renderer.Dispatcher.InvokeAsync(async () =>
+            {
+                InitializePublishDialog(activator.Component, host);
+                Assert.False((bool)option.GetValue(activator.Component)!);
+                option.SetValue(activator.Component, include);
+                await InvokePublishComponentAsync(activator.Component, "PublishPublicationDraftAsync");
+            });
+            var archive = ReadPublishedArchive(browser.Payload.ToImmutableArray());
+            using var json = JsonDocument.Parse(archive["process.json"]);
+            Assert.Equal(include, json.RootElement.GetProperty("presentation").GetProperty("items").EnumerateArray()
+                .Any(item => item.GetProperty("content").GetString() == "Published Demo Pool"));
+            Assert.Same(before, document.CaptureSnapshot());
+            Assert.Equal(history, session.CaptureState().HistoryStatus);
+        }
+        Assert.Equal(2, browser.DownloadCount);
+    }
+
     private const string HostilePublishedText = "</script><script>alert(1)</script>";
     private const string PublishedDataBootstrapPrefix =
         "globalThis.__INCEPTUS_PUBLISHED_PROCESS__ = ";
@@ -965,7 +1034,10 @@ public sealed partial class DocumentCanvasHostTests
     [InlineData("start", 0, 1, PublishedTokenRole.Start)]
     [InlineData("task", 1, 1, PublishedTokenRole.ActivityDelay)]
     [InlineData("exclusive", 1, 3, PublishedTokenRole.SplitInvariant)]
-    [InlineData("exclusive-merge", 3, 1, PublishedTokenRole.MergeInvariant)]
+    [InlineData("exclusive-merge", 2, 1, PublishedTokenRole.PassThrough)]
+    [InlineData("exclusive-merge", 3, 1, PublishedTokenRole.PassThrough)]
+    [InlineData("exclusive-merge", 4, 1, PublishedTokenRole.PassThrough)]
+    [InlineData("inclusive-merge", 3, 1, PublishedTokenRole.MergeInvariant)]
     [InlineData("parallel", 3, 1, PublishedTokenRole.ParallelSynchronize)]
     [InlineData("event", 1, 1, PublishedTokenRole.PassThrough)]
     [InlineData("end", 2, 0, PublishedTokenRole.End)]
@@ -980,6 +1052,7 @@ public sealed partial class DocumentCanvasHostTests
             "start" => BpmnSemanticTypes.StartEvent,
             "task" => BpmnSemanticTypes.Task,
             "exclusive" or "exclusive-merge" => BpmnSemanticTypes.ExclusiveGateway,
+            "inclusive-merge" => BpmnSemanticTypes.InclusiveGateway,
             "parallel" => BpmnSemanticTypes.ParallelGateway,
             "event" => BpmnSemanticTypes.MessageCatchEvent,
             "end" => BpmnSemanticTypes.EndEvent,
@@ -1156,6 +1229,7 @@ public sealed partial class DocumentCanvasHostTests
 
     private sealed class PublishDownloadRuntime : IJSRuntime
     {
+        internal byte[] Payload { get; private set; } = [];
         internal Exception? Failure { get; set; }
 
         internal int DownloadCount { get; private set; }
@@ -1189,6 +1263,7 @@ public sealed partial class DocumentCanvasHostTests
             {
                 Assert.Equal("downloadFile", identifier);
                 Assert.NotEmpty(Assert.IsType<byte[]>(args![0]));
+                owner.Payload = (byte[])args[0]!;
                 Assert.Equal("application/zip", args[1]);
                 Assert.Equal("published-process.zip", args[2]);
                 owner.DownloadCount++;
