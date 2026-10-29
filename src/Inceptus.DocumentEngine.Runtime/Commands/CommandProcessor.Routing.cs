@@ -12,6 +12,21 @@ namespace Inceptus.DocumentEngine.Runtime.Commands;
 
 public sealed partial class CommandProcessor
 {
+    private static bool CanPreservePreparedGeometry(DocumentSnapshot before, DocumentSnapshot after,
+        PipelineInvalidation invalidation, NodeGeometryPipelineImpact? impact,
+        ImmutableArray<ConnectorRoutingIntent> routingIntents,
+        ImmutableArray<SpatialRegionHeightIntent> heightIntents,
+        ImmutableArray<SpatialScopeWidthIntent> widthIntents,
+        ImmutableArray<NodeGeometryHistorySeed> seeds)
+    {
+        if ((invalidation & (PipelineInvalidation.Projection | PipelineInvalidation.NodeLayout | PipelineInvalidation.Routing)) != 0 ||
+            !routingIntents.IsEmpty || !heightIntents.IsEmpty || !widthIntents.IsEmpty || !seeds.IsEmpty ||
+            impact is not null && !impact.Equals(NodeGeometryPipelineImpact.PreserveAll)) return false;
+        var previous = DocumentSnapshotCloner.CloneAtRevision(before, after.Revision);
+        // Prepared geometry is authoritative. The ordinary invariant validation still runs below.
+        return previous.SemanticModel.Equals(after.SemanticModel) && previous.VisualModel.Equals(after.VisualModel);
+    }
+
     private static bool OnlySavedCaptionsChanged(ImmutableArray<ScopeRoutingSnapshot>? before,
         ImmutableArray<ScopeRoutingSnapshot>? after)
     {

@@ -43,13 +43,15 @@ internal sealed class BpmnMessageFlowLifetimeHistoryPolicy : ICommandHistoryPoli
         VisualStateId? targetVisualId, ConnectorAnchorId? targetAnchorId)
     {
         if (!BpmnMessageFlowCommandSupport.TryGet(document, id, visualId, out var relationship, out var visual)) return null;
+        var scope = document.VisualModel.RoutingScopes?.SingleOrDefault(state => state.Connectors.Any(record => record.VisualStateId == visualId));
         var owner = document.VisualModel.DocumentRoutingStates.SingleOrDefault(state => state.Connectors.Any(record => record.VisualStateId == visualId));
-        var index = owner is null ? -1 : owner.Connectors.IndexOf(owner.Connectors.Single(record => record.VisualStateId == visualId));
+        var records = scope?.Connectors ?? owner?.Connectors ?? [];
+        var record = records.SingleOrDefault(record => record.VisualStateId == visualId);
         ConnectorAnchor? anchor = null;
         if (targetVisualId is not null && targetAnchorId is not null && document.VisualModel.TryGetVisualState(targetVisualId, out var target))
             anchor = target!.ConnectorAnchors.Single(candidate => candidate.Id == targetAnchorId);
-        return new MessageFlowOwnedState(relationship!, visual!, owner?.OwnerId, index,
-            owner?.Connectors.Single(record => record.VisualStateId == visualId), targetVisualId, anchor);
+        return new MessageFlowOwnedState(relationship!, visual!, scope?.ScopeId, owner?.OwnerId,
+            record is null ? -1 : records.IndexOf(record), record, targetVisualId, anchor);
     }
 
     private sealed class Factory(MessageFlowOwnedState state, bool exists) : IHistoryCommandFactory
@@ -60,7 +62,7 @@ internal sealed class BpmnMessageFlowLifetimeHistoryPolicy : ICommandHistoryPoli
 }
 
 internal sealed record MessageFlowOwnedState(SemanticRelationshipSnapshot Relationship, VisualStateSnapshot Visual,
-    SemanticElementId? RoutingOwner, int RoutingIndex, ConnectorRoutingRecord? RoutingRecord,
+    DocumentScopeId? RoutingScope, SemanticElementId? RoutingOwner, int RoutingIndex, ConnectorRoutingRecord? RoutingRecord,
     VisualStateId? TargetVisualId, ConnectorAnchor? OwnedTargetAnchor);
 
 internal sealed class RestoreBpmnMessageFlowCommand(DocumentId documentId, DocumentRevision revision,
@@ -120,6 +122,13 @@ internal sealed class RestoreBpmnMessageFlowCommandHandler : ICommandHandler, IC
             visuals[visuals.IndexOf(target)] = changed;
         }
         var routing = BpmnMessageFlowCommandSupport.WithoutRoutingRecord(document, state.Visual.Id).ToList();
+        var scopes = document.VisualModel.RoutingScopes?.Select(scope =>
+        {
+            var records = scope.Connectors.Where(record => record.VisualStateId != state.Visual.Id).ToList();
+            if (restore.Exists && scope.ScopeId == state.RoutingScope && state.RoutingRecord is { } record)
+                records.Insert(Math.Clamp(state.RoutingIndex, 0, records.Count), record);
+            return new ScopeRoutingSnapshot(scope.ScopeId, scope.Geometry, records);
+        });
         if (restore.Exists)
         {
             relationships = relationships.Append(state.Relationship);
@@ -133,7 +142,11 @@ internal sealed class RestoreBpmnMessageFlowCommandHandler : ICommandHandler, IC
                 routing.Add(new DocumentRoutingSnapshot(owner, records));
             }
         }
-        var proposed = BpmnMessageFlowCommandSupport.Replace(document, relationships, visuals, routing);
+        var semantic = document.SemanticModel;
+        var proposed = new DocumentSnapshot(new SemanticModelSnapshot(document.DocumentId, document.Revision, semantic.Elements,
+                relationships, semantic.NestedScopes, semantic.ScopeMemberships, semantic.ModelProfiles, semantic.ProfileAssignments),
+            new VisualModelSnapshot(document.DocumentId, document.Revision, visuals, document.VisualModel.ProfileElementPresentations,
+                scopes, routing), document.Metadata, document.Publication);
         if (restore.Exists)
         {
             var diagnostics = BpmnMessageFlowSemantics.ValidatePresentation(proposed, state.Relationship.SourceId, state.Relationship.TargetId)

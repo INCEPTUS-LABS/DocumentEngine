@@ -59,11 +59,11 @@ public sealed partial class DocumentCanvasHostTests
         if (BpmnSemanticTypes.IsEvent(snapshot.TypeId))
         {
             Assert.NotEmpty(snapshot.DataFields);
-            Assert.Empty(draft.DataFields);
-            Assert.False(snapshot.CanEditData);
+            Assert.Equal("name", Assert.Single(draft.DataFields).FieldId.Value);
+            Assert.True(snapshot.CanEditData);
             Assert.False(snapshot.CanEditBounds);
-            Assert.DoesNotContain("data-property-group=\"data\"", form, StringComparison.Ordinal);
-            Assert.DoesNotContain("-properties-data-field-", form, StringComparison.Ordinal);
+            Assert.Contains("data-property-group=\"data\"", form, StringComparison.Ordinal);
+            Assert.Contains("-properties-data-field-name\"", form, StringComparison.Ordinal);
         }
         else
         {

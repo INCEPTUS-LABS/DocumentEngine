@@ -693,7 +693,7 @@ public sealed partial class Canvas2DSceneBuilder
                     foreach (var previewLine in CreateMeasuredNodeLabelItems(
                                  measuredLabel,
                                  measuredPreview,
-                                 visualItem.PersistentAppearance))
+                                 visualItem.PersistentAppearance, ResolveLabelPaint(persistentItems, labelId)))
                     {
                         items.Add(MaterializeProcessLocalEditorOverlay(
                             CreateMeasuredResizePreviewItem(
@@ -736,11 +736,11 @@ public sealed partial class Canvas2DSceneBuilder
                                 unmeasuredLabel,
                                 resizedOwner,
                                 manualOverride!,
-                                visualItem.PersistentAppearance)
+                                visualItem.PersistentAppearance, ResolveLabelPaint(persistentItems, unmeasuredLabelId))
                             : CreateUnmeasuredOutsideNodeLabelItem(
                                 unmeasuredLabel,
                                 resizedOwner,
-                                visualItem.PersistentAppearance);
+                                visualItem.PersistentAppearance, ResolveLabelPaint(persistentItems, unmeasuredLabelId));
                         items.Add(CreateMeasuredResizePreviewItem(
                             previewLine,
                             gesture,
@@ -1569,7 +1569,7 @@ public sealed partial class Canvas2DSceneBuilder
                     nodeTarget.Bounds,
                     nodeTarget.Transform),
                 previewOverride,
-                persistentAppearance);
+                persistentAppearance, ResolveLabelPaint(persistentItems, labelId));
             items.Add(CreateMeasuredResizePreviewItem(
                 previewItem,
                 gesture,
@@ -1595,7 +1595,7 @@ public sealed partial class Canvas2DSceneBuilder
         foreach (var previewItem in CreateMeasuredNodeLabelItems(
                      measuredLabel,
                      preview,
-                     persistentAppearance))
+                     persistentAppearance, ResolveLabelPaint(persistentItems, labelId)))
         {
             var materialized = MaterializeProcessLocalEditorOverlay(
                 CreateMeasuredResizePreviewItem(
@@ -1614,6 +1614,10 @@ public sealed partial class Canvas2DSceneBuilder
         return true;
     }
 
+    private static Canvas2DSceneStyle? ResolveLabelPaint(IEnumerable<Canvas2DSceneItem> items, ProjectedObjectId labelId) =>
+        items.FirstOrDefault(item => item.Origin.ProjectedObjectId == labelId &&
+            item.Geometry.Kind == Canvas2DSceneGeometryKind.Text)?.Style;
+
     private static void ComposeNodeLabelResizeBoundary(
         Canvas2DSceneItem target, RectD previewBounds, List<Canvas2DSceneItem> items)
     {
@@ -1624,7 +1628,9 @@ public sealed partial class Canvas2DSceneBuilder
         var previewTarget = new Canvas2DSceneItem(target.Id, target.Layer, target.ZIndex,
             Canvas2DSceneGeometry.Rectangle(previewBounds), target.Origin,
             hitTestPolicy: Canvas2DHitTestPolicy.None, bounds: previewBounds);
-        items.AddRange(CreateTargetOverlays(previewTarget, "hover", 2000, "#f59e0b", false, []));
+        var selected = items.Any(item => item.Origin.VisualStateId == target.Origin.VisualStateId &&
+            item.Origin.StableSourceKey?.StartsWith("selection:", StringComparison.Ordinal) == true);
+        items.AddRange(CreateTargetOverlays(previewTarget, "hover", 2000, selected ? "#2563eb" : "#f59e0b", false, []));
     }
 
     private static Canvas2DSceneItem CreateTranslatedLabelPreview(

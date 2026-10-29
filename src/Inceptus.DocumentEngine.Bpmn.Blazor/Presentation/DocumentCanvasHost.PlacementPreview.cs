@@ -1,5 +1,6 @@
 using Inceptus.DocumentEngine.Canvas2D.EditingSession;
 using Inceptus.DocumentEngine.Contracts.Canvas2D;
+using Inceptus.DocumentEngine.Contracts.EditorState;
 using Inceptus.DocumentEngine.Contracts.Geometry;
 
 namespace Inceptus.DocumentEngine.Bpmn.Blazor.Presentation;
@@ -8,6 +9,30 @@ internal sealed partial class DocumentCanvasHost
 {
     private PointD? _placementPointerCssPoint;
     private EditingSessionState? _placementEvaluatedState;
+    private EditingSessionState? _placementPreviewSource;
+
+    // Coalesce only intermediate presentation notifications inside the awaited pointer
+    // preview operation. Session state and command readiness remain authoritative/live.
+    private bool CanDeferPlacementPreviewNotification(EditingSessionState state) =>
+        _placementPreviewSource is { IsGraphicalInteractionEnabled: true } source &&
+        !state.IsClosed && !state.IsCurrentScenePresented &&
+        state.Status is EditingSessionStatus.Rebuilding or EditingSessionStatus.Ready &&
+        !_surfaceRenderPending && !_propertiesFormOpen && !_modelViewPropertiesFormOpen &&
+        _contextMenu is null && _hostDiagnostics.IsEmpty &&
+        state.RuntimeDiagnostics.IsEmpty && state.PresentationDiagnostics.IsEmpty &&
+        state.DocumentId == source.DocumentId && state.DocumentRevision == source.DocumentRevision &&
+        state.PresentationContext == source.PresentationContext &&
+        state.HistoryStatus.Equals(source.HistoryStatus) &&
+        state.ModelProfileState.Equals(source.ModelProfileState) &&
+        state.ModelProfileViewState.Equals(source.ModelProfileViewState) &&
+        state.ModelProfileElementViewState.Equals(source.ModelProfileElementViewState) &&
+        WithoutPlacementFeedback(state.EditorState).Equals(WithoutPlacementFeedback(source.EditorState));
+
+    private static EditorStateSnapshot WithoutPlacementFeedback(EditorStateSnapshot state) => new(
+        state.Selection, state.HoveredObjectId, state.ActiveToolId, state.FocusTargetId,
+        state.Viewport, state.ActiveGesture,
+        state.TemporaryFeedback.Where(static feedback => feedback.PlacementPreview is null),
+        state.ToolState, state.SemanticSceneSelection);
 
     private void RememberPlacementEvaluation(EditingSession session)
     {

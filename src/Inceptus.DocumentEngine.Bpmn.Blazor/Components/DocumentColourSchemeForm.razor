@@ -1,0 +1,157 @@
+@using System.Globalization
+@using Inceptus.DocumentEngine.Bpmn.Appearance
+@using Microsoft.AspNetCore.Components.Web
+@inject Microsoft.Extensions.Localization.IStringLocalizer<ModelerStrings> Text
+
+<form id="@Id" class="colour-form" role="dialog" aria-modal="true" aria-labelledby="@(Id + "-title")"
+      @onsubmit="AcceptAsync" @onsubmit:preventDefault @onkeydown="KeyDown" @onkeydown:stopPropagation
+      @onpointerdown:stopPropagation @onpointerup:stopPropagation @onclick:stopPropagation @onwheel:stopPropagation>
+    <span class="focus-guard" tabindex="0" @onfocus="FocusLastAsync"></span>
+    <header>
+        <h2 id="@(Id + "-title")">@Text["Appearance_EditColours"]</h2>
+        <button @ref="_closeButton" type="button" class="close" aria-label="@Text["Action_Cancel"]" @onclick="Cancel">×</button>
+    </header>
+    <div class="colour-form-content">
+        <p class="hint">@Text["Appearance_DraftHint"]</p>
+        @if (IsStale)
+        {
+            <p role="alert">@Text["Appearance_Stale"]</p>
+        }
+        @if (HasFallback)
+        {
+            <p role="status">@Text[ReadOnly ? "Appearance_Unsupported" : "Appearance_Fallback"]</p>
+        }
+        <fieldset disabled="@(ReadOnly || IsStale)">
+            <legend>@Text["Appearance_Title"]</legend>
+            <div class="scheme-row">
+                <label>@Text["Appearance_Scheme"]
+                    <select value="@Scheme" @onchange="args => SchemeChanged.InvokeAsync(args.Value?.ToString() ?? Scheme)">
+                        @foreach (var scheme in BpmnAppearanceSettings.Schemes)
+                        {
+                            <option value="@scheme">@Text[$"Appearance_{scheme}"]</option>
+                        }
+                    </select>
+                </label>
+                <button type="button" @onclick="Restore">@Text["Appearance_Restore"]</button>
+            </div>
+            @foreach (var family in BpmnAppearanceSettings.Families)
+            {
+                var shape = BpmnAppearanceSettings.PreviewShape(family);
+                <section class="colour-family" data-appearance-family="@family" @key="family">
+                    <div class="colour-controls">
+                        <h3>@Text[$"Appearance_{family}"]</h3>
+                        @foreach (var channel in BpmnAppearanceSettings.Channels)
+                        {
+                            var value = ReadColour(family, channel);
+                            var controlId = $"{Id}-{family}-{channel}";
+                            var noFill = family == "participant-header" && channel == "background" && value is null;
+                            <div class="colour-channel">
+                                <label for="@controlId">@Text[$"Appearance_{channel}"]</label>
+                                <input type="color" value="@(BpmnAppearanceSettings.IsColour(value) ? value : "#ffffff")"
+                                       aria-label="@($"{Text[$"Appearance_{family}"]} {Text[$"Appearance_{channel}"]}")"
+                                       @onchange="args => ChangeColourAsync(family, channel, args.Value?.ToString())" />
+                                <input id="@controlId" type="text" value="@value" maxlength="7" pattern="#[0-9a-fA-F]{6}"
+                                       required="@(!noFill)" placeholder="@(noFill ? Text["Appearance_NoFill"].Value : "#RRGGBB")"
+                                       aria-label="@($"{Text[$"Appearance_{family}"]} {Text[$"Appearance_{channel}"]} #RRGGBB")"
+                                       aria-invalid="@(!noFill && !BpmnAppearanceSettings.IsColour(value) ? "true" : "false")"
+                                       @oninput="args => ChangeColourAsync(family, channel, args.Value?.ToString())" />
+                            </div>
+                        }
+                        @if (family == "participant-header" && Scheme == BpmnAppearanceSettings.White)
+                        {
+                            <button type="button" class="default-background" @onclick="DefaultBackground">@Text["Appearance_DefaultBackground"]</button>
+                        }
+                    </div>
+                    <div class="colour-preview" role="img" aria-label="@($"{Text["Appearance_Preview"]}: {Text[$"Appearance_{family}"]}")">
+                        <svg viewBox="0 0 250 145" aria-hidden="true" focusable="false">
+                            @if (shape == BpmnAppearancePreviewShape.Header)
+                            {
+                                <g>
+                                <rect x="18" y="12" width="214" height="120" fill="#f8fafc" opacity="0.72" stroke="#64748b" stroke-width="1.5" />
+                                <rect x="18" y="12" width="42" height="120" fill="@Paint(family, "background")" stroke="@Paint(family, "border")" stroke-width="1.5" />
+                                <text x="-72" y="43" transform="rotate(-90)" text-anchor="middle" fill="@Paint(family, "text")" font-size="12">@Text[$"Appearance_{family}"]</text>
+                                <path d="M82 55h120v36H82z" fill="#fff" stroke="#94a3b8" />
+                                </g>
+                            }
+                            else if (shape == BpmnAppearancePreviewShape.Diamond)
+                            {
+                                <g>
+                                <path d="M125 12 187 72 125 132 63 72Z" fill="@Paint(family, "background")" stroke="@Paint(family, "border")" stroke-width="2" />
+                                <text x="125" y="79" text-anchor="middle" fill="@Paint(family, "text")" font-size="22">×</text>
+                                </g>
+                            }
+                            else if (shape == BpmnAppearancePreviewShape.RoundedRectangle)
+                            {
+                                <g>
+                                <rect x="25" y="35" width="200" height="75" rx="12" fill="@Paint(family, "background")" stroke="@Paint(family, "border")" stroke-width="2" />
+                                <text x="125" y="78" text-anchor="middle" fill="@Paint(family, "text")" font-size="15">@Text[$"Appearance_{family}"]</text>
+                                </g>
+                            }
+                            else
+                            {
+                                <g>
+                                <circle cx="125" cy="55" r="35" fill="@Paint(family, "background")" stroke="@Paint(family, "border")" stroke-width="@(shape == BpmnAppearancePreviewShape.ThickCircle ? "4" : "2")" />
+                                <text x="125" y="120" text-anchor="middle" fill="@Paint(family, "text")" font-size="15">@Text[$"Appearance_{family}"]</text>
+                                </g>
+                            }
+                        </svg>
+                        <span>@Text["Appearance_Preview"]</span>
+                    </div>
+                </section>
+            }
+        </fieldset>
+        @if (!IsValid)
+        {
+            <p role="alert">@Text["Appearance_Invalid"]</p>
+        }
+    </div>
+    <footer>
+        <button @ref="_cancelButton" type="button" @onclick="Cancel">@Text["Action_Cancel"]</button>
+        <button @ref="_acceptButton" type="submit" class="primary" disabled="@(ReadOnly || IsStale || !IsValid)">@Text["Appearance_UseColours"]</button>
+    </footer>
+    <span class="focus-guard" tabindex="0" @onfocus="FocusFirstAsync"></span>
+</form>
+
+@code {
+    [CascadingParameter(Name = "ModelerUICulture")] private CultureInfo? RenderCulture { get; set; }
+    [Parameter] public string Id { get; set; } = "document-colours";
+    [Parameter] public string Scheme { get; set; } = BpmnAppearanceSettings.White;
+    [Parameter] public bool ReadOnly { get; set; }
+    [Parameter] public bool IsStale { get; set; }
+    [Parameter] public bool IsValid { get; set; }
+    [Parameter] public bool HasFallback { get; set; }
+    [Parameter, EditorRequired] public Func<string, string, string?> ReadColour { get; set; } = default!;
+    [Parameter] public EventCallback<string> SchemeChanged { get; set; }
+    [Parameter] public EventCallback<(string Family, string Channel, string Value)> ColourChanged { get; set; }
+    [Parameter] public EventCallback Restore { get; set; }
+    [Parameter] public EventCallback DefaultBackground { get; set; }
+    [Parameter] public EventCallback Accept { get; set; }
+    [Parameter] public EventCallback Cancel { get; set; }
+    private ElementReference _closeButton;
+    private ElementReference _acceptButton;
+    private ElementReference _cancelButton;
+
+    private async Task FocusFirstAsync() => await _closeButton.FocusAsync(preventScroll: true);
+    private async Task FocusLastAsync() =>
+        await (ReadOnly || IsStale || !IsValid ? _cancelButton : _acceptButton).FocusAsync(preventScroll: true);
+
+    private Task ChangeColourAsync(string family, string channel, string? value) =>
+        ColourChanged.InvokeAsync((family, channel, value ?? string.Empty));
+
+    private Task AcceptAsync() => !ReadOnly && !IsStale && IsValid ? Accept.InvokeAsync() : Task.CompletedTask;
+
+    private string Paint(string family, string channel)
+    {
+        var value = ReadColour(family, channel);
+        if (BpmnAppearanceSettings.IsColour(value)) return value!;
+        var preset = BpmnAppearanceSettings.Preset(Scheme, family);
+        return (channel switch { "background" => preset.Background, "border" => preset.Border, _ => preset.Text }) ?? "none";
+    }
+
+    private Task KeyDown(KeyboardEventArgs args) => args.Key == "Escape" ? Cancel.InvokeAsync() : Task.CompletedTask;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) await _closeButton.FocusAsync(preventScroll: true);
+    }
+}

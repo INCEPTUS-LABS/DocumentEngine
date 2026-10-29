@@ -130,6 +130,7 @@ internal static class BpmnModelerComposition
             BpmnSemanticTypes.IsFlowNode);
         return OrganizationalPluginRegistration.Create(
             eligibilityPolicy,
-            OrganizationalPoolSceneContributor.CreateRegistration(eligibilityPolicy));
+            OrganizationalPoolSceneContributor.CreateRegistration(eligibilityPolicy,
+                new Inceptus.DocumentEngine.Bpmn.Appearance.BpmnPoolHeaderPaintProvider()));
     }
 }

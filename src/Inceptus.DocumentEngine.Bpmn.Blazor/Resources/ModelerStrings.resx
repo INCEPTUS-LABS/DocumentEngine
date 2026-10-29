@@ -268,4 +268,30 @@
   <data name="Publication_CurrentEditorView" xml:space="preserve"><value>Use current Editor view</value></data>
   <data name="Publication_FitEntireDiagram" xml:space="preserve"><value>Fit entire diagram</value></data>
   <data name="Publication_PublishWarnings" xml:space="preserve"><value>Published with warnings</value></data>
+  <data name="Appearance_DocumentProperties" xml:space="preserve"><value>Document Properties</value></data>
+  <data name="Appearance_Title" xml:space="preserve"><value>Element colours</value></data>
+  <data name="Appearance_Scheme" xml:space="preserve"><value>Colour scheme</value></data>
+  <data name="Appearance_white" xml:space="preserve"><value>White</value></data>
+  <data name="Appearance_mixed" xml:space="preserve"><value>Mixed</value></data>
+  <data name="Appearance_start-event" xml:space="preserve"><value>Start Event</value></data>
+  <data name="Appearance_task" xml:space="preserve"><value>Task</value></data>
+  <data name="Appearance_gateway" xml:space="preserve"><value>Gateway</value></data>
+  <data name="Appearance_end-event" xml:space="preserve"><value>End Event</value></data>
+  <data name="Appearance_background" xml:space="preserve"><value>Background</value></data>
+  <data name="Appearance_border" xml:space="preserve"><value>Border</value></data>
+  <data name="Appearance_text" xml:space="preserve"><value>Text</value></data>
+  <data name="Appearance_Restore" xml:space="preserve"><value>Restore preset defaults</value></data>
+  <data name="Appearance_Fallback" xml:space="preserve"><value>Some saved appearance values are unrecognised. Preset values are displayed; original values are preserved until explicitly edited or reset.</value></data>
+  <data name="Appearance_Unsupported" xml:space="preserve"><value>This appearance version is unsupported. White is displayed and appearance editing is disabled. Original settings are preserved.</value></data>
+  <data name="Appearance_EditColours" xml:space="preserve"><value>Edit Colours</value></data>
+  <data name="Appearance_UseColours" xml:space="preserve"><value>Use Colours</value></data>
+  <data name="Appearance_DraftHint" xml:space="preserve"><value>Changes are saved only when you Apply Document Properties.</value></data>
+  <data name="Appearance_Stale" xml:space="preserve"><value>The document or view changed. Cancel and reopen Document Properties.</value></data>
+  <data name="Appearance_NoFill" xml:space="preserve"><value>Default — no fill</value></data>
+  <data name="Appearance_DefaultBackground" xml:space="preserve"><value>Use default background</value></data>
+  <data name="Appearance_Preview" xml:space="preserve"><value>Live preview</value></data>
+  <data name="Appearance_Invalid" xml:space="preserve"><value>Enter colours as #RRGGBB.</value></data>
+  <data name="Appearance_pool-header" xml:space="preserve"><value>Standalone Pool header</value></data>
+  <data name="Appearance_lane-header" xml:space="preserve"><value>Lane header</value></data>
+  <data name="Appearance_participant-header" xml:space="preserve"><value>Participant header</value></data>
 </root>

@@ -24,7 +24,11 @@ public sealed record ElementToolboxState(VisualStateId VisualId, RectD Anchor, P
     ImmutableArray<ToolboxItemDefinition> Candidates)
 {
     public DocumentScopeId? OpenSubProcessScopeId => NavigationRequest?.Action.TargetScopeId;
-    public double ActionsWidth => OpenSubProcessScopeId is null ? 124d : 162d;
+    public bool IsConnector { get; init; }
+    public bool CanProperties { get; init; } = true;
+    public double ActionsWidth => MeasureActionsWidth(IsConnector, CanProperties, OpenSubProcessScopeId is not null);
+    internal static double MeasureActionsWidth(bool connector, bool properties, bool navigation) =>
+        (connector ? 106d : navigation ? 162d : 124d) - (properties ? 0d : connector ? 48d : 38d);
     internal DocumentCanvasElementScopeNavigationRequest? NavigationRequest { get; init; }
 }
 
@@ -46,6 +50,7 @@ internal sealed partial class DocumentCanvasHost
         {
             if (_disposed || _smartEditEnabled == enabled) return;
             _smartEditEnabled = enabled;
+            _connectorToolboxRequest = null;
             _dismissedElementToolbox = null;
         }
         _ = NotifyStateChangedSafelyAsync();
@@ -53,11 +58,16 @@ internal sealed partial class DocumentCanvasHost
 
     internal void DismissElementToolbox()
     {
-        lock (_sync) _dismissedElementToolbox = _session?.CaptureState().EditorState.Selection.FirstOrDefault();
+        lock (_sync)
+        {
+            _dismissedElementToolbox = _session?.CaptureState().EditorState.Selection.FirstOrDefault();
+            _connectorToolboxRequest = null;
+        }
     }
 
     private ElementToolboxState? CaptureElementToolbox(EditingSessionState? state)
     {
+        if (CaptureConnectorToolbox(state) is { } connector) return _elementToolbox = connector;
         if (!TryCaptureElementToolboxTarget(state, out var document, out var id, out var scope))
             return _elementToolbox = null;
         document.VisualModel.TryGetVisualState(id, out var visual);
@@ -98,7 +108,8 @@ internal sealed partial class DocumentCanvasHost
         var navigation = TryResolveScopeNavigationAction(_scopeNavigationCatalog, document, scope, id, out var action)
             ? new DocumentCanvasElementScopeNavigationRequest(_documentSessionVersion, document.DocumentId, document.Revision, scope, action!)
             : null;
-        var actionsWidth = navigation is null ? 124d : 162d;
+        var canProperties = CaptureToolboxPropertiesEligibility(document, id);
+        var actionsWidth = ElementToolboxState.MeasureActionsWidth(false, canProperties, navigation is not null);
         PointD ClampActions(double x, double y) => new(
             Math.Clamp(x, 8, Math.Max(8, surface.CssWidth - actionsWidth - 8)),
             Math.Clamp(y, 8, Math.Max(8, surface.CssHeight - 56)));
@@ -127,11 +138,16 @@ internal sealed partial class DocumentCanvasHost
         if (_elementToolbox is not { } previous || previous.VisualId != id || previous.Anchor != anchor ||
             previous.ActionsPosition != actions || previous.CreationPosition != lower || previous.CreationWidth != width ||
             previous.CanAutoPoints != _elementCanAutoPoints || previous.CanDelete != _elementCanDelete ||
-            previous.Candidates != _elementCandidates || previous.NavigationRequest != navigation)
+            previous.Candidates != _elementCandidates || previous.NavigationRequest != navigation || previous.CanProperties != canProperties)
             _elementToolbox = new(id, anchor, actions, lower, width, _elementCanAutoPoints, _elementCanDelete, _elementCandidates)
-            { NavigationRequest = navigation };
+            { NavigationRequest = navigation, CanProperties = canProperties };
         return _elementToolbox;
     }
+
+    private bool CaptureToolboxPropertiesEligibility(DocumentSnapshot document, VisualStateId id) =>
+        _propertiesSchemaCatalog is not null &&
+        DocumentCanvasPropertySnapshot.TryCreate(document, id, _propertiesSchemaCatalog, out var properties) &&
+        properties is { IsPropertiesAvailable: true };
 
     private bool TryCaptureElementToolboxTarget(EditingSessionState? state,
         out DocumentSnapshot document, out VisualStateId id, out DocumentScopeId scope)
@@ -241,18 +257,26 @@ internal sealed partial class DocumentCanvasHost
             EditingSessionState? state;
             DocumentSnapshot document;
             VisualStateId id;
+            var connector = false;
             lock (_sync)
             {
                 session = _session;
                 state = session?.CaptureState();
                 if (state is not { Status: EditingSessionStatus.Ready, CurrentScene: not null } ||
                     state.EditorState.ActiveGesture is not null ||
+                    !(connector = TryCaptureConnectorToolboxTarget(state, out document, out id, out _)) &&
                     !TryCaptureElementToolboxTarget(state, out document, out id, out _)) return null;
+                if (connector && (!delete || itemId is not null)) return null;
             }
             if (session is null || !TryResolveVisualPropertiesTarget(state, document, id, null, GetSpatialRegionId(state, id),
                 out var body, out _)) return null;
-            if (_surfaceSize is not { } surface || !ElementToolboxScreenBounds(state.CurrentScene!, body!.Bounds)
-                .Intersects(new RectD(0, 0, surface.CssWidth, surface.CssHeight))) return null;
+            if (_surfaceSize is not { } surface) return null;
+            var bounds = ElementToolboxScreenBounds(state.CurrentScene!, body!.Bounds);
+            // Connector paths can have zero width or height and still cross the viewport.
+            var visible = connector
+                ? bounds.Left < surface.CssWidth && bounds.Right > 0 && bounds.Top < surface.CssHeight && bounds.Bottom > 0
+                : bounds.Intersects(new RectD(0, 0, surface.CssWidth, surface.CssHeight));
+            if (!visible) return null;
             ICommand command;
             if (itemId is not null)
             {

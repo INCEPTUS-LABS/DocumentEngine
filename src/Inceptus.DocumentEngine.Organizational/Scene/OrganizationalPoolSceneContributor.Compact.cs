@@ -11,7 +11,7 @@ namespace Inceptus.DocumentEngine.Organizational.Scene;
 
 public sealed partial class OrganizationalPoolSceneContributor
 {
-    private static Canvas2DSceneContributionResult ContributeSavedGeometry(
+    private Canvas2DSceneContributionResult ContributeSavedGeometry(
         Canvas2DSceneContributionContext context,
         ScopeGeometrySnapshot geometry,
         ImmutableArray<SemanticElementSnapshot> pools,
@@ -74,9 +74,10 @@ public sealed partial class OrganizationalPoolSceneContributor
                 if (decorationVisible)
                 {
                     var selected = context.EditorState.SemanticSceneSelection == poolSemanticId;
+                    var headerPaint = ResolveHeaderPaint(presentation.Document, pool);
                     items.AddRange(collapsed
-                        ? CreateCompactPoolItems(pool, rowBounds, nameMeasurement!, selected)
-                        : CreatePoolItems(pool, rowBounds, rowBounds, selected));
+                        ? CreateCompactPoolItems(pool, rowBounds, nameMeasurement!, selected, headerPaint)
+                        : CreatePoolItems(pool, rowBounds, rowBounds, selected, headerPaint));
                 }
             }
             else if (decorationVisible)
@@ -101,7 +102,8 @@ public sealed partial class OrganizationalPoolSceneContributor
         SemanticElementSnapshot pool,
         RectD bounds,
         ScopeTextMeasurementSnapshot nameMeasurement,
-        bool selected)
+        bool selected,
+        OrganizationalPoolHeaderPaint headerPaint)
     {
         yield return Item(pool.Id, "pool-background", Canvas2DSceneLayer.Background, 0,
             Canvas2DSceneGeometry.Rectangle(bounds),
@@ -109,8 +111,8 @@ public sealed partial class OrganizationalPoolSceneContributor
                 strokeWidth: selected ? 2.5d : 1.5d, opacity: 0.72d), Canvas2DHitTestPolicy.None);
         yield return Item(pool.Id, "pool-header", Canvas2DSceneLayer.Background, 20,
             Canvas2DSceneGeometry.Rectangle(bounds),
-            new Canvas2DSceneStyle(fill: selected ? "#dbeafe" : "#eef2f7",
-                stroke: selected ? "#2563eb" : "#64748b", strokeWidth: selected ? 2.5d : 1.5d),
+            new Canvas2DSceneStyle(fill: selected ? headerPaint.SelectedBackground : headerPaint.Background,
+                stroke: selected ? "#2563eb" : headerPaint.Border, strokeWidth: selected ? 2.5d : 1.5d),
             new Canvas2DHitTestPolicy(Canvas2DHitTestMode.Bounds),
             metadata: [Canvas2DSemanticSceneInteractionMetadata.Enabled]);
         // Match existing unwrapped text overflow. The measured name controls the one line's
@@ -120,7 +122,7 @@ public sealed partial class OrganizationalPoolSceneContributor
         yield return Item(pool.Id, "pool-name", Canvas2DSceneLayer.Background, 40,
             Canvas2DSceneGeometry.Text(textBounds, nameMeasurement.Request.Text, textBounds.TopLeft,
                 Canvas2DTextAlignment.Start, Canvas2DTextBaseline.Top),
-            new Canvas2DSceneStyle(fill: "#0f172a", fontFamily: nameMeasurement.Request.FontFamily,
+            new Canvas2DSceneStyle(fill: headerPaint.Text, fontFamily: nameMeasurement.Request.FontFamily,
                 fontSize: nameMeasurement.Request.FontSize), Canvas2DHitTestPolicy.None);
     }
 

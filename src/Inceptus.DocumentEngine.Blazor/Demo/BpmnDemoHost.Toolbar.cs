@@ -29,12 +29,13 @@ public partial class BpmnDemoHost
             session.DocumentId, session.DocumentRevision, session.PresentationContext,
             new EditorStateSnapshot(activeToolId: editor.ActiveToolId, activeGesture: editor.ActiveGesture,
                 toolState: editor.ToolState, temporaryFeedback: editor.TemporaryFeedback.Where(feedback =>
+                    feedback.PlacementPreview is null &&
                     feedback.SpatialResize?.Phase != Canvas2DSpatialResizePhase.Hover)),
             session.ModelProfileState, session.ModelProfileViewState, session.ModelProfileElementViewState,
             state.PropertiesFormOpen, state.ValidationInFlight, _standardInProgress || _graphicalExportInProgress,
             _nativeDocumentImportInProgress, _nativeDocumentExportInProgress, _publicationDialogOpen, _publishInProgress);
 
-        // Selection, hover, viewport and scene identity do not change site actions.
+        // Selection, hover, placement previews, viewport and scene identity do not change site actions.
         // A different document, form, operation or gesture must not reuse availability.
         if (session.Status == EditingSessionStatus.Rebuilding && inputs == _readyToolbarInputs)
             return _toolbarPresentation;

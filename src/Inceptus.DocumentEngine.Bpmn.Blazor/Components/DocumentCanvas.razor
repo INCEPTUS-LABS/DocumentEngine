@@ -1,4 +1,5 @@
 @using Inceptus.DocumentEngine.Bpmn.Blazor
+@using Inceptus.DocumentEngine.Bpmn.Appearance
 @using Microsoft.Extensions.Localization
 @inject IStringLocalizer<ModelerStrings> Text
 @using Inceptus.DocumentEngine.Bpmn.Blazor.Composition
@@ -144,6 +145,9 @@
                 }
             </nav>
             <div class="toolbar-group document-file-controls" role="group" aria-label="@Text["Accessibility_DocumentFile"]">
+                <button id="@DomId("document-properties")" type="button"
+                        disabled="@(!actionBar.CanNavigateScope)"
+                        @onclick="OpenDocumentPropertiesAsync">@Text["Appearance_DocumentProperties"]</button>
                 <button id="@DomId("new-diagram")"
                         class="native-document-action new-diagram-action"
                         type="button"
@@ -244,13 +248,13 @@
             <ElementToolbox State="@(_newDiagramConfirmationOpen ? null : _state?.ElementToolbox)"
                             Properties="OpenElementToolboxPropertiesAsync" OpenSubProcess="OpenToolboxSubProcessAsync" AutoPoints="AutoPointsAsync"
                             Delete="DeleteToolboxElementAsync" Create="SmartCreateAsync" Dismiss="DismissElementToolbox" />
-            <canvas id="@CanvasElementId"
+            <canvas @ref="_primaryCanvasElement" id="@CanvasElementId"
                     data-viewport-input-enabled="@ViewportInputEnabled"
                     class="@CanvasClass(CanvasElementId)"
                     tabindex="@CanvasTabIndex(CanvasElementId)"
                     aria-hidden="@CanvasAriaHidden(CanvasElementId)"
                     aria-label="@Text["Accessibility_RenderedDiagram"]"></canvas>
-            <canvas id="@StandbyCanvasElementId"
+            <canvas @ref="_standbyCanvasElement" id="@StandbyCanvasElementId"
                     data-viewport-input-enabled="@ViewportInputEnabled"
                     class="@CanvasClass(StandbyCanvasElementId)"
                     tabindex="@CanvasTabIndex(StandbyCanvasElementId)"
@@ -425,6 +429,20 @@
                 <div class="properties-backdrop"
                      aria-hidden="true"
                      @oncontextmenu:preventDefault></div>
+                @if (modelViewDraft.ColourEditor is { } colourDraft)
+                {
+                    <DocumentColourSchemeForm Id="@DomId("colour-scheme-form")" @key="colourDraft"
+                        Scheme="@colourDraft.Scheme" ReadOnly="@(!colourDraft.CanEdit)" IsStale="@modelViewDraft.IsStale"
+                        IsValid="@colourDraft.IsValid" HasFallback="@(!colourDraft.InvalidKeys.IsEmpty)" ReadColour="colourDraft.Get"
+                        SchemeChanged="scheme => EditColours(modelViewDraft, colourDraft, editor => editor.SelectScheme(scheme))"
+                        ColourChanged="value => EditColours(modelViewDraft, colourDraft, editor => editor.Set(value.Family, value.Channel, value.Value))"
+                        Restore="() => EditColours(modelViewDraft, colourDraft, editor => editor.RestorePreset())"
+                        DefaultBackground="() => RestoreColourBackground(modelViewDraft, colourDraft)"
+                        Accept="() => CloseColourEditor(modelViewDraft, colourDraft, true)"
+                        Cancel="() => CloseColourEditor(modelViewDraft, colourDraft, false)" />
+                }
+                else
+                {
                 <form id="@DomId("model-view-properties-form")"
                       class="properties-form model-view-properties-form"
                       aria-label="@Text["Properties_ModelTitle"]"
@@ -441,6 +459,26 @@
                                 @onclick="CancelModelViewProperties">×</button>
                     </header>
 
+                    <fieldset data-property-group="appearance" disabled="@_modelViewPropertiesApplying">
+                        <legend>@Text["Appearance_Title"]</legend>
+                        <label for="@DomId("appearance-scheme")">@Text["Appearance_Scheme"]</label>
+                        <div class="document-appearance-row">
+                            <select id="@DomId("appearance-scheme")" value="@modelViewDraft.Appearance.Scheme"
+                                    disabled="@(!modelViewDraft.Appearance.CanEdit || modelViewDraft.IsStale)"
+                                    @onchange="args => ChangeAppearanceScheme(args.Value?.ToString())">
+                                @foreach (var scheme in BpmnAppearanceSettings.Schemes)
+                                {
+                                    <option value="@scheme">@Text[$"Appearance_{scheme}"]</option>
+                                }
+                            </select>
+                            <button @ref="_editColoursButton" type="button" disabled="@modelViewDraft.IsStale"
+                                    @onclick="OpenColourEditor">@Text["Appearance_EditColours"]</button>
+                        </div>
+                    </fieldset>
+                    @if (!modelViewDraft.Appearance.InvalidKeys.IsEmpty)
+                    {
+                        <p role="status">@Text[modelViewDraft.Appearance.CanEdit ? "Appearance_Fallback" : "Appearance_Unsupported"]</p>
+                    }
                     <fieldset data-property-group="profiles">
                         <legend>@Text["Properties_Profiles"]</legend>
                         @foreach (var profile in modelViewDraft.Profiles)
@@ -481,9 +519,10 @@
                         <button id="@DomId("model-view-properties-apply")"
                                 class="primary"
                                 type="submit"
-                                disabled="@(_modelViewPropertiesApplying || modelViewDraft.IsStale)">@Text["Action_Apply"]</button>
+                                disabled="@(_modelViewPropertiesApplying || modelViewDraft.IsStale || !modelViewDraft.Appearance.IsValid)">@Text["Action_Apply"]</button>
                     </footer>
                 </form>
+                }
             }
 
             @if (_propertiesDraft is { Authoritative.IsPropertiesAvailable: true } draft)
@@ -730,6 +769,8 @@
     }
     private DocumentCanvasPropertiesDraft? _propertiesDraft;
     private DocumentCanvasModelViewPropertiesDraft? _modelViewPropertiesDraft;
+    private ElementReference _editColoursButton;
+    private bool _editColoursFocusPending;
     private bool _propertiesApplying;
     private string _propertiesApplyStatus = "idle";
     private bool _modelViewPropertiesApplying;
@@ -1175,6 +1216,11 @@
         }
 
         await FocusNewDiagramConfirmationAsync();
+        if (_editColoursFocusPending && _modelViewPropertiesDraft is { ColourEditor: null })
+        {
+            _editColoursFocusPending = false;
+            await _editColoursButton.FocusAsync(preventScroll: true);
+        }
 
     }
 
@@ -1442,7 +1488,7 @@
         var snapshot = targetVisualStateId is not null
             ? await host.OpenPropertiesAsync(
                 targetVisualStateId,
-                _componentLifetime.Token)
+                elementToolboxTarget is not null, _componentLifetime.Token)
             : await host.OpenPropertiesAsync(
                 targetSemanticElementId!,
                 _componentLifetime.Token);
@@ -1529,7 +1575,11 @@
         RefreshHostState(host);
     }
 
-    private async Task OpenModelViewPropertiesAsync()
+    private Task OpenModelViewPropertiesAsync() => OpenModelViewPropertiesCoreAsync(false);
+
+    private Task OpenDocumentPropertiesAsync() => OpenModelViewPropertiesCoreAsync(true);
+
+    private async Task OpenModelViewPropertiesCoreAsync(bool fromToolbar)
     {
         DocumentCanvasHost? host;
         lock (_lifecycleSync)
@@ -1549,7 +1599,7 @@
         }
 
         var snapshot = await host.OpenModelViewPropertiesAsync(
-            _componentLifetime.Token);
+            fromToolbar, _componentLifetime.Token);
         if (snapshot is null)
         {
             return;
@@ -1558,7 +1608,7 @@
         var openedDraft = new DocumentCanvasModelViewPropertiesDraft(snapshot);
         var current = host.CaptureState();
         RefreshHostState(host, current);
-        if (IsCurrentModelViewPropertiesForm(current, openedDraft.Authoritative.ScopeId))
+        if (IsCurrentModelViewPropertiesForm(current, openedDraft.Authoritative.ViewContext))
         {
             _modelViewPropertiesDraft = openedDraft;
             _modelViewPropertiesApplyStatus = "idle";
@@ -1792,6 +1842,7 @@
 
     private void CancelModelViewProperties()
     {
+        _editColoursFocusPending = false;
         _modelViewPropertiesDraft = null;
         _modelViewPropertiesApplying = false;
         _modelViewPropertiesApplyStatus = "idle";
@@ -1838,12 +1889,49 @@
     private void PublishUpdatedModelViewPropertiesDraft(
         DocumentCanvasModelViewPropertiesDraft draft)
     {
-        draft.Feedback = null;
-        _modelViewPropertiesApplyStatus = draft.IsDirty ? "dirty" : "idle";
+        if (!draft.IsStale) draft.Feedback = null;
+        _modelViewPropertiesApplyStatus = draft.IsStale ? "stale" : draft.IsDirty ? "dirty" : "idle";
         if (_host is { } host)
         {
             _ = TryPublishModelViewPropertiesFormState(host, draft);
         }
+    }
+
+    private void ChangeAppearanceScheme(string? scheme)
+    {
+        if (_modelViewPropertiesDraft is not { } draft || _modelViewPropertiesApplying || scheme is null) return;
+        draft.Appearance.SelectScheme(scheme);
+        PublishUpdatedModelViewPropertiesDraft(draft);
+    }
+
+    private void OpenColourEditor()
+    {
+        if (_modelViewPropertiesDraft is not { IsStale: false } draft || _modelViewPropertiesApplying) return;
+        _editColoursFocusPending = false;
+        draft.BeginColourEditing();
+        PublishUpdatedModelViewPropertiesDraft(draft);
+    }
+
+    private void EditColours(DocumentCanvasModelViewPropertiesDraft parent, DocumentCanvasAppearanceDraft editor,
+        Action<DocumentCanvasAppearanceDraft> edit)
+    {
+        if (!ReferenceEquals(_modelViewPropertiesDraft, parent) || !ReferenceEquals(parent.ColourEditor, editor) ||
+            parent.IsStale || _modelViewPropertiesApplying) return;
+        edit(editor);
+        PublishUpdatedModelViewPropertiesDraft(parent);
+    }
+
+    private void RestoreColourBackground(DocumentCanvasModelViewPropertiesDraft parent, DocumentCanvasAppearanceDraft editor) =>
+        EditColours(parent, editor, draft => draft.RestoreDefaultBackground("participant-header"));
+
+    private void CloseColourEditor(DocumentCanvasModelViewPropertiesDraft parent, DocumentCanvasAppearanceDraft editor, bool accept)
+    {
+        if (!ReferenceEquals(_modelViewPropertiesDraft, parent) || !ReferenceEquals(parent.ColourEditor, editor) ||
+            _modelViewPropertiesApplying) return;
+        if (accept && !parent.AcceptColourEditing()) return;
+        if (!accept) parent.CancelColourEditing();
+        _editColoursFocusPending = !parent.IsStale;
+        PublishUpdatedModelViewPropertiesDraft(parent);
     }
 
     private async Task ApplyModelViewPropertiesAsync()
@@ -1880,7 +1968,7 @@
             if (!ReferenceEquals(_modelViewPropertiesDraft, draft) ||
                 !IsCurrentModelViewPropertiesForm(
                     current,
-                    draft.Authoritative.ScopeId))
+                    draft.Authoritative.ViewContext))
             {
                 SynchronizeModelViewPropertiesFormAfterStaleCallback(host);
                 return;
@@ -2014,6 +2102,7 @@
         left.DocumentId == right.DocumentId &&
         left.Revision == right.Revision &&
         left.ScopeId == right.ScopeId &&
+        Equals(left.AppearanceMetadata, right.AppearanceMetadata) &&
         left.Profiles.Length == right.Profiles.Length &&
         left.Profiles.Zip(right.Profiles).All(static pair =>
             pair.First.Definition.Id == pair.Second.Definition.Id &&
@@ -2022,10 +2111,10 @@
 
     private static bool IsCurrentModelViewPropertiesForm(
         DocumentCanvasHostState state,
-        DocumentScopeId scopeId) =>
+        PresentationViewContext viewContext) =>
         state.ModelViewPropertiesFormOpen &&
         state.Session is { IsClosed: false } session &&
-        session.PresentationContext == new ProcessScopePresentationContext(scopeId);
+        session.PresentationContext == viewContext;
 
     private string BackgroundActionControlId(CanvasBackgroundActionId actionId) =>
         DomId($"background-action-{CreateHtmlIdFragment(actionId.Value)}");
@@ -2387,10 +2476,14 @@
 
     private Task UndoAsync() => ExecuteHistoryOperationAsync(isUndo: true);
 
-    private void DismissElementToolbox()
+    private ElementReference _primaryCanvasElement;
+    private ElementReference _standbyCanvasElement;
+
+    private async Task DismissElementToolbox()
     {
         _host?.DismissElementToolbox();
         if (_host is { } host) RefreshHostState(host);
+        await (ActiveCanvasElementId == CanvasElementId ? _primaryCanvasElement : _standbyCanvasElement).FocusAsync(preventScroll: true);
     }
 
     private async Task SmartCreateAsync(ToolboxItemId itemId)

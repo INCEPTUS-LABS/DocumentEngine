@@ -24,6 +24,40 @@ const {
 
 const point = (x, y) => ({ x, y });
 
+test("Published format 1 renders resolved custom paints without changing execution", () => {
+    const original = activityProcess();
+    const process = structuredClone(original);
+    const body = {
+        id: "custom-body", layer: 0, zIndex: 0, geometryKind: 0,
+        geometryBounds: { x: 100, y: 40, width: 40, height: 30 }, content: null, points: [],
+        isClosed: true, textAnchor: point(120, 55), textAlignment: 1, textBaseline: 1,
+        transform: { m11: 1, m12: 0, m21: 0, m22: 1, offsetX: 0, offsetY: 0 },
+        clip: null, fill: "#E7EFF8", stroke: "#5D7FA5", strokeWidth: 1.5,
+        dashPattern: [], opacity: 1, fontSize: 12, fontFamily: "sans-serif"
+    };
+    process.presentation.items = [body, { ...body, id: "custom-text", geometryKind: 3,
+        content: "Custom task", fill: "#123456", stroke: null }];
+    const frozen = structuredClone(process);
+    const painted = [];
+    const context = new Proxy({}, {
+        get: (target, name) => target[name] ?? (() => {}),
+        set: (target, name, value) => { if (name === "fillStyle" || name === "strokeStyle") painted.push(value); target[name] = value; return true; }
+    });
+    const runtime = new PublishedTokenRuntime(process);
+    const baseline = new PublishedTokenRuntime(original);
+    const viewport = new PublishedViewport(process.presentation.contentBounds, 800, 600);
+    drawPublishedProcess(context, process, runtime.captureState(), viewport, 800, 600);
+    for (const colour of ["#E7EFF8", "#5D7FA5", "#123456"]) assert.ok(painted.includes(colour));
+    runtime.start(0);
+    baseline.start(0);
+    for (const time of [0, 1000, 2000, 5000]) {
+        runtime.tick(time);
+        baseline.tick(time);
+        assert.deepEqual(runtime.captureState(), baseline.captureState());
+    }
+    assert.deepEqual(process, frozen);
+});
+
 function connector(id, sourceElementId, targetElementId, points) {
     return { id, sourceElementId, targetElementId, points };
 }

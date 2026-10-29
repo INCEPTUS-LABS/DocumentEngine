@@ -20,7 +20,8 @@ public sealed class Canvas2DInteractionResult
         string cssCursor = "default",
         Canvas2DConnectorRouteContextAction? connectorRouteContextAction = null,
         Canvas2DConnectorAnchorContextAction? connectorAnchorContextAction = null,
-        Canvas2DNodeLabelContextAction? nodeLabelContextAction = null)
+        Canvas2DNodeLabelContextAction? nodeLabelContextAction = null,
+        bool isCompletedSelectionClick = false)
     {
         if (!Enum.IsDefined(status))
         {
@@ -36,6 +37,7 @@ public sealed class Canvas2DInteractionResult
         ConnectorRouteContextAction = connectorRouteContextAction;
         ConnectorAnchorContextAction = connectorAnchorContextAction;
         NodeLabelContextAction = nodeLabelContextAction;
+        IsCompletedSelectionClick = isCompletedSelectionClick;
         CssCursor = cssCursor;
         Diagnostics = EditingSessionDiagnosticCollection.CopyAndOrder(
             diagnostics,
@@ -43,6 +45,13 @@ public sealed class Canvas2DInteractionResult
     }
 
     public Canvas2DInteractionStatus Status { get; }
+
+    /// <summary>A completed ordinary primary click, excluding editing gestures and modified selection.</summary>
+    public bool IsCompletedSelectionClick { get; }
+
+    internal Canvas2DInteractionResult WithCompletedSelectionClick(bool completed) => new(Status, SessionState,
+        HitResult, Diagnostics, PersistentOperation, CssCursor, ConnectorRouteContextAction,
+        ConnectorAnchorContextAction, NodeLabelContextAction, completed && Succeeded);
 
     public EditingSessionState SessionState { get; }
 

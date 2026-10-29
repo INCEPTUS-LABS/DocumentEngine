@@ -952,7 +952,7 @@ public sealed class BpmnPluginRegistration
                 BpmnSemanticTypes.TimerBoundaryEvent,
                 new BpmnNodeProjectionRule(
                     BpmnProjectionIdentities.TimerBoundaryEventRuleId,
-                    requiresNameLabel: true,
+                    requiresNameLabel: false,
                     nameLabelPlacement: BpmnNodeLabelPlacementPolicy.OutsideBelow,
                     nameLabelInteractionPolicy:
                         NodeLabelInteractionPolicy.MoveAndResize,
@@ -1153,6 +1153,23 @@ public sealed class BpmnPluginRegistration
                 new BpmnSequenceFlowNameHistoryPolicy())];
         PropertiesSchemas = [.. PropertiesSchemas, BpmnSequenceFlowPropertiesSchema.Definition];
         CommandHandlers = [.. CommandHandlers,
+            Handler<UpdateBpmnEventNameCommand>(UpdateBpmnEventNameCommand.KnownTypeId,
+                new BpmnEventNameCommandHandler())];
+        CommandValidators = [.. CommandValidators,
+            Validator(UpdateBpmnEventNameCommand.KnownTypeId, "bpmn:validator/event-name",
+                new BpmnEventNameCommandHandler())];
+        HistoryPolicies = [.. HistoryPolicies,
+            new CommandHistoryPolicyRegistration(UpdateBpmnEventNameCommand.KnownTypeId,
+                new BpmnEventNameHistoryPolicy())];
+        PropertiesSchemas = [.. PropertiesSchemas,
+            BpmnStartEndEventPropertiesSchemas.Start, BpmnStartEndEventPropertiesSchemas.End];
+        ProjectionRules = [.. ProjectionRules.Select(static rule =>
+            rule.SemanticTypeId == BpmnSemanticTypes.StartEvent || rule.SemanticTypeId == BpmnSemanticTypes.EndEvent
+                ? new ProjectionRuleRegistration(rule.RuleId, rule.SourceKind, rule.SemanticTypeId,
+                    new BpmnNodeProjectionRule(rule.RuleId, requiresNameLabel: false,
+                        nameLabelPlacement: BpmnNodeLabelPlacementPolicy.OutsideBelow))
+                : rule)];
+        CommandHandlers = [.. CommandHandlers,
             Handler<UpdateBpmnElementDescriptionCommand>(UpdateBpmnElementDescriptionCommand.KnownTypeId,
                 new BpmnElementDescriptionCommandHandler())];
         CommandValidators = [.. CommandValidators,
@@ -1194,6 +1211,14 @@ public sealed class BpmnPluginRegistration
         ConnectorAnchorPolicies = [.. ConnectorAnchorPolicies.Where(registration =>
             registration.ElementTypeId != BpmnSemanticTypes.MessageBoundaryEvent),
             BpmnConnectorAnchorPolicies.MessageBoundaryMessageFlowRegistration];
+        CommandHandlers = [.. CommandHandlers,
+            Handler<SetBpmnDocumentAppearanceCommand>(SetBpmnDocumentAppearanceCommand.KnownTypeId,
+                new BpmnDocumentAppearanceCommandHandler())];
+        CommandValidators = [.. CommandValidators,
+            Validator(SetBpmnDocumentAppearanceCommand.KnownTypeId, "bpmn:validator/document-appearance",
+                new BpmnDocumentAppearanceCommandHandler())];
+        HistoryPolicies = [.. HistoryPolicies,
+            new(SetBpmnDocumentAppearanceCommand.KnownTypeId, new BpmnDocumentAppearanceHistoryPolicy())];
     }
 
     private BpmnPluginRegistration(BpmnPluginRegistration n100, N101RegistrationMarker _)
@@ -1403,7 +1428,7 @@ public sealed class BpmnPluginRegistration
             semanticTypeId,
             new BpmnNodeProjectionRule(
                 ruleId,
-                requiresNameLabel: true,
+                requiresNameLabel: false,
                 nameLabelPlacement: BpmnNodeLabelPlacementPolicy.OutsideBelow,
                 nameLabelInteractionPolicy: NodeLabelInteractionPolicy.MoveAndResize,
                 geometryInteractionPolicy:

@@ -26,9 +26,11 @@ internal sealed record BpmnToolboxCreationDefaults(
     {
         failure = null;
         var size = BpmnNodeLogicalSizePolicy.Resolve(type);
-        if (type == BpmnSemanticTypes.StartEvent || type == BpmnSemanticTypes.EndEvent)
+        if (BpmnSemanticTypes.IsEvent(type))
         {
-            return new(type, size, null, null, 0L, null);
+            return new(type, size,
+                type == BpmnSemanticTypes.StartEvent || type == BpmnSemanticTypes.EndEvent ? null : string.Empty,
+                null, 0L, null);
         }
 
         long number = 0L;
@@ -79,24 +81,7 @@ internal sealed record BpmnToolboxCreationDefaults(
 
         number = checked(document.SemanticModel.Elements.LongCount(element => element.TypeId == type) + 1L);
         var numberText = number.ToString(CultureInfo.InvariantCulture);
-        if (type == BpmnSemanticTypes.SubProcess)
-        {
-            displayName = "SubProcess";
-            code = string.Concat("SUBPROCESS_", numberText);
-        }
-        else if (BpmnBoundaryEventSemanticTypes.IsBoundaryEvent(type))
-        {
-            displayName = BpmnBoundaryEventSemanticTypes.DisplayName(type);
-        }
-        else
-        {
-            displayName = type == BpmnSemanticTypes.MessageCatchEvent ? "Message Event"
-                : type == BpmnSemanticTypes.TimerCatchEvent ? "Timer Event"
-                : type == BpmnSemanticTypes.MessageThrowEvent ? "Message Throw Event"
-                : type == BpmnSemanticTypes.SignalCatchEvent ? "Signal Catch Event"
-                : "Signal Throw Event";
-        }
-
-        return new(type, size, string.Concat(displayName, " ", numberText), code, number, null);
+        return new(type, size, string.Concat("SubProcess ", numberText),
+            string.Concat("SUBPROCESS_", numberText), number, null);
     }
 }

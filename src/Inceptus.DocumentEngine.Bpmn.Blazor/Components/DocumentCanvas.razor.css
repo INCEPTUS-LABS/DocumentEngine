@@ -305,6 +305,31 @@
     width: min(28rem, calc(100vw - 2rem));
 }
 
+.document-appearance-row {
+    display: flex;
+    align-items: center;
+    gap: .65rem;
+    margin-top: .3rem;
+}
+
+.document-appearance-row select {
+    flex: 0 1 8rem;
+    min-width: 0;
+    min-height: 44px;
+    padding: .4rem .5rem;
+    border: 1px solid #cbd5e1;
+    border-radius: .35rem;
+    font: inherit;
+    background: #fff;
+    color: #0f172a;
+}
+
+.document-appearance-row button {
+    flex: 0 0 auto;
+    min-height: 44px;
+    white-space: nowrap;
+}
+
 .model-profile-row {
     display: grid;
     gap: 0.5rem;

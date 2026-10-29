@@ -739,9 +739,12 @@ public sealed class PhaseN1ToolboxPlacementIntegrationTests
             element.TypeId == BpmnSemanticTypes.EndEvent)
         {
             Assert.Empty(element.Properties);
-            Assert.False(composition.PropertiesSchemaCatalog.TryGetSchema(
+            Assert.True(composition.PropertiesSchemaCatalog.TryGetSchema(
                 element.TypeId,
-                out _));
+                out var eventSchema));
+            var nameField = Assert.Single(eventSchema!.Fields);
+            Assert.Equal(BpmnSemanticProperties.Name, nameField.SemanticPropertyKey);
+            Assert.True(nameField.IsEditable);
             return;
         }
 

@@ -19,6 +19,36 @@ namespace Inceptus.DocumentEngine.UnitTests.Commands;
 
 public sealed class PreparedRoutingCommandTests
 {
+    [Fact]
+    public async Task AppearanceSceneOnlyCommitAndReplayDoNotInvokePreparationButMixedGeometryDoes()
+    {
+        var document = CreateDocument(ConnectorRoutingType.Straight);
+        var preparer = new RecordingPreparer();
+        var plugin = Inceptus.DocumentEngine.Bpmn.BpmnPluginRegistration.N100;
+        var processor = new CommandProcessor(plugin.CommandHandlers, plugin.CommandValidators, null,
+            plugin.HistoryPolicies, null, preparer);
+        var history = new HistoryManager(document);
+        Inceptus.DocumentEngine.Bpmn.Commands.SetBpmnDocumentAppearanceCommand Appearance(string value) =>
+            new(Id, document.Revision, [new(Inceptus.DocumentEngine.Bpmn.Appearance.BpmnAppearanceSettings.SchemeKey,
+                Contracts.Properties.PropertyValue.FromText(value)),
+                new(Inceptus.DocumentEngine.Bpmn.Appearance.BpmnAppearanceSettings.Key(value, "lane-header", "background"),
+                    Contracts.Properties.PropertyValue.FromText("#ABCDEF"))]);
+        var before = document.CaptureSnapshot();
+        Assert.True((await history.ExecuteAsync(processor, Appearance("mixed"))).IsCommitted);
+        Assert.Empty(preparer.Requests);
+        Assert.True((await history.UndoAsync(processor)).IsCommitted);
+        Assert.True((await history.RedoAsync(processor)).IsCommitted);
+        Assert.Empty(preparer.Requests);
+        Assert.Equal(before.VisualModel.RoutingScopes, document.CaptureSnapshot().VisualModel.RoutingScopes);
+        Assert.True((await history.ExecuteAsync(processor, new CompoundDocumentCommand(Id, document.Revision,
+            [Appearance("white"), Move(document, 10)]))).IsCommitted);
+        Assert.Single(preparer.Requests);
+        Assert.True((await history.UndoAsync(processor)).IsCommitted);
+        Assert.Equal(2, preparer.Requests.Count);
+        Assert.True((await history.RedoAsync(processor)).IsCommitted);
+        Assert.Equal(3, preparer.Requests.Count);
+    }
+
     private static readonly DocumentId Id = new("test:prepared-routing");
     private static readonly VisualStateId SourceVisual = new("test:source-visual");
     private static readonly VisualStateId ConnectorVisual = new("test:connector-visual");

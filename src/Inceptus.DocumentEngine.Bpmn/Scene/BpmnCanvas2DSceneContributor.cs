@@ -1,4 +1,5 @@
 using Inceptus.DocumentEngine.Bpmn.Projection;
+using Inceptus.DocumentEngine.Bpmn.Appearance;
 using Inceptus.DocumentEngine.Bpmn.Semantics;
 using Inceptus.DocumentEngine.Contracts.Canvas2D;
 using Inceptus.DocumentEngine.Contracts.Diagnostics;
@@ -81,17 +82,20 @@ public sealed class BpmnCanvas2DSceneContributor : ICanvas2DSceneContributor, IC
         Canvas2DSceneContributionContext context, bool includeLegacyFeedback)
     {
         ArgumentNullException.ThrowIfNull(context);
-        return ContributeNodes(context.ProjectedGraph, context.LayoutResult, context.EditorState, includeLegacyFeedback);
+        return ContributeNodes(context.ProjectedGraph, context.LayoutResult, context.EditorState, includeLegacyFeedback,
+            context.Presentation);
     }
 
     private static Canvas2DSceneContributionResult ContributeNodes(
-        ProjectedGraph graph, LayoutResult localLayout, EditorStateSnapshot editorState, bool includeLegacyFeedback)
+        ProjectedGraph graph, LayoutResult localLayout, EditorStateSnapshot editorState, bool includeLegacyFeedback,
+        Canvas2DScenePresentationContext? presentation = null)
     {
 
         var layouts = localLayout.Nodes.ToDictionary(
             static geometry => geometry.ProjectedObjectId);
         var items = new List<Canvas2DSceneItem>();
         var visualOverrides = new List<Canvas2DCanonicalSceneItemVisualOverride>();
+        var palette = BpmnAppearanceSettings.Resolve(presentation?.Document.Metadata);
         foreach (var node in graph.Nodes)
         {
             if (!BpmnSemanticTypes.IsFlowNode(node.Source.SemanticTypeId))
@@ -116,11 +120,14 @@ public sealed class BpmnCanvas2DSceneContributor : ICanvas2DSceneContributor, IC
             }
 
             var appearance = CreateAppearance(node, layout);
+            var colours = BpmnAppearanceSettings.Family(node.Source.SemanticTypeId) is { } family
+                ? palette.Colours[family] : null;
+            var firstMarker = items.Count;
             var localBounds = new RectD(0d, 0d, layout.Bounds.Width, layout.Bounds.Height);
             visualOverrides.Add(new Canvas2DCanonicalSceneItemVisualOverride(
                 Canvas2DSceneObjectIdentity.ForProjected(node.Id, "node"),
                 Geometry(node.Source.SemanticTypeId, localBounds),
-                Style(appearance)));
+                Style(appearance, colours)));
             if (BpmnSemanticTypes.IsGateway(node.Source.SemanticTypeId))
             {
                 items.AddRange(CreateGatewayMarkers(appearance, localBounds));
@@ -141,9 +148,33 @@ public sealed class BpmnCanvas2DSceneContributor : ICanvas2DSceneContributor, IC
             {
                 items.AddRange(CreateSubProcessMarkers(appearance, localBounds));
             }
+            if (colours is not null)
+            {
+                for (var index = firstMarker; index < items.Count; index++)
+                {
+                    var item = items[index];
+                    var style = item.Style;
+                    string? Paint(string? paint) => paint == "#000000" ? colours.Text : paint == "#ffffff" ? colours.Background : paint;
+                    items[index] = new Canvas2DSceneItem(item.ProcessPlacement, item.Id, item.Layer, item.ZIndex,
+                        item.Geometry, item.Origin, item.Transform, item.Clip,
+                        new Canvas2DSceneStyle(Paint(style.Fill), Paint(style.Stroke), style.StrokeWidth, style.DashPattern,
+                            style.Opacity, style.FontFamily, style.FontSize), item.IsVisible, item.HitTestPolicy,
+                        item.PersistentAppearance, item.Metadata, item.Bounds, item.SpatialRegion,
+                        item.ConnectorPresentationMapping, item.DerivedRegionMapping);
+                }
+                foreach (var label in presentation?.BaseSceneItems.Where(item =>
+                    item.Origin.VisualStateId == node.Source.VisualStateId &&
+                    item.Geometry.Kind == Canvas2DSceneGeometryKind.Text) ?? [])
+                {
+                    var style = label.Style;
+                    visualOverrides.Add(new(label.Id, label.Geometry, new Canvas2DSceneStyle(colours.Text, style.Stroke,
+                        style.StrokeWidth, style.DashPattern, style.Opacity, style.FontFamily, style.FontSize)));
+                }
+            }
         }
 
-        var participants = BpmnParticipantSceneContributor.Contribute(graph, localLayout, Descriptor.ContributorId);
+        var participants = BpmnParticipantSceneContributor.Contribute(graph, localLayout, Descriptor.ContributorId,
+            palette.Colours["participant-header"]);
         items.AddRange(participants.Items);
         visualOverrides.AddRange(participants.CanonicalItemVisualOverrides);
 
@@ -211,13 +242,13 @@ public sealed class BpmnCanvas2DSceneContributor : ICanvas2DSceneContributor, IC
         return Canvas2DSceneGeometry.Path(RoundedRectanglePoints(localBounds), isClosed: true);
     }
 
-    private static Canvas2DSceneStyle Style(NodeAppearanceContext node)
+    private static Canvas2DSceneStyle Style(NodeAppearanceContext node, BpmnElementColours? colours = null)
     {
         var semanticTypeId = node.SemanticTypeId;
         var dashPattern = node.Interrupting ? null : new[] { 3d, 2d };
         return new Canvas2DSceneStyle(
-            fill: "#ffffff",
-            stroke: "#000000",
+            fill: colours?.Background ?? "#ffffff",
+            stroke: colours?.Border ?? "#000000",
             strokeWidth: semanticTypeId == BpmnSemanticTypes.EndEvent
                 ? EndEventStrokeWidth
                 : semanticTypeId == BpmnSemanticTypes.StartEvent ||

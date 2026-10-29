@@ -268,4 +268,30 @@
   <data name="Publication_CurrentEditorView" xml:space="preserve"><value>Aktuelle Editoransicht verwenden</value></data>
   <data name="Publication_FitEntireDiagram" xml:space="preserve"><value>Gesamtes Diagramm einpassen</value></data>
   <data name="Publication_PublishWarnings" xml:space="preserve"><value>Mit Warnungen veröffentlicht</value></data>
+  <data name="Appearance_DocumentProperties" xml:space="preserve"><value>Dokumenteigenschaften</value></data>
+  <data name="Appearance_Title" xml:space="preserve"><value>Elementfarben</value></data>
+  <data name="Appearance_Scheme" xml:space="preserve"><value>Farbschema</value></data>
+  <data name="Appearance_white" xml:space="preserve"><value>Weiß</value></data>
+  <data name="Appearance_mixed" xml:space="preserve"><value>Gemischt</value></data>
+  <data name="Appearance_start-event" xml:space="preserve"><value>Startereignis</value></data>
+  <data name="Appearance_task" xml:space="preserve"><value>Aufgabe</value></data>
+  <data name="Appearance_gateway" xml:space="preserve"><value>Gateway</value></data>
+  <data name="Appearance_end-event" xml:space="preserve"><value>Endereignis</value></data>
+  <data name="Appearance_background" xml:space="preserve"><value>Hintergrund</value></data>
+  <data name="Appearance_border" xml:space="preserve"><value>Rahmen</value></data>
+  <data name="Appearance_text" xml:space="preserve"><value>Text</value></data>
+  <data name="Appearance_Restore" xml:space="preserve"><value>Standardfarben wiederherstellen</value></data>
+  <data name="Appearance_Fallback" xml:space="preserve"><value>Einige gespeicherte Farbwerte sind unbekannt. Standardwerte werden angezeigt; Originalwerte bleiben bis zur ausdrücklichen Änderung oder Rücksetzung erhalten.</value></data>
+  <data name="Appearance_Unsupported" xml:space="preserve"><value>Diese Darstellungsversion wird nicht unterstützt. Weiß wird angezeigt und die Farbbearbeitung ist deaktiviert. Die Originaleinstellungen bleiben erhalten.</value></data>
+  <data name="Appearance_EditColours" xml:space="preserve"><value>Farben bearbeiten</value></data>
+  <data name="Appearance_UseColours" xml:space="preserve"><value>Farben übernehmen</value></data>
+  <data name="Appearance_DraftHint" xml:space="preserve"><value>Änderungen werden erst beim Anwenden der Dokumenteigenschaften gespeichert.</value></data>
+  <data name="Appearance_Stale" xml:space="preserve"><value>Das Dokument oder die Ansicht wurde geändert. Brechen Sie ab und öffnen Sie die Dokumenteigenschaften erneut.</value></data>
+  <data name="Appearance_NoFill" xml:space="preserve"><value>Standard — ohne Füllung</value></data>
+  <data name="Appearance_DefaultBackground" xml:space="preserve"><value>Standardhintergrund verwenden</value></data>
+  <data name="Appearance_Preview" xml:space="preserve"><value>Live-Vorschau</value></data>
+  <data name="Appearance_Invalid" xml:space="preserve"><value>Geben Sie Farben im Format #RRGGBB ein.</value></data>
+  <data name="Appearance_pool-header" xml:space="preserve"><value>Kopf eines eigenständigen Pools</value></data>
+  <data name="Appearance_lane-header" xml:space="preserve"><value>Lane-Kopf</value></data>
+  <data name="Appearance_participant-header" xml:space="preserve"><value>Teilnehmerkopf</value></data>
 </root>

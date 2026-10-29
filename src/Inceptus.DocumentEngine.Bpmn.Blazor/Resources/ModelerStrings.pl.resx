@@ -268,4 +268,30 @@
   <data name="Publication_CurrentEditorView" xml:space="preserve"><value>Użyj bieżącego widoku edytora</value></data>
   <data name="Publication_FitEntireDiagram" xml:space="preserve"><value>Dopasuj cały diagram</value></data>
   <data name="Publication_PublishWarnings" xml:space="preserve"><value>Opublikowano z ostrzeżeniami</value></data>
+  <data name="Appearance_DocumentProperties" xml:space="preserve"><value>Właściwości dokumentu</value></data>
+  <data name="Appearance_Title" xml:space="preserve"><value>Kolory elementów</value></data>
+  <data name="Appearance_Scheme" xml:space="preserve"><value>Schemat kolorów</value></data>
+  <data name="Appearance_white" xml:space="preserve"><value>Biały</value></data>
+  <data name="Appearance_mixed" xml:space="preserve"><value>Mieszany</value></data>
+  <data name="Appearance_start-event" xml:space="preserve"><value>Zdarzenie początkowe</value></data>
+  <data name="Appearance_task" xml:space="preserve"><value>Zadanie</value></data>
+  <data name="Appearance_gateway" xml:space="preserve"><value>Bramka</value></data>
+  <data name="Appearance_end-event" xml:space="preserve"><value>Zdarzenie końcowe</value></data>
+  <data name="Appearance_background" xml:space="preserve"><value>Tło</value></data>
+  <data name="Appearance_border" xml:space="preserve"><value>Obramowanie</value></data>
+  <data name="Appearance_text" xml:space="preserve"><value>Tekst</value></data>
+  <data name="Appearance_Restore" xml:space="preserve"><value>Przywróć kolory domyślne</value></data>
+  <data name="Appearance_Fallback" xml:space="preserve"><value>Niektóre zapisane kolory są nierozpoznane. Wyświetlane są wartości domyślne; oryginalne wartości pozostają zapisane do jawnej zmiany lub przywrócenia.</value></data>
+  <data name="Appearance_Unsupported" xml:space="preserve"><value>Ta wersja ustawień wyglądu nie jest obsługiwana. Wyświetlany jest schemat Biały, a edycja kolorów jest wyłączona. Oryginalne ustawienia pozostają zapisane.</value></data>
+  <data name="Appearance_EditColours" xml:space="preserve"><value>Edytuj kolory</value></data>
+  <data name="Appearance_UseColours" xml:space="preserve"><value>Użyj kolorów</value></data>
+  <data name="Appearance_DraftHint" xml:space="preserve"><value>Zmiany zostaną zapisane dopiero po zastosowaniu właściwości dokumentu.</value></data>
+  <data name="Appearance_Stale" xml:space="preserve"><value>Dokument lub widok uległ zmianie. Anuluj i otwórz ponownie właściwości dokumentu.</value></data>
+  <data name="Appearance_NoFill" xml:space="preserve"><value>Domyślne — bez wypełnienia</value></data>
+  <data name="Appearance_DefaultBackground" xml:space="preserve"><value>Użyj domyślnego tła</value></data>
+  <data name="Appearance_Preview" xml:space="preserve"><value>Podgląd na żywo</value></data>
+  <data name="Appearance_Invalid" xml:space="preserve"><value>Wprowadź kolory w formacie #RRGGBB.</value></data>
+  <data name="Appearance_pool-header" xml:space="preserve"><value>Nagłówek samodzielnej puli</value></data>
+  <data name="Appearance_lane-header" xml:space="preserve"><value>Nagłówek toru</value></data>
+  <data name="Appearance_participant-header" xml:space="preserve"><value>Nagłówek uczestnika</value></data>
 </root>

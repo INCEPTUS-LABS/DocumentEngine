@@ -46,7 +46,7 @@ public static class BpmnSemanticFactory
         SemanticElementId id,
         string? name = null,
         string? description = null) =>
-        new(id, BpmnSemanticTypes.StartEvent, OptionalProperties(name, description));
+        new(id, BpmnSemanticTypes.StartEvent, OptionalProperties(string.IsNullOrWhiteSpace(name) ? null : name, description));
 
     public static SemanticElementSnapshot CreateTask(
         SemanticElementId id,
@@ -185,7 +185,7 @@ public static class BpmnSemanticFactory
         string? timerDefinition = null,
         string? description = null)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentNullException.ThrowIfNull(name);
         if (timerDefinition is not null)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(timerDefinition);
@@ -301,7 +301,7 @@ public static class BpmnSemanticFactory
                 nameof(typeId));
         }
 
-        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentNullException.ThrowIfNull(name);
 
         var properties = new List<KeyValuePair<string, PropertyValue>>
         {
@@ -329,7 +329,7 @@ public static class BpmnSemanticFactory
                 nameof(typeId));
         }
 
-        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentNullException.ThrowIfNull(name);
         if (typeId == BpmnSemanticTypes.TimerBoundaryEvent)
         {
             if (timerDefinition is not null)
@@ -370,7 +370,7 @@ public static class BpmnSemanticFactory
         SemanticElementId id,
         string? name = null,
         string? description = null) =>
-        new(id, BpmnSemanticTypes.EndEvent, OptionalProperties(name, description));
+        new(id, BpmnSemanticTypes.EndEvent, OptionalProperties(string.IsNullOrWhiteSpace(name) ? null : name, description));
 
     public static SemanticRelationshipSnapshot CreateSequenceFlow(
         SemanticElementId id,

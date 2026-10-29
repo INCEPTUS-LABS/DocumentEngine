@@ -50,7 +50,8 @@ public sealed class BpmnToolboxPlacementPreviewTests
         var command = Assert.IsAssignableFrom<BpmnElementCreationCommand>(planned.Plan!.Command);
         Assert.Equal(preview.Bounds.TopLeft, command.Position);
         Assert.Equal(preview.Bounds.Size, command.Size);
-        Assert.Equal(preview.Label, command.GetType().GetProperty("Name")!.GetValue(command));
+        var commandName = (string?)command.GetType().GetProperty("Name")!.GetValue(command);
+        Assert.Equal(preview.Label, string.IsNullOrEmpty(commandName) ? null : commandName);
         Assert.Equal(1, identities.Count);
         var expected = BpmnActivitySemanticTypes.IsActivity(preview.SemanticTypeId) ? new SizeD(120d, 80d)
             : preview.SemanticTypeId == BpmnSemanticTypes.ExclusiveGateway ||
@@ -88,7 +89,8 @@ public sealed class BpmnToolboxPlacementPreviewTests
         var planned = registration.CommandFactory.CreatePlan(new(registration.ToolboxItemId, document,
             document.Revision, pointer, new Identities(), visibleTargets: [target], candidate: preview.AttachmentCandidate));
         Assert.True(planned.Succeeded);
-        Assert.Equal(preview.Label, planned.Plan!.Command.GetType().GetProperty("Name")!.GetValue(planned.Plan.Command));
+        Assert.Null(preview.Label);
+        Assert.Equal(string.Empty, planned.Plan!.Command.GetType().GetProperty("Name")!.GetValue(planned.Plan.Command));
         Assert.Equal(preview, provider.Evaluate(new(registration.ToolboxItemId, document, pointer, visibleTargets: [target])));
     }
 

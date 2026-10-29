@@ -231,8 +231,11 @@ public sealed class PhaseHCanvas2DSceneIntegrationTests
         Assert.Same(first.Routing, sceneContributor.LastRouting);
         Assert.Same(documentBefore.VisualModel, sceneContributor.LastVisualModel);
         Assert.Same(editorOnly, sceneContributor.LastEditorState);
-        Assert.Equal(11, rebuiltScene.Items.Count(item =>
+        Assert.Equal(10, rebuiltScene.Items.Count(item =>
             item.Origin.Categories.HasFlag(Canvas2DSceneOriginCategory.EditorState)));
+        Assert.Contains(rebuiltScene.Items, item => item.Origin.StableSourceKey == "selection:" + alphaNode.Id.Value &&
+            item.Style.Stroke == "#2563eb");
+        Assert.DoesNotContain(rebuiltScene.Items, item => item.Origin.StableSourceKey == "hover:" + alphaNode.Id.Value);
         Assert.Equal(editorOnly.Viewport, rebuiltScene.Viewport);
         Assert.Equal(
             first.Scene.Items.Where(item =>

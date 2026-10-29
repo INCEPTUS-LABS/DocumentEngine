@@ -693,14 +693,18 @@ public sealed partial class CommandProcessor
                 null);
         }
 
-        if (_routingStatePreparer is null && (baseSnapshot.VisualModel.RoutingScopes is not null ||
+        var preservesPreparedGeometry = CanPreservePreparedGeometry(baseSnapshot, committedSnapshot,
+            handlerResult.PipelineInvalidation ?? CommandPipelineInvalidation.Resolve(command),
+            handlerResult.NodeGeometryImpact, routingIntents, spatialHeightIntents, spatialWidthIntents,
+            preparedHistoryMutation?.NodeGeometrySeeds ?? []);
+        if (!preservesPreparedGeometry && _routingStatePreparer is null && (baseSnapshot.VisualModel.RoutingScopes is not null ||
             !routingIntents.IsEmpty || !spatialHeightIntents.IsEmpty || !spatialWidthIntents.IsEmpty))
         {
             return (Failure(transaction.DocumentId, command, CommandExecutionStatus.ProposedStateValidationFailed,
                 transaction.BaseRevision, Error("INCEPTUS.ROUTING.PREPARER.MISSING",
                     "Prepared routing state requires a configured immutable routing preparer.", command.TypeId.Value)), false, null);
         }
-        if (_routingStatePreparer is not null)
+        if (!preservesPreparedGeometry && _routingStatePreparer is not null)
         {
             committedSnapshot = ApplyReplayNodeGeometrySeeds(committedSnapshot,
                 preparedHistoryMutation?.NodeGeometrySeeds ?? []);

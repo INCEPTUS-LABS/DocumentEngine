@@ -1,4 +1,5 @@
 using Inceptus.DocumentEngine.Bpmn.Semantics;
+using Inceptus.DocumentEngine.Bpmn.Appearance;
 using Inceptus.DocumentEngine.Contracts.Canvas2D;
 using Inceptus.DocumentEngine.Contracts.Geometry;
 using Inceptus.DocumentEngine.Contracts.Layout;
@@ -12,7 +13,7 @@ namespace Inceptus.DocumentEngine.Bpmn.Scene;
 internal static class BpmnParticipantSceneContributor
 {
     internal static Canvas2DSceneContribution Contribute(ProjectedGraph graph, LayoutResult localLayout,
-        Canvas2DSceneContributorId contributorId)
+        Canvas2DSceneContributorId contributorId, BpmnElementColours colours)
     {
         var overrides = new List<Canvas2DCanonicalSceneItemVisualOverride>();
         var decorations = new List<Canvas2DSceneItem>();
@@ -21,7 +22,7 @@ internal static class BpmnParticipantSceneContributor
             var layout = localLayout.Nodes.Single(geometry => geometry.ProjectedObjectId == node.Id);
             var bounds = new RectD(0d, 0d, layout.Bounds.Width, layout.Bounds.Height);
             overrides.Add(new Canvas2DCanonicalSceneItemVisualOverride(Canvas2DSceneObjectIdentity.ForProjected(node.Id, "node"),
-                Canvas2DSceneGeometry.Rectangle(bounds), new Canvas2DSceneStyle(stroke: "#111827", strokeWidth: 1.5d)));
+                Canvas2DSceneGeometry.Rectangle(bounds), new Canvas2DSceneStyle(fill: colours.Background, stroke: colours.Border, strokeWidth: 1.5d)));
             var headerWidth = bounds.Width;
             Canvas2DSceneOriginTrace Trace(string key) => new(Canvas2DSceneOriginCategory.SemanticElement |
                 (node.Source.VisualStateId is null ? Canvas2DSceneOriginCategory.None : Canvas2DSceneOriginCategory.VisualState) | Canvas2DSceneOriginCategory.ProjectedRuntimeObject |
@@ -37,7 +38,7 @@ internal static class BpmnParticipantSceneContributor
                     Canvas2DSceneLayer.Decoration, 1,
                     Canvas2DSceneGeometry.Text(textBounds, name.TextValue, new PointD(0d, 0d),
                         Canvas2DTextAlignment.Center, Canvas2DTextBaseline.Middle), Trace(nameKey), transform: transform, clip: layout.Bounds,
-                    style: new Canvas2DSceneStyle(fill: "#111827", fontSize: 12d)));
+                    style: new Canvas2DSceneStyle(fill: colours.Text, fontSize: 12d)));
             }
         }
 

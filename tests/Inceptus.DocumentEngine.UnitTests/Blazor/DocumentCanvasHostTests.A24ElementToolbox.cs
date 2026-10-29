@@ -59,6 +59,11 @@ public sealed partial class DocumentCanvasHostTests
         var target = Assert.Single(after.SemanticModel.Elements, element => element.Id == visual.SemanticElementId);
         Assert.Equal(candidate.ElementTypeId, target.TypeId);
         Assert.False(target.Properties.ContainsKey(BpmnSemanticProperties.Description));
+        if (BpmnSemanticTypes.IsEvent(target.TypeId))
+        {
+            Assert.True(!target.Properties.TryGetValue(BpmnSemanticProperties.Name, out var name) ||
+                string.IsNullOrEmpty(name.TextValue));
+        }
         Assert.Equal(before.SemanticModel.Elements.AsEnumerable(),
             after.SemanticModel.Elements.Where(element => element.Id != target.Id));
         Assert.Equal(before.SemanticModel.RootScopeId, after.SemanticModel.GetScope(target.Id).Id);

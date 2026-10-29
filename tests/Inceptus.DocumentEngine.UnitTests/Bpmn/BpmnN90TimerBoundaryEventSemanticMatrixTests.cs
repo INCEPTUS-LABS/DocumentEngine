@@ -348,8 +348,8 @@ public sealed class BpmnN90TimerBoundaryEventSemanticMatrixTests
 
         var draft = new DocumentCanvasPropertiesDraft(authoritative);
         Assert.True(authoritative.CanEditType);
-        Assert.False(authoritative.CanEditData);
-        Assert.Empty(draft.DataFields);
+        Assert.True(authoritative.CanEditData);
+        Assert.Equal("name", Assert.Single(draft.DataFields).FieldId.Value);
         Assert.False(draft.TryGetDataField(
             new ElementPropertyFieldId("interrupting"),
             out _));
@@ -358,7 +358,7 @@ public sealed class BpmnN90TimerBoundaryEventSemanticMatrixTests
         Assert.False(draft.TryGetDirtyDataField(out _));
         Assert.False(draft.IsDirty);
 
-        // A2.1 exposes only Type through the Event form. The existing typed
+        // Event forms expose Name and Type. The other existing typed
         // schema and property command remain available to domain operations.
         var typedDraft = new DocumentCanvasDataPropertyDraft(interruptingField)
         {

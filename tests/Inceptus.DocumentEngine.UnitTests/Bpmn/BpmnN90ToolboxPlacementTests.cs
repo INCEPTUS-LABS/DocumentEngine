@@ -268,7 +268,7 @@ public sealed class BpmnN90ToolboxPlacementTests
         Assert.Equal(BoundaryAttachmentSide.Bottom, command.Side);
         Assert.Equal(0.5d, command.PositionOnSide);
         Assert.Equal(ActivityBounds, command.EffectiveOwnerBounds);
-        Assert.Equal("Timer Boundary Event 2", command.Name);
+        Assert.Equal(string.Empty, command.Name);
         Assert.Null(command.TimerDefinition);
         Assert.True(command.CancelActivity);
         Assert.Null(command.Description);

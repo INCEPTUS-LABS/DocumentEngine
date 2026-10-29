@@ -11,3 +11,4 @@ button.destructive { color: #dc2626; }
 .element-creation-row + .element-creation-row { border-top: 1px solid #e2e8f0; }
 .element-group-name { flex: 0 0 94px; font-size: 12px; font-weight: 600; }
 .element-candidates { display: flex; gap: 4px; overflow-x: auto; padding: 3px; scrollbar-width: thin; }
+.connector-actions button { flex-basis: 44px; width: 44px; height: 44px; }

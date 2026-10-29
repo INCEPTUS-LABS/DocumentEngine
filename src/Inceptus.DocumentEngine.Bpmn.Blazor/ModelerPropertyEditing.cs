@@ -16,6 +16,16 @@ namespace Inceptus.DocumentEngine.Bpmn.Blazor;
 /// </summary>
 internal static class ModelerPropertyEditing
 {
+    internal const string AppearanceInvalidDiagnosticCode = "BPMN.APPEARANCE.INVALID";
+
+    internal static ICommand CreateAppearanceCommand(DocumentId documentId, DocumentRevision revision,
+        IEnumerable<KeyValuePair<string, PropertyValue?>> changes) =>
+        new SetBpmnDocumentAppearanceCommand(documentId, revision, changes);
+
+    internal static bool SupportsConnectorActions(DocumentSnapshot document, SemanticElementId semanticId) =>
+        document.SemanticModel.Relationships.Any(flow => flow.Id == semanticId &&
+            (flow.TypeId == BpmnSemanticTypes.SequenceFlow || flow.TypeId == BpmnSemanticTypes.MessageFlow));
+
     internal static ImmutableArray<KeyValuePair<SemanticElementId, string>> CaptureParticipants(DocumentSnapshot document) =>
         [.. document.SemanticModel.Elements.Where(element => element.TypeId == BpmnSemanticTypes.Participant)
             .Select(element => KeyValuePair.Create(element.Id,
@@ -30,9 +40,15 @@ internal static class ModelerPropertyEditing
 
     internal static bool CanEditMissingValue(
         SemanticTypeId typeId, ElementPropertyFieldDefinition field) =>
-        (typeId == BpmnSemanticTypes.SequenceFlow || typeId == BpmnSemanticTypes.MessageFlow) &&
+        (typeId == BpmnSemanticTypes.SequenceFlow || typeId == BpmnSemanticTypes.MessageFlow || SupportsEventName(typeId)) &&
         field.SemanticPropertyKey == BpmnSemanticProperties.Name || IsParticipantField(typeId, field) ||
         IsDescriptionField(typeId, field);
+
+    internal static bool SupportsEventName(SemanticTypeId typeId) =>
+        BpmnSemanticTypes.IsEvent(typeId);
+
+    internal static bool IsVisibleDataField(SemanticTypeId typeId, ElementPropertyFieldDefinition field) =>
+        !BpmnSemanticTypes.IsEvent(typeId) || field.SemanticPropertyKey == BpmnSemanticProperties.Name;
 
     private static bool IsDescriptionField(SemanticTypeId typeId, ElementPropertyFieldDefinition field) =>
         (BpmnActivitySemanticTypes.IsActivity(typeId) || BpmnGatewaySemanticTypes.IsGateway(typeId)) &&
@@ -53,6 +69,10 @@ internal static class ModelerPropertyEditing
             return new SetBpmnPoolParticipantCommand(target.DocumentId, target.Revision, target.SemanticId,
                 string.IsNullOrWhiteSpace(value.TextValue) ? null : new SemanticElementId(value.TextValue));
         if (!CanEditMissingValue(target.TypeId, field)) return null;
+
+        if (SupportsEventName(target.TypeId))
+            return new UpdateBpmnEventNameCommand(target.DocumentId, target.Revision, target.SemanticId,
+                string.IsNullOrWhiteSpace(value.TextValue) ? null : value.TextValue);
 
         var name = value.TextValue.Length == 0 ? null : value.TextValue;
         return target.TypeId == BpmnSemanticTypes.MessageFlow

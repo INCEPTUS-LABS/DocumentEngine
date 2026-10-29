@@ -1,7 +1,7 @@
 # Inceptus Document Engine
 
 A reusable BPMN modeler with immutable native documents and a standalone process
-presentation export. This README describes the locally prepared **0.1.14** release
+presentation export. This README describes the locally prepared **0.1.16** release
 candidate targeting **net10.0**; public publication is a separate step.
 
 [Open BPMN Editor](https://bpmn-editor.inceptus.online)
@@ -30,8 +30,8 @@ transitively; hosts using only editing still need only the Bpmn.Blazor reference
 The validated hosting model is a **standalone Blazor WebAssembly application** on .NET 10. Configure a feed containing the reviewed candidate before adding the package:
 
 ```xml
-<PackageReference Include="Inceptus.DocumentEngine.Bpmn.Blazor" Version="0.1.14" />
-<PackageReference Include="Inceptus.Bpmn.Integration" Version="0.1.14" />
+<PackageReference Include="Inceptus.DocumentEngine.Bpmn.Blazor" Version="0.1.16" />
+<PackageReference Include="Inceptus.Bpmn.Integration" Version="0.1.16" />
 ```
 
 Register the modeler in the application's `Program.cs`. The extension namespace is `Microsoft.Extensions.DependencyInjection`:
@@ -107,6 +107,25 @@ for an eligible selected SubProcess, using the existing scope navigation,
 breadcrumb return and navigation History. These controls belong to the packaged
 editor; hosts do not need a separate Properties or Smart Edit implementation.
 
+Start and End Events support optional Names in Properties and display nonblank
+names as external labels below the event. Newly created Events start unnamed;
+clearing a Name removes it. Event Data exposes Name while existing type selectors
+and event parameters remain available. Apply and Undo/Redo preserve the exact
+previous optional value, identities, attachments and retained geometry. Names
+and their resolved text colours are included in graphical exports and published
+presentations without changing process execution.
+
+The contextual Properties action now follows the selected element's actual
+editable schema, including supported missing values. With Smart Edit enabled,
+a completed click on a Sequence Flow or Message Flow opens a compact connector
+toolbox containing Properties and Delete near the click. Dragging, reconnecting,
+bend editing and modifier selection do not open it. Connector edits and deletion
+use the existing Commands and History, including exact Undo/Redo restoration.
+Version 0.1.16 corrects Delete for horizontal and vertical connector bounds
+without changing node visibility or general rectangle semantics. Message Flow
+Undo restores its original scope-owned routing record, including Straight or
+Manual routing, path geometry and ordering.
+
 Message Flow connects different effective Participants in the supported Pool
 diagram. A standalone Pool supplies its own communication identity; Pools
 assigned to the same Participant are presented as adjoining Lanes. Supported
@@ -129,6 +148,37 @@ conservatively improves eligible incident connection points. Turning Smart Edit
 **OFF** hides both contextual toolboxes while ordinary editing remains available;
 turning it ON restores tools eligible for the current selection. Smart Edit and
 Toolbox expansion are transient editor UI state, not saved document preferences.
+
+## Document colour schemes
+
+Document Properties offers **White** and **Mixed** colour schemes. White is the
+fallback for documents without appearance metadata and retains the established
+header presentation. Mixed supplies coordinated colours for Start Events, Tasks,
+Gateways, End Events and Pool, Lane and Participant headers. Each scheme retains
+its own background, border and text overrides; header colours apply by family,
+not to individual Pool/Lane/Participant instances.
+
+**Edit colours** opens the dedicated Colour Scheme editor with seven family
+previews, colour pickers, `#RRGGBB` fields and Restore preset. The White Participant
+header can retain its default unfilled background. **Use colours** accepts edits
+into the parent draft; only Document Properties **Apply** commits them. Cancel
+discards the relevant draft, and stale drafts cannot overwrite newer state. The
+form follows the Document Properties layout with scrollable content and fixed
+actions, and uses the packaged English, Polish, French, German and Spanish UI.
+
+Appearance is stored in the document's existing extension metadata through the
+normal validated Command and History path. Undo/Redo restores exact values;
+native JSON preserves overrides and unknown metadata. Invalid colour values use
+safe presentation fallbacks; unsupported appearance versions are read-only.
+Changes recompose the Scene without rearranging nodes or rerouting connectors.
+SVG, PNG and PublishedProcess capture resolved paint; execution semantics and
+native/published format versions remain unchanged.
+
+These controls and behaviours are supplied by `InceptusBpmnModeler`. Existing
+package hosts receive them by updating the aligned package family and retaining
+normal Razor static assets and localization setup. No host colour form, connector
+toolbox or event-name implementation is required. The internal source Demo's
+placement-preview toolbar cache adjustment belongs to its own host orchestration.
 
 ## Graphical export and drawing area
 
@@ -259,6 +309,15 @@ Native JSON remains **Inceptus.Document, formatVersion 2**. The migrator accepts
 unsupported versions; no legacy migrations exist. The optional `BpmnModelerDocumentLoadOptions` overload preserves saved-routing
 verification and opt-in incompatible-v2 recovery during attachment. This requires the editor's renderer metrics and routing
 configuration and is an internal attachment precondition, not schema migration. Recovered content remains unsaved.
+
+Start/End Event captions now use `OutsideBelow` placement. Older v2 documents with
+saved `InsideCentered` caption geometry can fail strict attachment with
+`INCEPTUS.ROUTING.SAVED_STATE.INCOMPATIBLE`. To recover deliberately, call
+`SetDocumentAsync` with `VerifySavedRouting = true` and
+`ReprepareIncompatibleRouting = true`, then save the recovered native document
+and verify a subsequent strict load with the same rendering configuration.
+Recovery regenerates incompatible routing; no automatic recovery or silent
+schema migration is performed.
 
 `BpmnStandardConverter` converts the supported interchange subset of **BPMN 2.0.2**. Native schema version and BPMN
 standard version remain separate concepts. Conversion is deliberately lossy; it is not executable-process certification.

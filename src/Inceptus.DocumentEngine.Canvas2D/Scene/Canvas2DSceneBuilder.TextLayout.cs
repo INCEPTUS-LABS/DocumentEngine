@@ -307,7 +307,8 @@ public sealed partial class Canvas2DSceneBuilder
     private static IEnumerable<Canvas2DSceneItem> CreateMeasuredNodeLabelItems(
         Canvas2DMeasuredNodeLabel measuredLabel,
         Canvas2DMeasuredLabelBox box,
-        IEnumerable<KeyValuePair<string, PropertyValue>> persistentAppearance)
+        IEnumerable<KeyValuePair<string, PropertyValue>> persistentAppearance,
+        Canvas2DSceneStyle? resolvedStyle = null)
     {
         var persistentAppearanceMap = new PropertyMap(persistentAppearance);
         var interactionCapable =
@@ -364,7 +365,7 @@ public sealed partial class Canvas2DSceneBuilder
                     localAnchor,
                     documentAnchor),
                 clip: box.ClipBounds,
-                style: NodeLabelStyle,
+                style: resolvedStyle ?? NodeLabelStyle,
                 hitTestPolicy: interactionCapable
                     ? Canvas2DHitTestPolicy.None
                     : new Canvas2DHitTestPolicy(Canvas2DHitTestMode.Bounds),

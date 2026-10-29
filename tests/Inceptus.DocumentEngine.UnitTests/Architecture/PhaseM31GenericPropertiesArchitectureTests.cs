@@ -8,7 +8,7 @@ namespace Inceptus.DocumentEngine.UnitTests.Architecture;
 public sealed class PhaseM31GenericPropertiesArchitectureTests
 {
     [Fact]
-    public void BlazorPropertiesPresentationIsSchemaDrivenWithTypeOnlyBpmnEventAccess()
+    public void BlazorPropertiesPresentationIsSchemaDrivenWithFilteredBpmnEventDataAccess()
     {
         var component = ReadProductionFile(
             "Inceptus.DocumentEngine.Bpmn.Blazor",
@@ -26,7 +26,8 @@ public sealed class PhaseM31GenericPropertiesArchitectureTests
         const string eventExclusion = "!BpmnSemanticTypes.IsEvent(TypeId)";
         Assert.Equal(1, CountOccurrences(presentation, eventExclusion));
         Assert.Contains("BpmnElementTypeSwitching.GetSwitchableTypes(TypeId)", presentation, StringComparison.Ordinal);
-        Assert.Contains("authoritative.CanEditData ? authoritative.DataFields : []", presentation, StringComparison.Ordinal);
+        Assert.Contains("authoritative.VisibleDataFields", presentation, StringComparison.Ordinal);
+        Assert.Contains("ModelerPropertyEditing.IsVisibleDataField(TypeId, item.Definition)", presentation, StringComparison.Ordinal);
         Assert.DoesNotContain("BpmnSemanticTypes", component + presentation.Replace(eventExclusion, string.Empty, StringComparison.Ordinal),
             StringComparison.Ordinal);
         Assert.DoesNotContain("BpmnPluginRegistration", component + presentation,

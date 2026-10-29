@@ -1120,10 +1120,12 @@ public sealed class Canvas2DSceneBuilderTests
             new EditorStateSnapshot(
                 selection: [node.Source.VisualStateId!],
                 hoveredObjectId: nodeId)).Scene);
-        Assert.Contains(normallyHoveredScene.Items, item =>
+        Assert.DoesNotContain(normallyHoveredScene.Items, item =>
             StringComparer.Ordinal.Equals(
                 item.Origin.StableSourceKey,
                 $"hover:{nodeId.Value}"));
+        Assert.Contains(normallyHoveredScene.Items, item =>
+            item.Origin.StableSourceKey == $"selection:{nodeId.Value}" && item.Style.Stroke == "#2563eb");
     }
 
     [Fact]
@@ -2420,7 +2422,7 @@ public sealed class Canvas2DSceneBuilderTests
         Assert.Equal(firstScene.SourceRevision, secondScene.SourceRevision);
         Assert.Equal(firstScene.Items.Where(item => item.Layer != Canvas2DSceneLayer.Overlay),
             secondScene.Items.Where(item => item.Layer != Canvas2DSceneLayer.Overlay));
-        Assert.Equal(12, secondScene.Items.Count(item => item.Layer == Canvas2DSceneLayer.Overlay));
+        Assert.Equal(11, secondScene.Items.Count(item => item.Layer == Canvas2DSceneLayer.Overlay));
         Assert.Equal(updatedEditorState.Viewport, secondScene.Viewport);
         Assert.Equal(
             new PointD(32d, 42d),

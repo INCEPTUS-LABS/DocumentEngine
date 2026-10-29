@@ -153,6 +153,30 @@ test("graphical PNG uses a detached canvas, scale, white background and ordinary
     assert.equal(created[0].width, 0);
 });
 
+test("graphical PNG paints resolved document colours without palette metadata", async () => {
+    const paints = [];
+    const previous = document.createElement;
+    document.createElement = () => {
+        const drawing = new FakeContext();
+        drawing.fillRect = () => paints.push(["background", drawing.fillStyle]);
+        drawing.strokeRect = () => paints.push(["border", drawing.strokeStyle]);
+        drawing.fillText = () => paints.push(["text", drawing.fillStyle]);
+        const detached = new FakeCanvas(drawing);
+        detached.toBlob = callback => callback(new Blob([new Uint8Array([137, 80, 78, 71])]));
+        return detached;
+    };
+    const exporter = createGraphicalExport();
+    try {
+        await exporter.png({ ...versions(), viewportTransform: matrix(), items: [
+            { ...rectangle("task", 1), fill: "#E7EFF8", stroke: "#5D7FA5" },
+            { ...rectangle("label", 3), geometryKind: 3, content: "Task", fill: "#123456", stroke: null }
+        ] }, 200, 100, 1, { images: {}, fonts: {}, defaultFontFamily: "sans-serif" });
+        assert.ok(paints.some(([kind, colour]) => kind === "background" && colour === "#E7EFF8"));
+        assert.ok(paints.some(([kind, colour]) => kind === "border" && colour === "#5D7FA5"));
+        assert.ok(paints.some(([kind, colour]) => kind === "text" && colour === "#123456"));
+    } finally { exporter.dispose(); document.createElement = previous; }
+});
+
 test("graphical export rejects unsafe resources and oversized canvases before allocation", async () => {
     const oldBase = document.baseURI;
     const previous = document.createElement;

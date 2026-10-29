@@ -1549,9 +1549,9 @@ public sealed partial class DocumentCanvasHostTests
         Assert.NotNull(properties);
         Assert.Equal(expectedBounds, properties.Bounds);
         Assert.True(properties.CanEditType);
-        Assert.False(properties.CanEditData);
+        Assert.True(properties.CanEditData);
         Assert.False(properties.CanEditBounds);
-        Assert.Empty(new DocumentCanvasPropertiesDraft(properties).DataFields);
+        Assert.Equal("name", Assert.Single(new DocumentCanvasPropertiesDraft(properties).DataFields).FieldId.Value);
         Assert.True(host.CaptureState().PropertiesFormOpen);
         Assert.True(host.UpdatePropertiesFormState(false, null, false));
         Assert.Equal(expectedBounds, body.Bounds);
@@ -3276,7 +3276,7 @@ public sealed partial class DocumentCanvasHostTests
         var typeOnlySnapshot = Assert.IsType<DocumentCanvasPropertySnapshot>(await host.OpenPropertiesAsync(target));
         Assert.True(host.CaptureState().PropertiesFormOpen);
         Assert.True(typeOnlySnapshot.CanEditType);
-        Assert.Empty(new DocumentCanvasPropertiesDraft(typeOnlySnapshot).DataFields);
+        Assert.Equal("name", Assert.Single(new DocumentCanvasPropertiesDraft(typeOnlySnapshot).DataFields).FieldId.Value);
         Assert.True(DocumentCanvasPropertySnapshot.TryCreate(beforeDocument, target,
             new ElementPropertiesSchemaCatalog(BpmnPluginRegistration.N100.PropertiesSchemas), out var authoritative));
         Assert.Equal(string.Empty, DataEditorValue(authoritative, TimerDefinitionFieldId));

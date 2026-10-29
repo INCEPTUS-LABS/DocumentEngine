@@ -306,8 +306,10 @@ internal sealed record DocumentCanvasPropertySnapshot(
 
     // Ordinary element UI eligibility is presentation policy; schemas and their
     // internal values remain available to commands, serialization and diagnostics.
-    internal bool IsPropertiesAvailable => CanEditType ||
-        (!DataFields.IsEmpty && CanEditData);
+    internal bool IsPropertiesAvailable => CanEditType || CanEditData;
+
+    internal IEnumerable<DocumentCanvasDataPropertySnapshot> VisibleDataFields => DataFields.Where(item =>
+        ModelerPropertyEditing.IsVisibleDataField(TypeId, item.Definition));
 
     internal ImmutableArray<SemanticTypeId> SwitchableTypes => IsConnector
         ? []
@@ -315,13 +317,14 @@ internal sealed record DocumentCanvasPropertySnapshot(
 
     internal bool CanEditType => SwitchableTypes.Length > 1;
 
-    internal bool CanEditData => !BpmnSemanticTypes.IsEvent(TypeId);
+    internal bool CanEditData => VisibleDataFields.Any();
 
-    internal bool HasLongFormData => CanEditData && DataFields.Any(static item =>
+    internal bool HasLongFormData => VisibleDataFields.Any(static item =>
         item.Definition.EditorKind == ElementPropertyEditorKind.MultilineText);
 
     internal bool CanEditBounds => VisualStateId is not null &&
-        PlacementMode != VisualPlacementMode.Derived && !IsConnector && !IsBoundaryAttached && CanEditData;
+        PlacementMode != VisualPlacementMode.Derived && !IsConnector && !IsBoundaryAttached &&
+        !BpmnSemanticTypes.IsEvent(TypeId);
 
     internal bool CanEditRoutingType => IsConnector && VisualStateId is not null && RoutingType is not null;
 
@@ -624,7 +627,7 @@ internal sealed class DocumentCanvasPropertiesDraft
     {
         ArgumentNullException.ThrowIfNull(authoritative);
         Authoritative = authoritative;
-        DataFields = (authoritative.CanEditData ? authoritative.DataFields : [])
+        DataFields = authoritative.VisibleDataFields
             .Select(static field => new DocumentCanvasDataPropertyDraft(field))
             .ToImmutableArray();
         X = Format(authoritative.Bounds.X);

@@ -23,7 +23,7 @@ public sealed class PhaseM31BpmnPropertiesIntegrationTests
         "Review the incoming customer order.\nCheck completeness before approval.";
 
     [Fact]
-    public async Task TaskBodyAndLabelResolveTheExactM31SchemaWhileEventsKeepInternalDataAndHaveNoProperties()
+    public async Task TaskBodyAndLabelResolveTheExactSchemaWhileStartAndEndEventsExposeOnlyOptionalName()
     {
         await using var harness = await HostHarness.CreateAsync();
         var initialDocument = harness.Composition.Document.CaptureSnapshot();
@@ -66,14 +66,20 @@ public sealed class PhaseM31BpmnPropertiesIntegrationTests
         {
             await harness.Pointer.ContextMenuDocumentPointAsync(harness.Scene,
                 Center(NodeBody(harness.Scene, visualId).Bounds));
-            Assert.False(harness.Host.CanOpenContextProperties());
-            Assert.Null(await harness.Host.OpenPropertiesAsync(visualId));
-            Assert.False(harness.Host.CaptureState().PropertiesFormOpen);
+            Assert.True(harness.Host.CanOpenContextProperties());
+            var eventProperties = Assert.IsType<DocumentCanvasPropertySnapshot>(await harness.Host.OpenPropertiesAsync(visualId));
+            Assert.True(harness.Host.CaptureState().PropertiesFormOpen);
+            Assert.False(eventProperties.CanEditBounds);
+            Assert.False(eventProperties.CanEditType);
+            var field = Assert.Single(new DocumentCanvasPropertiesDraft(eventProperties).DataFields);
+            Assert.Equal(BpmnSemanticProperties.Name, field.Definition.SemanticPropertyKey);
+            Assert.True(field.CanEdit);
+            CloseProperties(harness.Host);
             Assert.True(DocumentCanvasPropertySnapshot.TryCreate(initialDocument, visualId,
                 harness.Composition.PropertiesSchemaCatalog, out var internalSnapshot));
             Assert.Equal(semanticId, internalSnapshot!.SemanticId);
             Assert.Equal(typeId, internalSnapshot.TypeId);
-            Assert.Empty(internalSnapshot.DataFields);
+            Assert.Equal(BpmnSemanticProperties.Name, Assert.Single(internalSnapshot.DataFields).Definition.SemanticPropertyKey);
         }
 
         var finalState = harness.State;

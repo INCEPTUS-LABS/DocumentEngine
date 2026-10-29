@@ -47,19 +47,31 @@ public sealed partial class OrganizationalPoolSceneContributor :
         Canvas2DSceneTransientDependency.Invariant);
 
     private readonly IOrganizationalElementEligibilityPolicy _eligibilityPolicy;
+    private readonly IOrganizationalPoolHeaderPaintProvider? _headerPaintProvider;
 
     public OrganizationalPoolSceneContributor(
-        IOrganizationalElementEligibilityPolicy eligibilityPolicy)
+        IOrganizationalElementEligibilityPolicy eligibilityPolicy) : this(eligibilityPolicy, null)
+    {
+    }
+
+    public OrganizationalPoolSceneContributor(
+        IOrganizationalElementEligibilityPolicy eligibilityPolicy,
+        IOrganizationalPoolHeaderPaintProvider? headerPaintProvider)
     {
         ArgumentNullException.ThrowIfNull(eligibilityPolicy);
         _eligibilityPolicy = eligibilityPolicy;
+        _headerPaintProvider = headerPaintProvider;
     }
 
     public static Canvas2DSceneContributorRegistration CreateRegistration(
-        IOrganizationalElementEligibilityPolicy eligibilityPolicy) =>
+        IOrganizationalElementEligibilityPolicy eligibilityPolicy) => CreateRegistration(eligibilityPolicy, null);
+
+    public static Canvas2DSceneContributorRegistration CreateRegistration(
+        IOrganizationalElementEligibilityPolicy eligibilityPolicy,
+        IOrganizationalPoolHeaderPaintProvider? headerPaintProvider) =>
         new(
             Descriptor,
-            new OrganizationalPoolSceneContributor(eligibilityPolicy),
+            new OrganizationalPoolSceneContributor(eligibilityPolicy, headerPaintProvider),
             Canvas2DSceneContributionStage.Presentation);
 
     public Canvas2DSceneContributionResult Contribute(
@@ -187,7 +199,7 @@ public sealed partial class OrganizationalPoolSceneContributor :
                     poolBounds,
                     ExpandDecorationBounds(poolBounds, commonLeftOverflow,
                         isCollapsed ? 0d : Math.Min(0d, contentBounds.Top)),
-                    selected));
+                    selected, ResolveHeaderPaint(presentation.Document, pool)));
             }
             cursorY = poolBounds.Bottom + PoolGap;
         }
@@ -368,7 +380,8 @@ public sealed partial class OrganizationalPoolSceneContributor :
         Contracts.Semantics.SemanticElementSnapshot pool,
         RectD poolBounds,
         RectD decorationBounds,
-        bool selected)
+        bool selected,
+        OrganizationalPoolHeaderPaint headerPaint)
     {
         var headerBounds = new RectD(
             poolBounds.Left,
@@ -394,8 +407,8 @@ public sealed partial class OrganizationalPoolSceneContributor :
             20,
             Canvas2DSceneGeometry.Rectangle(headerBounds),
             new Canvas2DSceneStyle(
-                fill: selected ? "#dbeafe" : "#eef2f7",
-                stroke: selected ? "#2563eb" : "#64748b",
+                fill: selected ? headerPaint.SelectedBackground : headerPaint.Background,
+                stroke: selected ? "#2563eb" : headerPaint.Border,
                 strokeWidth: selected ? 2.5d : 1.5d),
             new Canvas2DHitTestPolicy(Canvas2DHitTestMode.Bounds),
             metadata: [Canvas2DSemanticSceneInteractionMetadata.Enabled]);
@@ -410,7 +423,7 @@ public sealed partial class OrganizationalPoolSceneContributor :
                 new PointD(headerBounds.Right, headerBounds.Bottom),
             ]),
             new Canvas2DSceneStyle(
-                stroke: selected ? "#2563eb" : "#64748b",
+                stroke: selected ? "#2563eb" : headerPaint.Border,
                 strokeWidth: selected ? 2.5d : 1.5d),
             Canvas2DHitTestPolicy.None);
 
@@ -431,7 +444,7 @@ public sealed partial class OrganizationalPoolSceneContributor :
                 new PointD(localWidth / 2d, localHeight / 2d),
                 Canvas2DTextAlignment.Center,
                 Canvas2DTextBaseline.Middle),
-            new Canvas2DSceneStyle(fill: "#0f172a", fontSize: 13d),
+            new Canvas2DSceneStyle(fill: headerPaint.Text, fontSize: 13d),
             Canvas2DHitTestPolicy.None,
             new Matrix2D(
                 0d,
@@ -441,6 +454,11 @@ public sealed partial class OrganizationalPoolSceneContributor :
                 center.X - (localHeight / 2d),
                 center.Y + (localWidth / 2d)));
     }
+
+    private OrganizationalPoolHeaderPaint ResolveHeaderPaint(
+        Inceptus.DocumentEngine.Contracts.Documents.DocumentSnapshot document,
+        Inceptus.DocumentEngine.Contracts.Semantics.SemanticElementSnapshot pool) =>
+        _headerPaintProvider?.Resolve(document, pool) ?? OrganizationalPoolHeaderPaint.Default;
 
     private static Canvas2DSceneItem CreatePlacementExclusion(
         SemanticElementId poolId,

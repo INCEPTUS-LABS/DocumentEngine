@@ -579,13 +579,15 @@ public sealed partial class Canvas2DSceneBuilder
                 hovered = ResolveConnectorHoverTarget(hovered, hoverItems);
                 hovered = ResolveNodeLabelHoverTarget(hovered, itemsById);
                 hovered = ResolveConnectorLabelHoverPreview(hovered, editorState.ActiveGesture);
-                if (!IsResizeInteractionRegion(hovered))
+                var selected = hovered.Origin.VisualStateId is { } owner && editorState.Selection.Contains(owner);
+                var selectionTarget = selected ? ResolveLogicalSelectionTarget(persistentItems, hovered.Origin.VisualStateId!) : null;
+                if (!IsResizeInteractionRegion(hovered) && selectionTarget?.Id != hovered.Id)
                 {
                     items.AddRange(CreateTargetOverlays(
                         hovered,
                         "hover",
                         2000,
-                        "#f59e0b",
+                        selected ? "#2563eb" : "#f59e0b",
                         hasLineJumps,
                         hoverItems));
                 }
@@ -845,7 +847,8 @@ public sealed partial class Canvas2DSceneBuilder
             Canvas2DSceneObjectIdentity.ForEditorState(stableKey),
             overlayLayer,
             overlayZIndex,
-            target.Geometry,
+            target.Geometry.Kind == Canvas2DSceneGeometryKind.Text
+                ? Canvas2DSceneGeometry.Rectangle(target.Geometry.Bounds) : target.Geometry,
             new Canvas2DSceneOriginTrace(
                 categories,
                 target.Origin.SemanticElementId,
@@ -1364,7 +1367,7 @@ public sealed partial class Canvas2DSceneBuilder
     private static Canvas2DSceneItem CreateUnmeasuredOutsideNodeLabelItem(
         ProjectedLabel label,
         LayoutNodeGeometry ownerNode,
-        IEnumerable<KeyValuePair<string, PropertyValue>> persistentAppearance)
+        IEnumerable<KeyValuePair<string, PropertyValue>> persistentAppearance, Canvas2DSceneStyle? resolvedStyle = null)
     {
         var placement = label.NodePlacement!;
         var maximumWidth = placement.MaximumWidth!.Value;
@@ -1407,7 +1410,7 @@ public sealed partial class Canvas2DSceneBuilder
                 localAnchor,
                 documentAnchor),
             clip: bounds,
-            style: NodeLabelStyle,
+            style: resolvedStyle ?? NodeLabelStyle,
             hitTestPolicy: label.NodeInteractionPolicy ==
                 NodeLabelInteractionPolicy.MoveAndResize &&
                 label.Source.VisualStateId is not null
@@ -1426,7 +1429,7 @@ public sealed partial class Canvas2DSceneBuilder
         ProjectedLabel label,
         LayoutNodeGeometry ownerNode,
         NodeLabelVisualOverride visualOverride,
-        IEnumerable<KeyValuePair<string, PropertyValue>> persistentAppearance)
+        IEnumerable<KeyValuePair<string, PropertyValue>> persistentAppearance, Canvas2DSceneStyle? resolvedStyle = null)
     {
         var horizontalScale = Length(
             ownerNode.Transform.TransformVector(new VectorD(1d, 0d)));
@@ -1461,7 +1464,7 @@ public sealed partial class Canvas2DSceneBuilder
                 localAnchor,
                 center),
             clip: bounds,
-            style: NodeLabelStyle,
+            style: resolvedStyle ?? NodeLabelStyle,
             hitTestPolicy: label.NodeInteractionPolicy ==
                 NodeLabelInteractionPolicy.MoveAndResize &&
                 label.Source.VisualStateId is not null

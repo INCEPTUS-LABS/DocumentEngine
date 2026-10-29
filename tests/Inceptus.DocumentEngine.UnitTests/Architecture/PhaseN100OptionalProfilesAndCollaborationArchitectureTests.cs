@@ -112,8 +112,15 @@ public sealed class PhaseN100OptionalProfilesAndCollaborationArchitectureTests
         var prior = BpmnPluginRegistration.N91;
         var current = BpmnPluginRegistration.N100;
 
-        Assert.Equal(prior.ProjectionRules.AsEnumerable(), current.ProjectionRules.Where(
-            rule => rule.SemanticTypeId != BpmnSemanticTypes.Participant && rule.SemanticTypeId != BpmnSemanticTypes.MessageFlow));
+        var inheritedRules = current.ProjectionRules.Where(rule =>
+            rule.SemanticTypeId != BpmnSemanticTypes.Participant && rule.SemanticTypeId != BpmnSemanticTypes.MessageFlow).ToArray();
+        Assert.Equal(prior.ProjectionRules.Select(rule => (rule.RuleId, rule.SourceKind, rule.SemanticTypeId)),
+            inheritedRules.Select(rule => (rule.RuleId, rule.SourceKind, rule.SemanticTypeId)));
+        // Start/End rules now position their optional names below the event; all other rules are reused.
+        Assert.Equal(prior.ProjectionRules.Where(rule => rule.SemanticTypeId != BpmnSemanticTypes.StartEvent &&
+                rule.SemanticTypeId != BpmnSemanticTypes.EndEvent),
+            inheritedRules.Where(rule => rule.SemanticTypeId != BpmnSemanticTypes.StartEvent &&
+                rule.SemanticTypeId != BpmnSemanticTypes.EndEvent));
         Assert.Single(current.ProjectionRules, rule => rule.SemanticTypeId == BpmnSemanticTypes.Participant);
         Assert.Single(current.ProjectionRules, rule => rule.SemanticTypeId == BpmnSemanticTypes.MessageFlow);
         Assert.Equal(BpmnSemanticTypes.Collaboration, Assert.Single(current.PresentationViewProviders).OwnerTypeId);
@@ -145,15 +152,30 @@ public sealed class PhaseN100OptionalProfilesAndCollaborationArchitectureTests
                 currentToolbox.Items.Any(item => item.ItemId == registration.ToolboxItemId)),
             current.ToolboxPlacementRegistrations);
         Assert.Equal(prior.PropertiesSchemas, current.PropertiesSchemas.Where(
-            schema => schema.SemanticTypeId != BpmnSemanticTypes.SequenceFlow && schema.SemanticTypeId != BpmnSemanticTypes.MessageFlow && schema.SemanticTypeId != BpmnSemanticTypes.Participant));
+            schema => schema.SemanticTypeId != BpmnSemanticTypes.SequenceFlow && schema.SemanticTypeId != BpmnSemanticTypes.MessageFlow &&
+                schema.SemanticTypeId != BpmnSemanticTypes.Participant && schema.SemanticTypeId != BpmnSemanticTypes.StartEvent &&
+                schema.SemanticTypeId != BpmnSemanticTypes.EndEvent));
+        foreach (var type in new[] { BpmnSemanticTypes.StartEvent, BpmnSemanticTypes.EndEvent })
+        {
+            var field = Assert.Single(Assert.Single(current.PropertiesSchemas, schema => schema.SemanticTypeId == type).Fields);
+            Assert.Equal(BpmnSemanticProperties.Name, field.SemanticPropertyKey);
+            Assert.True(field.IsEditable);
+        }
         var flowSchema = Assert.Single(current.PropertiesSchemas,
             schema => schema.SemanticTypeId == BpmnSemanticTypes.SequenceFlow);
         Assert.Equal(BpmnSemanticProperties.Name, Assert.Single(flowSchema.Fields).SemanticPropertyKey);
         Assert.Equal(prior.ModelValidationRules, current.ModelValidationRules.Where(rule => rule is not BpmnMessageFlowValidationRule && rule is not BpmnPoolFlowValidationRule));
         Assert.Single(current.ModelValidationRules, rule => rule is BpmnMessageFlowValidationRule);
         // A2.4 adds Smart Create, its focused replay, and Auto Points to the A2.3 registrations.
-        Assert.Equal(prior.CommandHandlers.Length + 22, current.CommandHandlers.Length);
-        Assert.Equal(prior.HistoryPolicies.Length + 20, current.HistoryPolicies.Length);
+        // Document appearance adds one metadata command through the same command/history catalogs.
+        Assert.Equal(prior.CommandHandlers.Length + 24, current.CommandHandlers.Length);
+        Assert.Equal(prior.HistoryPolicies.Length + 22, current.HistoryPolicies.Length);
+        Assert.Single(current.CommandHandlers, registration => registration.TypeId == UpdateBpmnEventNameCommand.KnownTypeId);
+        Assert.Single(current.CommandValidators, registration => registration.TypeId == UpdateBpmnEventNameCommand.KnownTypeId);
+        Assert.Single(current.HistoryPolicies, registration => registration.TypeId == UpdateBpmnEventNameCommand.KnownTypeId);
+        Assert.Single(current.CommandHandlers, registration => registration.TypeId == SetBpmnDocumentAppearanceCommand.KnownTypeId);
+        Assert.Single(current.CommandValidators, registration => registration.TypeId == SetBpmnDocumentAppearanceCommand.KnownTypeId);
+        Assert.Single(current.HistoryPolicies, registration => registration.TypeId == SetBpmnDocumentAppearanceCommand.KnownTypeId);
         Assert.Single(current.CommandHandlers, registration => registration.TypeId == UpdateBpmnElementDescriptionCommand.KnownTypeId);
         Assert.Single(current.CommandValidators, registration => registration.TypeId == UpdateBpmnElementDescriptionCommand.KnownTypeId);
         Assert.Single(current.HistoryPolicies, registration => registration.TypeId == UpdateBpmnElementDescriptionCommand.KnownTypeId);

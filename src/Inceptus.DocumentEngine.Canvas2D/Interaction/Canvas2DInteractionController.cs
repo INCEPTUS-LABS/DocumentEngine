@@ -1557,6 +1557,8 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
                 ? "pointer"
                 : "default";
         var delta = documentPoint - pending.StartDocumentPoint;
+        if (HasReachedMoveActivationThreshold(delta))
+            _pendingPointer = pending with { HasExceededClickDistance = true };
         if (pending.MoveTarget is null ||
             !HasReachedMoveActivationThreshold(delta))
         {
@@ -1902,21 +1904,25 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
                 releasedVisualStateId,
                 releasedSemanticElementId);
         var cssCursor = CssCursor(observed.CurrentScene!, releaseHit);
+        var completedClick = !pending.ControlKey && !pending.HasExceededClickDistance &&
+            !HasReachedMoveActivationThreshold(documentPoint - pending.StartDocumentPoint) &&
+            pending.SelectedVisualStateId == releasedVisualStateId;
         if (updated.Equals(observed.EditorState))
         {
             return new Canvas2DInteractionResult(
                 Canvas2DInteractionStatus.Unchanged,
                 observed,
                 releaseHit,
-                cssCursor: cssCursor);
+                cssCursor: cssCursor, isCompletedSelectionClick: completedClick);
         }
 
-        return await ApplyEditorStateAsync(
+        var result = await ApplyEditorStateAsync(
             observed,
             updated,
             releaseHit,
             cancellationToken,
             cssCursor).ConfigureAwait(false);
+        return result.WithCompletedSelectionClick(completedClick);
     }
 
     private static bool ShouldActivatePendingMove(
@@ -5076,7 +5082,10 @@ public sealed partial class Canvas2DInteractionController : IAsyncDisposable
         Canvas2DSceneItem? MoveTarget,
         Canvas2DScene Scene,
         EditingSessionGeneration Generation,
-        EditorStateSnapshot EditorState);
+        EditorStateSnapshot EditorState)
+    {
+        public bool HasExceededClickDistance { get; init; }
+    }
 
     private readonly record struct PointerPresentation(
         Canvas2DSceneHitTestResult? HitResult,

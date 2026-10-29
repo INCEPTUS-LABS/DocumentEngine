@@ -80,10 +80,11 @@ public sealed class PhaseA22ConnectorVisualTests
         var targetArrow = canonical.Items.Single(item => item.Metadata.ContainsKey(Canvas2DConnectorArrowMetadata.TargetArrow));
         var arrowOverlays = scene.Items.Where(item => item.Layer == Canvas2DSceneLayer.Overlay &&
             item.Origin.RelatedSceneObjectIds.Contains(targetArrow.Id)).ToArray();
-        Assert.Equal(2, arrowOverlays.Length);
+        Assert.Single(arrowOverlays);
         Assert.All(arrowOverlays, item =>
         {
             Assert.Equal("#ffffff", item.Style.Fill);
+            Assert.Equal("#2563eb", item.Style.Stroke);
             Assert.True(item.Geometry.IsClosed);
         });
         var decorationOverlays = scene.Items.Where(item => item.Layer == Canvas2DSceneLayer.Overlay &&

@@ -121,51 +121,6 @@ internal sealed class BpmnElementCreationValidator<TCommand> : ICommandValidator
                 creation.ElementId.Value));
         }
 
-        if (creation is CreateBpmnMessageCatchEventCommand messageCatchEvent &&
-            string.IsNullOrWhiteSpace(messageCatchEvent.Name))
-        {
-            diagnostics.Add(BpmnDiagnostics.Error(
-                BpmnCommandDiagnosticCodes.InvalidCatchEvent,
-                "A BPMN Message Catch Event requires a nonblank text Name property.",
-                creation.ElementId.Value));
-        }
-
-        if (creation is CreateBpmnTimerCatchEventCommand timerCatchEvent &&
-            string.IsNullOrWhiteSpace(timerCatchEvent.Name))
-        {
-            diagnostics.Add(BpmnDiagnostics.Error(
-                BpmnCommandDiagnosticCodes.InvalidCatchEvent,
-                "A BPMN Timer Catch Event requires a nonblank text Name property.",
-                creation.ElementId.Value));
-        }
-
-        if (creation is CreateBpmnMessageThrowEventCommand messageThrowEvent &&
-            string.IsNullOrWhiteSpace(messageThrowEvent.Name))
-        {
-            diagnostics.Add(BpmnDiagnostics.Error(
-                BpmnCommandDiagnosticCodes.InvalidIntermediateEvent,
-                "A BPMN Message Throw Event requires a nonblank text Name property.",
-                creation.ElementId.Value));
-        }
-
-        if (creation is CreateBpmnSignalCatchEventCommand signalCatchEvent &&
-            string.IsNullOrWhiteSpace(signalCatchEvent.Name))
-        {
-            diagnostics.Add(BpmnDiagnostics.Error(
-                BpmnCommandDiagnosticCodes.InvalidIntermediateEvent,
-                "A BPMN Signal Catch Event requires a nonblank text Name property.",
-                creation.ElementId.Value));
-        }
-
-        if (creation is CreateBpmnSignalThrowEventCommand signalThrowEvent &&
-            string.IsNullOrWhiteSpace(signalThrowEvent.Name))
-        {
-            diagnostics.Add(BpmnDiagnostics.Error(
-                BpmnCommandDiagnosticCodes.InvalidIntermediateEvent,
-                "A BPMN Signal Throw Event requires a nonblank text Name property.",
-                creation.ElementId.Value));
-        }
-
         ValidateOptionalText(creation, diagnostics);
         return [.. diagnostics];
     }
@@ -176,7 +131,7 @@ internal sealed class BpmnElementCreationValidator<TCommand> : ICommandValidator
     {
         var values = creation switch
         {
-            CreateBpmnStartEventCommand start => new[] { start.Name, start.Description },
+            CreateBpmnStartEventCommand start => new[] { start.Description },
             CreateBpmnTaskCommand task => new[] { task.Description },
             CreateBpmnExclusiveGatewayCommand gateway => new[] { gateway.Description },
             CreateBpmnParallelGatewayCommand gateway => new[] { gateway.Description },
@@ -188,7 +143,7 @@ internal sealed class BpmnElementCreationValidator<TCommand> : ICommandValidator
                 new[] { timer.TimerDefinition, timer.Description },
             CreateBpmnSignalCatchEventCommand signal => new[] { signal.Description },
             CreateBpmnSignalThrowEventCommand signal => new[] { signal.Description },
-            CreateBpmnEndEventCommand end => new[] { end.Name, end.Description },
+            CreateBpmnEndEventCommand end => new[] { end.Description },
             _ => [],
         };
         if (values.Any(static value => value is not null && string.IsNullOrWhiteSpace(value)))
@@ -386,15 +341,14 @@ internal static class BpmnBoundaryEventCreationValidation
         BpmnBoundaryEventCreationCommandData creation,
         List<Diagnostic> diagnostics)
     {
-        if (string.IsNullOrWhiteSpace(creation.Name) ||
-            creation.TimerDefinition is not null &&
+        if (creation.TimerDefinition is not null &&
                 string.IsNullOrWhiteSpace(creation.TimerDefinition) ||
             creation.Description is not null &&
                 string.IsNullOrWhiteSpace(creation.Description))
         {
             diagnostics.Add(BpmnDiagnostics.Error(
                 BpmnCommandDiagnosticCodes.InvalidBoundaryEvent,
-                $"A BPMN {BpmnBoundaryEventSemanticTypes.DisplayName(creation.SemanticTypeId)} requires a nonblank Name, and optional text properties must be nonblank when supplied.",
+                $"A BPMN {BpmnBoundaryEventSemanticTypes.DisplayName(creation.SemanticTypeId)} requires optional Timer and Description text to be nonblank when supplied.",
                 creation.ElementId.Value));
         }
     }

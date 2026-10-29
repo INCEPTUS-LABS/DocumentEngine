@@ -48,7 +48,7 @@ public sealed partial class Canvas2DSpatialPoolInteractionTests
     }
 
     [Fact]
-    public async Task A1214PoolCrossingUsesEachActualOriginAndKeepsBodyLabelAndMarkerInOneFeedbackFamily()
+    public async Task A1214PoolCrossingUsesEachActualOriginAndKeepsUnnamedBodyAndMarkerInOneFeedbackFamily()
     {
         await using var fixture = await Fixture.CreateDragRegressionAsync();
         fixture.ToolboxSelection.Select(new ToolboxItemId("bpmn:toolbox:message-catch-event"));
@@ -65,12 +65,12 @@ public sealed partial class Canvas2DSpatialPoolInteractionTests
             Assert.Equal(region.MapLocalToScene(feedback.PlacementPreview.Bounds), feedback.Bounds);
             Assert.Equal(point, Center(feedback.Bounds!.Value));
             Assert.Equal(BpmnSemanticTypes.MessageCatchEvent, feedback.PlacementPreview.SemanticTypeId);
-            Assert.Contains("Message Event", feedback.PlacementPreview.Label, StringComparison.Ordinal);
+            Assert.Null(feedback.PlacementPreview.Label);
             var family = fixture.State.CurrentScene!.Items.Where(item =>
                 item.Origin.StableSourceKey?.StartsWith($"feedback:{feedback.Id}:", StringComparison.Ordinal) == true).ToArray();
             Assert.NotEmpty(family);
             Assert.Contains(family, item => item.Origin.StableSourceKey == $"feedback:{feedback.Id}:body");
-            Assert.Contains(family, item => item.Origin.StableSourceKey!.StartsWith(
+            Assert.DoesNotContain(family, item => item.Origin.StableSourceKey!.StartsWith(
                 $"feedback:{feedback.Id}:label:", StringComparison.Ordinal));
             Assert.Contains(family, item => item.Origin.StableSourceKey!.StartsWith(
                 $"feedback:{feedback.Id}:message-catch-event:envelope:", StringComparison.Ordinal));

@@ -1,5 +1,99 @@
 # Release notes
 
+## 0.1.16
+
+- Prepares the aligned seven-package family for the next release after public
+  0.1.14. Includes the locally prepared 0.1.15 features and the manually accepted
+  Connector Delete and Message Flow History corrections. Existing 0.1.15 and
+  historical artifacts remain immutable; public publication is a separate step.
+- Adds White and Mixed document colour schemes with independent per-scheme
+  background, border and text customisation for Start Events, Tasks, Gateways,
+  End Events and Pool, Lane and Participant headers. Documents without appearance
+  metadata use White. Header colours apply to expanded and compact presentations;
+  White Participant headers retain their default unfilled background. Appearance
+  changes paint without changing retained geometry, Layout or Routing.
+- Adds a dedicated Colour Scheme editor in Document Properties with seven family
+  previews, pickers, hexadecimal fields and Restore preset. Use colours accepts
+  the child draft; parent Apply commits through existing Commands and History.
+  Cancel and stale-draft protection preserve authoritative state. The form has
+  scrollable content, fixed actions and English, Polish, French, German and
+  Spanish resources. Native JSON preserves appearance and unknown metadata;
+  SVG, PNG and PublishedProcess use the resolved colours.
+- Adds Properties and Delete actions after a completed Sequence Flow or Message
+  Flow click while Smart Edit is enabled. Corrects Delete for horizontal and
+  vertical connectors whose path bounds have zero height or width, while retaining
+  viewport overlap checks, node toolbox behavior and general RectD semantics.
+  Dragging, reconnection, bend editing and modifier selection retain their existing
+  interaction eligibility and do not open the connector toolbox.
+- Corrects Message Flow Delete/Undo to capture and restore scope-owned routing
+  records, preserving Straight and Manual configurations, paths, metadata and
+  record order through the existing Command Processor and chronological History.
+  Automatic routing and existing document-owned routing support are retained.
+- Adds optional Start/End Event Names with external labels below the event. Newly
+  created Events are unnamed. Properties supports adding, editing and clearing
+  Names with exact Undo/Redo of absent, empty and populated values. Event Data
+  shows Name while existing parameters and type switching remain available.
+  Corrects Properties toolbox eligibility to follow actual editable schemas,
+  including supported missing values, and improves placement-preview response.
+- Compatibility: Start/End caption placement changes from InsideCentered to
+  OutsideBelow. Older native v2 documents with incompatible saved caption geometry
+  may require the existing explicit attachment recovery: VerifySavedRouting=true
+  and ReprepareIncompatibleRouting=true. Save the recovered document and verify
+  subsequent strict loading. Recovery regenerates incompatible routing; strict
+  validation remains enabled and no automatic migration is introduced.
+- Retains .NET 10, SDK 10.0.401, all seven package IDs, dependency policies,
+  external dependency versions, public integration APIs, MIT/icon metadata,
+  Project/repository URLs, portable symbols and Source Link configuration.
+  Native Inceptus.Document formatVersion 2 and PublishedProcess formatVersion 1
+  remain unchanged. The packaged editor owns these controls and corrections;
+  external hosts need no duplicate implementations. Local preparation does not
+  establish public Source Link or nuget.org availability.
+
+## 0.1.15
+
+- Prepares the aligned seven-package family after the committed document colour,
+  connector toolbox and optional Event Name changes. Local DEVELOPMENT artifacts
+  and public source/package publication remain separate release steps.
+- Adds White and Mixed document colour schemes with independent per-scheme
+  background, border and text customisation for Start Events, Tasks, Gateways and
+  End Events. Documents without appearance metadata use White. Appearance uses
+  existing extension metadata and validated Commands with exact Undo/Redo;
+  native JSON preserves overrides and unknown metadata. Invalid values fall back
+  safely, and unsupported appearance versions remain read-only.
+- Adds a dedicated Colour Scheme editor within Document Properties, with seven
+  family previews, colour pickers, hexadecimal fields and Restore preset. Use
+  colours accepts the child draft; the parent Apply commits the change. Cancel
+  and stale-draft protection preserve authoritative state. The form matches the
+  Document Properties layout with scrollable content and fixed actions, with
+  English, Polish, French, German and Spanish resources.
+- Extends colour schemes to Pool, Lane and Participant headers, including
+  expanded and compact presentations. Header overrides apply by family, preserve
+  ownership and profile visibility, and retain the White Participant header's
+  default unfilled background. Appearance changes only paint, without changing
+  node/container geometry, Layout or Routing. SVG, PNG and PublishedProcess use
+  the resolved colours without changing execution.
+- Adds a compact connector toolbox with Properties and Delete after a completed
+  Sequence Flow or Message Flow click while Smart Edit is enabled. Dragging,
+  reconnection, bend editing and modifier selection do not open the toolbox.
+  Actions use the existing command, validation and chronological History paths.
+- Adds optional Start/End Event Names and external labels below the event.
+  Newly created Events are unnamed; supported Event Names can be added, edited
+  or cleared through Properties with exact restoration of absent, empty and
+  populated values by Undo/Redo. Event Data displays Name while existing type
+  switching and parameters remain available. Label text and colours reach
+  graphical exports and PublishedProcess without altering execution or retained
+  node/container/connector geometry.
+- Corrects Properties toolbox eligibility to follow actual editable schemas,
+  including supported missing values. Improves placement-preview responsiveness
+  and prevents internal Demo toolbar churn on preview-only updates.
+- Retains .NET 10, SDK 10.0.401, all seven package IDs, dependency policies and
+  external dependency versions, public integration APIs, MIT/icon metadata, Project and repository
+  URLs, portable symbols and Source Link configuration. Native Inceptus.Document
+  formatVersion 2 and PublishedProcess formatVersion 1 remain unchanged. The
+  reusable editor provides the new controls; package hosts do not need separate
+  implementations. Local preparation does not establish public Source Link or
+  nuget.org availability.
+
 ## 0.1.14
 
 - Extends the seven-package DocumentEngine family with BPMN Editor improvements, configurable PublishedProcess presentation and enhanced process animation. Version 0.1.13 was intentionally skipped.

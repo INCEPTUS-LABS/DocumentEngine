@@ -35,6 +35,7 @@ public partial class DocumentCanvas
             new EditorStateSnapshot(selection: editor.Selection, activeToolId: editor.ActiveToolId, viewport: editor.Viewport,
                 activeGesture: editor.ActiveGesture, toolState: editor.ToolState,
                 temporaryFeedback: editor.TemporaryFeedback.Where(feedback =>
+                    feedback.PlacementPreview is null &&
                     feedback.SpatialResize?.Phase != Canvas2DSpatialResizePhase.Hover)),
             session.ModelProfileState, session.ModelProfileViewState, session.ModelProfileElementViewState,
             _propertiesDraft is not null || state.PropertiesFormOpen,
@@ -43,7 +44,7 @@ public partial class DocumentCanvas
             AnyPropertiesApplying || state.PropertiesApplyInFlight || state.ModelViewPropertiesApplyInFlight,
             _newDiagramConfirmationOpen, _newDiagramInProgress);
 
-        // Hover identity and resize-hover feedback do not affect these
+        // Hover identity, placement previews and resize-hover feedback do not affect these
         // actions. Scene instances and generation numbers are deliberately absent.
         if (session.Status == EditingSessionStatus.Rebuilding && inputs == _readyActionBarInputs)
             return _actionBarPresentation;

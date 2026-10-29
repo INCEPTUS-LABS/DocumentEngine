@@ -63,7 +63,8 @@ internal sealed class BpmnToolboxPlacementPreviewProvider : IToolboxPlacementPre
 
         return new ToolboxPlacementPreview(request.ToolboxItemId, _type, bounds,
             new PointD(bounds.Left + (bounds.Width / 2d), bounds.Top + (bounds.Height / 2d)),
-            defaults.Name, BpmnNodeLabelPlacementPolicy.Resolve(_type), candidate,
+            string.IsNullOrWhiteSpace(defaults.Name) ? null : defaults.Name,
+            BpmnNodeLabelPlacementPolicy.Resolve(_type), candidate,
             diagnostics.Count == 0, diagnostics);
     }
 }

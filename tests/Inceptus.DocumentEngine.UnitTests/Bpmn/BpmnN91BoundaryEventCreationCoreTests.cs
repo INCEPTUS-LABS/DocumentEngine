@@ -342,7 +342,7 @@ public sealed class BpmnN91BoundaryEventCreationCoreTests
                 boundaryType,
                 revision,
                 PersistentOwnerBounds,
-                name: " "),
+                description: " "),
             BpmnCommandDiagnosticCodes.InvalidBoundaryEvent);
     }
 
@@ -462,7 +462,8 @@ public sealed class BpmnN91BoundaryEventCreationCoreTests
         DocumentScopeId? targetScopeId = null,
         bool cancelActivity = true,
         BoundaryAttachmentPlacement? attachment = null,
-        string name = "Boundary catch")
+        string name = "Boundary catch",
+        string description = "Boundary description.")
     {
         attachment ??= Attachment;
         return boundaryType == BpmnSemanticTypes.MessageBoundaryEvent
@@ -477,7 +478,7 @@ public sealed class BpmnN91BoundaryEventCreationCoreTests
                 effectiveOwnerBounds,
                 name,
                 cancelActivity,
-                "Boundary description.",
+                description,
                 targetScopeId)
             : boundaryType == BpmnSemanticTypes.SignalBoundaryEvent
                 ? new CreateBpmnSignalBoundaryEventCommand(
@@ -491,7 +492,7 @@ public sealed class BpmnN91BoundaryEventCreationCoreTests
                     effectiveOwnerBounds,
                     name,
                     cancelActivity,
-                    "Boundary description.",
+                    description,
                     targetScopeId)
                 : throw new ArgumentException(
                     $"Semantic type '{boundaryType}' is not an N9.1 Boundary Event.",

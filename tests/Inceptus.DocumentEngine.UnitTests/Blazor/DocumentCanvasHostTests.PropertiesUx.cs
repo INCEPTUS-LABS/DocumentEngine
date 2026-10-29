@@ -45,11 +45,9 @@ public sealed partial class DocumentCanvasHostTests
         var snapshot = CreatePropertiesUxSnapshot(zeroData ? "BPMN.SubProcess" : type);
         await using var host = CreatePropertiesUxHost(snapshot);
         await host.InitializeAsync("properties-ux-canvas", "properties-ux-container");
-        if (zeroData)
-        {
-            typeof(DocumentCanvasHost).GetField("_propertiesSchemaCatalog", PropertiesUxFlags)!
-                .SetValue(host, new ElementPropertiesSchemaCatalog([]));
-        }
+        // All these targets lack a type switch. Without a schema none has an editing action.
+        typeof(DocumentCanvasHost).GetField("_propertiesSchemaCatalog", PropertiesUxFlags)!
+            .SetValue(host, new ElementPropertiesSchemaCatalog([]));
 
         var session = Session(host);
         var before = AttachedDocument(session).CaptureSnapshot();
@@ -73,7 +71,7 @@ public sealed partial class DocumentCanvasHostTests
 
         // The UI exclusion must not delete Event fields or technical snapshot data.
         Assert.True(DocumentCanvasPropertySnapshot.TryCreate(before, PropertiesUxVisualId,
-            new ElementPropertiesSchemaCatalog(zeroData ? [] : BpmnPluginRegistration.N100.PropertiesSchemas),
+            new ElementPropertiesSchemaCatalog([]),
             out var internalSnapshot));
         Assert.False(internalSnapshot!.IsPropertiesAvailable);
         Assert.Equal(PropertiesUxElementId, internalSnapshot.SemanticId);
@@ -90,11 +88,8 @@ public sealed partial class DocumentCanvasHostTests
         await session.UpdateEditorStateAsync(new EditorStateSnapshot(selection: [ownerVisual]));
         await session.WaitForIdleAsync();
         Assert.NotNull(await host.OpenPropertiesAsync(ownerVisual));
-        if (zeroData)
-        {
-            typeof(DocumentCanvasHost).GetField("_propertiesSchemaCatalog", PropertiesUxFlags)!
-                .SetValue(host, new ElementPropertiesSchemaCatalog([]));
-        }
+        typeof(DocumentCanvasHost).GetField("_propertiesSchemaCatalog", PropertiesUxFlags)!
+            .SetValue(host, new ElementPropertiesSchemaCatalog([]));
         await session.UpdateEditorStateAsync(new EditorStateSnapshot(selection: [PropertiesUxVisualId]));
         await session.WaitForIdleAsync();
         Assert.False(host.CaptureState().PropertiesFormOpen);
