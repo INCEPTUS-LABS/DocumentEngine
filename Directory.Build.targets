@@ -14,8 +14,82 @@
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)RELEASE-NOTES.md'))</PackageReleaseNotes>
   </PropertyGroup>
+
+  <UsingTask TaskName="ExtractPackageReleaseNotes" TaskFactory="RoslynCodeTaskFactory"
+      AssemblyFile="$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll" Condition="'$(IsPackable)' == 'true'">
+    <ParameterGroup>
+      <NotesFile ParameterType="System.String" Required="true" />
+      <Version ParameterType="System.String" Required="true" />
+      <PreviousPublishedVersion ParameterType="System.String" Required="true" />
+      <PackageId ParameterType="System.String" Required="true" />
+      <PublicationBaseline ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
+      <ReleaseNotes ParameterType="System.String" Output="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.Linq" />
+      <Using Namespace="System.Text.RegularExpressions" />
+      <Using Namespace="System.Text" />
+      <Code Type="Fragment" Language="cs"><![CDATA[
+        System.Version current, baseline;
+        var family = new[] { "Inceptus.DocumentEngine.Contracts", "Inceptus.DocumentEngine.Runtime", "Inceptus.DocumentEngine.Bpmn",
+            "Inceptus.DocumentEngine.Organizational", "Inceptus.DocumentEngine.Canvas2D", "Inceptus.DocumentEngine.Bpmn.Blazor", "Inceptus.Bpmn.Integration" };
+        if (!Regex.IsMatch(Version, @"^[0-9]+\.[0-9]+\.[0-9]+$") || !System.Version.TryParse(Version, out current)
+            || !Regex.IsMatch(PreviousPublishedVersion, @"^[0-9]+\.[0-9]+\.[0-9]+$")
+            || !System.Version.TryParse(PreviousPublishedVersion, out baseline) || baseline >= current
+            || !PublicationBaseline.Select(item => item.ItemSpec).OrderBy(id => id, StringComparer.Ordinal)
+                .SequenceEqual(family.OrderBy(id => id, StringComparer.Ordinal))
+            || !PublicationBaseline.Any(item => item.ItemSpec == PackageId)
+            || PublicationBaseline.Any(item => item.GetMetadata("PublishedVersion") != PreviousPublishedVersion))
+        {
+            Log.LogError("Invalid or inconsistent publication baseline for {0}.", Version);
+            return false;
+        }
+        // The release workflow uses stable three-component versions. Keep section order and Markdown.
+        // XML metadata normalizes line endings; the packaged historical file remains unchanged.
+        var text = File.ReadAllText(NotesFile).Replace("\r\n", "\n").Replace("\r", "\n");
+        var headings = Regex.Matches(text,
+            @"(?m)^##[ \t]+(?<version>[0-9]+\.[^\s]+)(?:[ \t]+[^\n]*)?$");
+        var selectedVersions = new System.Collections.Generic.HashSet<System.Version>();
+        var notes = new StringBuilder();
+        foreach (Match heading in headings)
+        {
+            var value = heading.Groups["version"].Value;
+            System.Version sectionVersion;
+            if (!Regex.IsMatch(value, @"^[0-9]+\.[0-9]+\.[0-9]+$") || !System.Version.TryParse(value, out sectionVersion))
+            {
+                Log.LogError("Invalid release notes version heading: {0}.", value);
+                return false;
+            }
+            if (sectionVersion <= baseline || sectionVersion > current) continue;
+            var next = headings.Cast<Match>().FirstOrDefault(candidate => candidate.Index > heading.Index);
+            var end = next == null ? text.Length : next.Index;
+            var bodyStart = heading.Index + heading.Length;
+            if (!selectedVersions.Add(sectionVersion) || string.IsNullOrWhiteSpace(text.Substring(bodyStart, end - bodyStart)))
+            {
+                Log.LogError("Missing, empty or ambiguous release notes section: {0}.", value);
+                return false;
+            }
+            notes.Append(text.Substring(heading.Index, end - heading.Index));
+        }
+        ReleaseNotes = notes.ToString().TrimEnd();
+        if (!selectedVersions.Contains(current) || ReleaseNotes.Length == 0 || ReleaseNotes.Length > 35000)
+        {
+            Log.LogError("Cumulative release notes must include version {0} and contain between 1 and 35000 characters; found {1}.", Version, ReleaseNotes.Length);
+            return false;
+        }
+      ]]></Code>
+    </Task>
+  </UsingTask>
+
+  <!-- Run for pack with or without a build, before NuGet reads PackageReleaseNotes. -->
+  <Target Name="SetPackageReleaseNotes" BeforeTargets="GenerateNuspec" Condition="'$(IsPackable)' == 'true'">
+    <ExtractPackageReleaseNotes NotesFile="$(MSBuildThisFileDirectory)RELEASE-NOTES.md" Version="$(Version)"
+        PreviousPublishedVersion="$(PreviousPublishedVersion)" PackageId="$(PackageId)" PublicationBaseline="@(PublicationBaselinePackage)">
+      <Output TaskParameter="ReleaseNotes" PropertyName="PackageReleaseNotes" />
+    </ExtractPackageReleaseNotes>
+  </Target>
 
   <ItemGroup Condition="'$(IsPackable)' == 'true'">
     <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="/" />

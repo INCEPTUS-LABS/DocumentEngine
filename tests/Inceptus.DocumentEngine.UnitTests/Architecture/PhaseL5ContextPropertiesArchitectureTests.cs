@@ -626,6 +626,7 @@ public sealed class PhaseL5ContextPropertiesArchitectureTests
         Assert.DoesNotContain("CreateBpmn", phaseSources, StringComparison.Ordinal);
         Assert.DoesNotContain("JsonSerializer", phaseSources, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Serialize", phaseSources, StringComparison.OrdinalIgnoreCase);
+        // SDK updates are governed by the exact baseline assertion in SolutionArchitectureTests.
         Assert.DoesNotContain(
             ChangedPaths().Where(static path =>
                 !path.StartsWith("docs/", StringComparison.OrdinalIgnoreCase)),
@@ -633,6 +634,7 @@ public sealed class PhaseL5ContextPropertiesArchitectureTests
                 path.Contains("Serialization", StringComparison.OrdinalIgnoreCase) &&
                     !ApprovedN102Changes.IsApprovedSerializationPath(path) ||
                 path.EndsWith(".json", StringComparison.OrdinalIgnoreCase) &&
+                    !path.Equals("global.json", StringComparison.OrdinalIgnoreCase) &&
                     !path.Equals(
                         "src/Inceptus.DocumentEngine.Blazor/Demo/bpmn-demo.inceptus.json",
                         StringComparison.OrdinalIgnoreCase));

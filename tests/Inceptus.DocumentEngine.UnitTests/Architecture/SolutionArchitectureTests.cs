@@ -111,7 +111,7 @@ public sealed class SolutionArchitectureTests
     {
         var buildProperties = XDocument.Load(Path.Combine(RepositoryRoot, "Directory.Build.props"));
 
-        Assert.Equal("0.1.16", ReadElementValue(buildProperties, "Version"));
+        Assert.Equal("0.1.17", ReadElementValue(buildProperties, "Version"));
         Assert.Equal("Robert Prokopczuk", ReadElementValue(buildProperties, "Authors"));
 
         var releaseTargets = XDocument.Load(Path.Combine(RepositoryRoot, "Directory.Build.targets"));
@@ -245,7 +245,7 @@ public sealed class SolutionArchitectureTests
             File.ReadAllText(Path.Combine(RepositoryRoot, "global.json")));
         var sdk = globalConfiguration.RootElement.GetProperty("sdk");
 
-        Assert.Equal("10.0.401", sdk.GetProperty("version").GetString());
+        Assert.Equal("10.0.403", sdk.GetProperty("version").GetString());
         Assert.Equal("disable", sdk.GetProperty("rollForward").GetString());
         Assert.False(sdk.GetProperty("allowPrerelease").GetBoolean());
 

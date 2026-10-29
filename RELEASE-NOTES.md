@@ -1,5 +1,36 @@
 # Release notes
 
+## 0.1.17
+
+- Corrects NuGet PackageReleaseNotes metadata after the 0.1.16 publishing failure:
+  packages now include every recorded release-note section newer than the verified
+  previous publication and no newer than the version being built. With the complete
+  seven-package nuget.org baseline at 0.1.14, this release includes the original
+  0.1.15, 0.1.16 and 0.1.17 sections, preserving their headings, order and Markdown.
+  The complete historical RELEASE-NOTES.md remains included in each package.
+- Adds explicit publication-baseline discovery through the official nuget.org API
+  for all seven package IDs. Partial or inconsistent publication stops preparation.
+  The verified baseline and package records are persisted in release configuration;
+  build and pack do not query nuget.org. Unused version-number gaps remain allowed.
+- Rejects missing target sections, ambiguous or empty included sections, malformed
+  version headings, invalid or inconsistent baselines and cumulative metadata over
+  NuGet's 35,000-character limit. Package inspection verifies the exact cumulative
+  notes in both primary and symbol metadata. Permanent regressions cover offline
+  packaging, publication consistency, persistence, Markdown and length boundaries.
+- Updates the pinned .NET SDK to 10.0.403 while retaining net10.0, existing external
+  dependency versions, all seven package IDs, dependency policies, public APIs,
+  package structure, resources, portable symbols and Source Link configuration.
+- Includes the previously prepared colour schemes and dedicated editor, Pool/Lane/
+  Participant header colours, connector Properties/Delete toolbox, optional Event
+  Names, horizontal/vertical connector Delete correction and exact Message Flow
+  routing restoration through Undo/Redo, as described in the retained sections below.
+  Native formatVersion 2 and PublishedProcess formatVersion 1 remain unchanged.
+  Older saved Start/End caption geometry still requires the documented explicit
+  recovery when incompatible; strict validation and OutsideBelow placement remain.
+- Uses a new package identity version without replacing historical artifacts or the
+  immutable public v0.1.16 commit/tag. Local preparation and External Demo acceptance
+  remain separate from public source, NuGet publication and deployment.
+
 ## 0.1.16
 
 - Prepares the aligned seven-package family for the next release after public

@@ -6,6 +6,7 @@ param(
     [switch]$RequireSourceLink
 )
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'ReleaseNotes.ps1')
 # Release-artifact inspection only; canonical suites run separately in the workflows.
 Add-Type -TypeDefinition @'
 using System;
@@ -227,6 +228,10 @@ function Assert-PackageDependencies([string]$Id, $Metadata, [string]$ExpectedVer
         Require ($dependency.version -ceq $range) "Dependency range: $Id -> $($dependency.id)"
     }
 }
+function Assert-PackageReleaseNotes([string]$Id, [string]$Actual, [string]$Expected) {
+    Require (-not [string]::IsNullOrWhiteSpace($Actual) -and $Actual.Length -le 35000) "Release notes metadata length: $Id"
+    Require ($Actual -ceq $Expected) "Cumulative release notes metadata: $Id"
+}
 function Assert-IntegrationResources([byte[]]$Assembly) {
     $resources = @('Bpmn202ImportProfile.xml', 'Bpmn202ImportProfile.xsd', 'Schemas/BPMN20.xsd', 'Schemas/Semantic.xsd', 'Schemas/BPMNDI.xsd', 'Schemas/DC.xsd', 'Schemas/DI.xsd')
     foreach ($resource in $resources) {
@@ -237,6 +242,15 @@ function Assert-IntegrationResources([byte[]]$Assembly) {
     }
 }
 Require ($Commit -cmatch '^[0-9a-f]{40}$') 'Expected an actual full Git commit.'
+$configuration = [xml][IO.File]::ReadAllText((Join-Path $PWD 'Directory.Build.props'))
+$sourceVersion = $configuration.Project.PropertyGroup.Version
+Require ($Version -ceq $sourceVersion) 'Package version differs from Directory.Build.props.'
+$baseline = $configuration.Project.PropertyGroup.PreviousPublishedVersion
+$baselinePackages = @($configuration.Project.ItemGroup.PublicationBaselinePackage | ForEach-Object {
+    [pscustomobject]@{ PackageId = $_.Include; PublishedVersion = $_.PublishedVersion }
+})
+Assert-PublicationBaseline $Version $baseline $baselinePackages
+$expectedReleaseNotes = Get-CumulativeReleaseNotes ([IO.File]::ReadAllText((Join-Path $PWD 'RELEASE-NOTES.md'))) $Version $baseline
 if ($RequireSourceLink) {
     Require (@(git status --porcelain=v1 --untracked-files=all).Count -eq 0) 'Public artifacts require a clean checkout.'
     Require ((git rev-parse HEAD) -ceq $Commit) 'Artifact commit differs from the public checkout.'
@@ -264,7 +278,8 @@ $records = foreach ($id in $family) {
         Require ($metadata.projectUrl -ceq 'https://inceptus.online/bpmn/editor/') "Project URL: $id"
         Require ($symbolSpec.package.metadata.projectUrl -ceq 'https://inceptus.online/bpmn/editor/') "Symbol project URL: $id"
         Require ($metadata.readme -ceq 'README.md') "README metadata: $id"
-        Require (-not [string]::IsNullOrWhiteSpace($metadata.releaseNotes)) "Release notes metadata: $id"
+        Assert-PackageReleaseNotes $id $metadata.releaseNotes $expectedReleaseNotes
+        Assert-PackageReleaseNotes "$id symbols" $symbolSpec.package.metadata.releaseNotes $expectedReleaseNotes
         foreach ($document in @('README.md', 'LICENSE', 'RELEASE-NOTES.md', 'THIRD-PARTY-NOTICES.md')) {
             $actual = Read-EntryText $zip $document
             Require ($actual -ceq [IO.File]::ReadAllText((Join-Path $PWD $document))) "Document content: $id/$document"
@@ -342,6 +357,8 @@ $records = foreach ($id in $family) {
         [ordered]@{
             PackageId = $id; Version = $Version; Commit = $Commit
             PreparationOnly = -not [bool]$RequireSourceLink
+            ReleaseNotesCharacters = $expectedReleaseNotes.Length
+            PreviousPublishedVersion = $baseline
             UIResourceKeyCounts = $uiResourceKeyCounts
             NupkgSha256 = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()
             SnupkgSha256 = (Get-FileHash $symbolArchive -Algorithm SHA256).Hash.ToLowerInvariant()
