@@ -111,7 +111,7 @@ public sealed class SolutionArchitectureTests
     {
         var buildProperties = XDocument.Load(Path.Combine(RepositoryRoot, "Directory.Build.props"));
 
-        Assert.Equal("0.1.17", ReadElementValue(buildProperties, "Version"));
+        Assert.Equal("0.1.18", ReadElementValue(buildProperties, "Version"));
         Assert.Equal("Robert Prokopczuk", ReadElementValue(buildProperties, "Authors"));
 
         var releaseTargets = XDocument.Load(Path.Combine(RepositoryRoot, "Directory.Build.targets"));
@@ -261,12 +261,12 @@ public sealed class SolutionArchitectureTests
                 StringComparer.Ordinal);
         var expectedVersions = new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            ["Microsoft.AspNetCore.Components.Web"] = "10.0.5",
-            ["Microsoft.AspNetCore.Components.WebAssembly"] = "10.0.5",
-            ["Microsoft.AspNetCore.Components.WebAssembly.DevServer"] = "10.0.5",
-            ["Microsoft.JSInterop"] = "10.0.5",
-            ["Microsoft.Extensions.Localization"] = "10.0.5",
-            ["Microsoft.NET.Test.Sdk"] = "18.0.1",
+            ["Microsoft.AspNetCore.Components.Web"] = "10.0.14",
+            ["Microsoft.AspNetCore.Components.WebAssembly"] = "10.0.14",
+            ["Microsoft.AspNetCore.Components.WebAssembly.DevServer"] = "10.0.14",
+            ["Microsoft.JSInterop"] = "10.0.14",
+            ["Microsoft.Extensions.Localization"] = "10.0.14",
+            ["Microsoft.NET.Test.Sdk"] = "18.11.0",
             ["xunit"] = "2.9.3",
             ["xunit.runner.visualstudio"] = "3.1.5",
         };

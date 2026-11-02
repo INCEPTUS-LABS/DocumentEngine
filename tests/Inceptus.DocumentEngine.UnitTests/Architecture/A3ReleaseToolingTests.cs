@@ -72,7 +72,7 @@ public sealed class A3ReleaseToolingTests
                 return new XElement("dependency", new XAttribute("id", dependency), new XAttribute("version",
                     id == "Inceptus.DocumentEngine.Canvas2D" && dependency == "Inceptus.DocumentEngine.Runtime" ? "[0.1.10]" : "0.1.10"));
             }).Concat(project.Descendants("PackageReference").Select(reference =>
-                new XElement("dependency", new XAttribute("id", (string)reference.Attribute("Include")!), new XAttribute("version", "10.0.5")))).ToList();
+                new XElement("dependency", new XAttribute("id", (string)reference.Attribute("Include")!), new XAttribute("version", "10.0.14")))).ToList();
             var group = new XElement("group", new XAttribute("targetFramework", "net10.0"), dependencies);
             var mutated = id == "Inceptus.Bpmn.Integration" && scenario != "exact-runtime";
             if (mutated)

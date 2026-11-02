@@ -1,15 +1,17 @@
 # Inceptus Document Engine
 
 A reusable BPMN modeler with immutable native documents and a standalone process
-presentation export. This README describes the locally prepared **0.1.17** release
+presentation export. This README describes the locally prepared **0.1.18** release
 candidate targeting **net10.0**; public publication is a separate step.
 
-Version 0.1.17 uses SDK **10.0.403** and corrects NuGet release-note metadata.
-All seven packages include the cumulative 0.1.15, 0.1.16 and 0.1.17 sections since
-the verified last complete nuget.org publication, 0.1.14. Builds use the persisted
-publication baseline without querying the feed. The complete historical release
-notes remain packaged. Existing 0.1.15/0.1.16 artifacts and the public v0.1.16 tag
-remain immutable; the editor features and compatibility notes below still apply.
+Version 0.1.18 updates Microsoft ASP.NET Core Components, JSInterop and Localization
+dependencies to **10.0.14**, and Microsoft.NET.Test.Sdk to **18.11.0**. It retains
+SDK **10.0.403** and net10.0. All seven packages use the verified complete nuget.org
+publication **0.1.17** as their persisted baseline, so cumulative PackageReleaseNotes
+contains exactly the recorded **0.1.18** section. Builds do not query the feed.
+The complete historical release notes remain packaged, and historical artifacts
+remain immutable. Existing public APIs, document formats, package metadata and
+the editor features and compatibility notes below still apply.
 
 [Open BPMN Editor](https://bpmn-editor.inceptus.online)
 
@@ -37,8 +39,8 @@ transitively; hosts using only editing still need only the Bpmn.Blazor reference
 The validated hosting model is a **standalone Blazor WebAssembly application** on .NET 10. Configure a feed containing the reviewed candidate before adding the package:
 
 ```xml
-<PackageReference Include="Inceptus.DocumentEngine.Bpmn.Blazor" Version="0.1.17" />
-<PackageReference Include="Inceptus.Bpmn.Integration" Version="0.1.17" />
+<PackageReference Include="Inceptus.DocumentEngine.Bpmn.Blazor" Version="0.1.18" />
+<PackageReference Include="Inceptus.Bpmn.Integration" Version="0.1.18" />
 ```
 
 Register the modeler in the application's `Program.cs`. The extension namespace is `Microsoft.Extensions.DependencyInjection`:

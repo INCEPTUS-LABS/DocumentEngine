@@ -224,7 +224,7 @@ function Assert-PackageDependencies([string]$Id, $Metadata, [string]$ExpectedVer
     foreach ($dependency in $dependencies) {
         $range = if ($family -ccontains $dependency.id) {
             if ($Id -ceq 'Inceptus.DocumentEngine.Canvas2D' -and $dependency.id -ceq 'Inceptus.DocumentEngine.Runtime') { "[$ExpectedVersion]" } else { $ExpectedVersion }
-        } else { '10.0.5' }
+        } else { '10.0.14' }
         Require ($dependency.version -ceq $range) "Dependency range: $Id -> $($dependency.id)"
     }
 }

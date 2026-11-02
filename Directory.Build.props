@@ -1,9 +1,9 @@
 <Project>
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
-    <Version>0.1.17</Version>
-    <PreviousPublishedVersion>0.1.14</PreviousPublishedVersion>
-    <PublicationBaselineVerifiedUtc>2026-10-29T11:53:59Z</PublicationBaselineVerifiedUtc>
+    <Version>0.1.18</Version>
+    <PreviousPublishedVersion>0.1.17</PreviousPublishedVersion>
+    <PublicationBaselineVerifiedUtc>2026-11-02T12:07:35Z</PublicationBaselineVerifiedUtc>
     <Authors>Robert Prokopczuk</Authors>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -20,12 +20,12 @@
   </PropertyGroup>
   <!-- Verified through nuget.org during preparation; build and pack never query the feed. -->
   <ItemGroup Label="PublicationBaseline">
-    <PublicationBaselinePackage Include="Inceptus.DocumentEngine.Contracts" PublishedVersion="0.1.14" />
-    <PublicationBaselinePackage Include="Inceptus.DocumentEngine.Runtime" PublishedVersion="0.1.14" />
-    <PublicationBaselinePackage Include="Inceptus.DocumentEngine.Bpmn" PublishedVersion="0.1.14" />
-    <PublicationBaselinePackage Include="Inceptus.DocumentEngine.Organizational" PublishedVersion="0.1.14" />
-    <PublicationBaselinePackage Include="Inceptus.DocumentEngine.Canvas2D" PublishedVersion="0.1.14" />
-    <PublicationBaselinePackage Include="Inceptus.DocumentEngine.Bpmn.Blazor" PublishedVersion="0.1.14" />
-    <PublicationBaselinePackage Include="Inceptus.Bpmn.Integration" PublishedVersion="0.1.14" />
+    <PublicationBaselinePackage Include="Inceptus.DocumentEngine.Contracts" PublishedVersion="0.1.17" />
+    <PublicationBaselinePackage Include="Inceptus.DocumentEngine.Runtime" PublishedVersion="0.1.17" />
+    <PublicationBaselinePackage Include="Inceptus.DocumentEngine.Bpmn" PublishedVersion="0.1.17" />
+    <PublicationBaselinePackage Include="Inceptus.DocumentEngine.Organizational" PublishedVersion="0.1.17" />
+    <PublicationBaselinePackage Include="Inceptus.DocumentEngine.Canvas2D" PublishedVersion="0.1.17" />
+    <PublicationBaselinePackage Include="Inceptus.DocumentEngine.Bpmn.Blazor" PublishedVersion="0.1.17" />
+    <PublicationBaselinePackage Include="Inceptus.Bpmn.Integration" PublishedVersion="0.1.17" />
   </ItemGroup>
 </Project>

@@ -1,5 +1,24 @@
 # Release notes
 
+## 0.1.18
+
+- Updates Microsoft.AspNetCore.Components.Web, Microsoft.AspNetCore.Components.WebAssembly,
+  Microsoft.AspNetCore.Components.WebAssembly.DevServer, Microsoft.JSInterop and
+  Microsoft.Extensions.Localization from 10.0.5 to 10.0.14.
+- Updates Microsoft.NET.Test.Sdk from 18.0.1 to 18.11.0. Exact dependency-version
+  assertions, the release-package inspector and its regression fixture enforce
+  the approved versions.
+- Prepares the aligned seven-package 0.1.18 family using the verified complete
+  nuget.org publication 0.1.17 as its persisted baseline. Cumulative PackageReleaseNotes
+  includes exactly this 0.1.18 section; the complete historical RELEASE-NOTES.md
+  remains packaged unchanged below. Historical release artifacts remain immutable.
+- Retains SDK 10.0.403, net10.0, public APIs, package identities and dependency-range
+  policies, existing package metadata, embedded resources, portable symbols and
+  Source Link configuration. Native Inceptus.Document formatVersion 2 and
+  PublishedProcess formatVersion 1 remain unchanged. No additional product behavior
+  is introduced; local preparation and External Demo acceptance precede separate
+  public publication.
+
 ## 0.1.17
 
 - Corrects NuGet PackageReleaseNotes metadata after the 0.1.16 publishing failure:
